@@ -62,16 +62,30 @@ body{
 
 .dock{
   position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;
-  padding-bottom:calc(12px + env(safe-area-inset-bottom,0px));
-  padding-left:max(12px,env(safe-area-inset-left,0px));
-  padding-right:max(12px,env(safe-area-inset-right,0px));
+  padding-left:max(8px,env(safe-area-inset-left,0px));
+  padding-right:max(8px,env(safe-area-inset-right,0px));
   pointer-events:none;
 }
+/* 바텀 시트: 기본은 내려가 있고 손잡이 바만 보임 */
 .dock-in{
   width:100%;max-width:430px;pointer-events:auto;
   background:var(--panel);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
-  border:1px solid var(--line);border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:12px;
+  border:1px solid var(--line);border-bottom:0;border-radius:20px 20px 0 0;
+  padding:0 14px calc(16px + env(safe-area-inset-bottom,0px));
+  display:flex;flex-direction:column;gap:12px;
+  transform:translateY(calc(100% - 30px - env(safe-area-inset-bottom,0px)));
+  transition:transform .34s cubic-bezier(.2,.8,.2,1);will-change:transform;
 }
+.dock-in.dragging{transition:none}
+.grab{
+  display:flex;justify-content:center;align-items:center;height:30px;margin:0 -14px -6px;
+  cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;
+}
+.grab span{width:46px;height:5px;border-radius:3px;background:var(--mute);opacity:.85}
+.grab:focus-visible{outline:none}
+.grab:focus-visible span{background:var(--accent)}
+.dock-in:not(.open) > :not(.grab){opacity:.0;transition:opacity .2s}
+.dock-in.open > :not(.grab), .dock-in.dragging > :not(.grab){opacity:1}
 .read{display:flex;flex-direction:column;gap:8px}
 .read-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
 .gesture{font-size:20px;font-weight:600}
@@ -127,7 +141,9 @@ button{font:inherit;color:inherit;cursor:pointer}
 
 <div class="hint" id="hint" hidden>손바닥을 카메라에 보여주세요<br><span style="color:var(--mute);font-size:14px">30–60cm 거리, 밝은 곳이 가장 정확합니다</span></div>
 
+<div class="safe-probe" id="safeProbe" style="position:fixed;bottom:0;left:0;width:0;height:env(safe-area-inset-bottom,0px);pointer-events:none"></div>
 <div class="dock"><div class="dock-in" id="dock">
+  <div class="grab" id="grab" role="button" tabindex="0" aria-expanded="false" aria-label="옵션 열기/닫기"><span></span></div>
   <div class="read">
     <div class="read-h">
       <div class="gesture" id="gesture">펼친 손<small id="src">demo</small></div>
@@ -141,9 +157,8 @@ button{font:inherit;color:inherit;cursor:pointer}
   <div class="row">
     <button class="btn primary" id="start">카메라 시작</button>
     <button class="btn icon" id="flip" title="전면/후면 카메라 전환" aria-label="카메라 전환">전환</button>
-    <button class="btn icon" id="more" aria-expanded="false" aria-controls="settings">설정</button>
   </div>
-  <div class="settings" id="settings" hidden>
+  <div class="settings" id="settings">
     <div>
       <div class="lab">손 소재</div>
       <div class="seg" id="mats">
@@ -363,7 +378,7 @@ function renderReadout(p, src, t){
 let upp = 0.01, areaW = 1, areaH = 1, camDist = 7;
 function resize(){
   const W = innerWidth, H = innerHeight;
-  const dockH = $('dock').getBoundingClientRect().height + 16;
+  const dockH = Math.max(0, H - $('dock').getBoundingClientRect().top) + 10;
   const Hf = H + dockH;
   renderer.setSize(W, H, false);
   camera.aspect = W / Hf;
@@ -379,8 +394,8 @@ function resize(){
   upp = tanH * camDist / Hf;
   ground.position.y = -(areaH/2)*upp - 0.4;
 }
-addEventListener('resize', resize);
-new ResizeObserver(resize).observe($('dock'));
+addEventListener('resize', () => { snapSheet(sheetOpen); resize(); });
+let lastSheetTop = -1;
 
 /* ---------- Tracking ---------- */
 const video = $('video'), ov = $('ov'), octx = ov.getContext('2d');
@@ -389,7 +404,7 @@ let lastVideoTime = -1, detCount = 0, detFps = 0, fpsT = performance.now();
 const tmp = Array.from({length:21}, () => new THREE.Vector3());
 
 function setPill(text, mode){ $('pillText').textContent = text; $('pill').className = 'pill ' + (mode||''); }
-function showErr(msg){ $('err').textContent = msg; $('err').hidden = !msg; }
+function showErr(msg){ $('err').textContent = msg; $('err').hidden = !msg; if (msg) snapSheet(true); else if (sheetOpen) snapSheet(true); }
 
 async function loadModel(){
   if (landmarker) return landmarker;
@@ -511,6 +526,8 @@ function loop(now){
     hands[0].update(p); hands[0].visible = true;
     renderReadout(p, 'demo', now);
   }
+  const top = $('dock').getBoundingClientRect().top;
+  if (Math.abs(top - lastSheetTop) > 0.5){ lastSheetTop = top; resize(); }
   controls.update();
   renderer.render(scene, camera);
 }
@@ -522,10 +539,44 @@ $('flip').onclick = async () => {
   mirror = facing === 'user'; syncMirror();
   if (tracking){ try { await openCamera(); } catch (e) { showErr('카메라를 전환하지 못했습니다.'); } }
 };
-$('more').onclick = () => {
-  const open = $('settings').hidden; $('settings').hidden = !open;
-  $('more').setAttribute('aria-expanded', String(open));
+
+/* ---------- Bottom sheet ---------- */
+const sheet = $('dock'), grab = $('grab');
+let sheetOpen = false, sheetOff = 0, maxOff = 0;
+const safeB = () => $('safeProbe').offsetHeight;
+function measureSheet(){ maxOff = Math.max(0, sheet.offsetHeight - grab.offsetHeight - safeB()); }
+function setOff(v){ sheetOff = THREE.MathUtils.clamp(v, 0, maxOff); sheet.style.transform = `translateY(${sheetOff}px)`; }
+function snapSheet(open){
+  sheetOpen = open; measureSheet();
+  sheet.classList.remove('dragging'); sheet.classList.toggle('open', open);
+  setOff(open ? 0 : maxOff);
+  grab.setAttribute('aria-expanded', String(open));
+}
+let drag = null;
+grab.addEventListener('pointerdown', (e) => {
+  measureSheet(); grab.setPointerCapture(e.pointerId);
+  drag = { y:e.clientY, off:sheetOff, t:performance.now(), moved:false, ly:e.clientY, lt:performance.now(), v:0 };
+  sheet.classList.add('dragging');
+});
+grab.addEventListener('pointermove', (e) => {
+  if (!drag) return;
+  const dy = e.clientY - drag.y;
+  if (Math.abs(dy) > 5) drag.moved = true;
+  const now = performance.now(), dt = Math.max(1, now - drag.lt);
+  drag.v = (e.clientY - drag.ly) / dt; drag.ly = e.clientY; drag.lt = now;
+  setOff(drag.off + dy);
+});
+const endDrag = () => {
+  if (!drag) return;
+  const d = drag; drag = null;
+  if (!d.moved) snapSheet(!sheetOpen);
+  else if (d.v < -0.35) snapSheet(true);
+  else if (d.v > 0.35) snapSheet(false);
+  else snapSheet(sheetOff < maxOff / 2);
 };
+grab.addEventListener('pointerup', endDrag);
+grab.addEventListener('pointercancel', endDrag);
+grab.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); snapSheet(!sheetOpen); } });
 $('mats').onclick = (e) => {
   const b = e.target.closest('button'); if (!b) return;
   matKey = b.dataset.m;
@@ -546,6 +597,8 @@ $('tPip').onclick = () => {
 };
 $('tReset').onclick = () => { controls.target.set(0,0,0); camera.position.copy(CAM_HOME).setLength(camDist); controls.update(); };
 
+sheet.classList.add('dragging'); snapSheet(false); sheet.classList.add('dragging');
+requestAnimationFrame(() => sheet.classList.remove('dragging'));
 resize();
 requestAnimationFrame(loop);
 </script>

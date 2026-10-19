@@ -206,12 +206,10 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 
 const MP_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
 const HAND_TASK = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
 const FACE_TASK = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
-const HAND_GLB = 'assets/hand-right.glb';   // WebXR generic-hand (25 joints, skinned)
 const FACE_GLB = 'assets/facecap.glb';      // ARKit 52 blendshape face
 
 const $ = id => document.getElementById(id);
@@ -261,6 +259,8 @@ const MATS = {
 };
 let matKey = 'skin';
 const TEETH = new THREE.MeshStandardMaterial({ color:0xece6da, roughness:0.4 });
+const NAIL = new THREE.MeshPhysicalMaterial({ color:0xe0a896, roughness:0.22, clearcoat:0.9, clearcoatRoughness:0.15 });
+const TONGUE = new THREE.MeshPhysicalMaterial({ color:0xc25f66, roughness:0.38, clearcoat:0.35, clearcoatRoughness:0.3, sheen:0.4, sheenColor:new THREE.Color(0xff9aa0) });
 const EYE = new THREE.MeshPhysicalMaterial({ map:makeEyeTexture(), roughness:0.3, clearcoat:1, clearcoatRoughness:0.05 });
 
 function makeEyeTexture(){
@@ -281,81 +281,114 @@ function makeEyeTexture(){
 const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 const loadGLB = (url) => new Promise((res, rej) => loader.load(url, res, undefined, rej));
 
-/* ---------- Realistic skinned hand (WebXR joints driven by MediaPipe landmarks) ---------- */
-const FINGERS = ['index','middle','ring','pinky'];
-const XR = ['wrist','thumb-metacarpal','thumb-phalanx-proximal','thumb-phalanx-distal','thumb-tip',
-  ...FINGERS.flatMap(f => ['metacarpal','phalanx-proximal','phalanx-intermediate','phalanx-distal','tip'].map(s => `${f}-finger-${s}`))];
-const MP_OF = [0, 1,2,3,4, -1,5,6,7,8, -1,9,10,11,12, -1,13,14,15,16, -1,17,18,19,20];
-const CHILD = XR.map((n,i) => i === 0 ? 11 : n.endsWith('tip') ? -1 : i+1);
+/* ---------- Procedural hand: joints + tapered bones + rounded palm + nails ---------- */
+// 관절 반지름 (mm): 손목, 엄지, 검지, 중지, 약지, 소지
+const RADII = [17, 15,12,10.5,9, 10.5,9.6,8.4,7.6, 11,10,8.8,7.9, 10.2,9.3,8.2,7.4, 9,8,7.1,6.5].map(v => v/1000*S);
+const FINGER_BONES = [[1,2],[2,3],[3,4],[5,6],[6,7],[7,8],[9,10],[10,11],[11,12],[13,14],[14,15],[15,16],[17,18],[18,19],[19,20]];
+const TIPS = [4,8,12,16,20], DIPS = [3,7,11,15,19];
+const RING_T = [13,14,10,11,11,11,10,12].map(v => v/1000*S);        // 손바닥 테두리 반두께
+const RING_BUMP = [4,7,4,2,1,2,5,6].map(v => v/1000*S);              // 엄지두덩·새끼두덩 볼륨
+const UP = new THREE.Vector3(0,1,0);
+const unitSphere = new THREE.SphereGeometry(1, 28, 20);
+const _m = new THREE.Matrix4();
 
-const _m = new THREE.Matrix4(), _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3();
-function frameQuat(f, b, out){
-  _z.copy(f);
-  _y.copy(b).addScaledVector(_z, -b.dot(_z));
-  if (_y.lengthSq() < 1e-8) _y.set(0,1,0).addScaledVector(_z, -_z.y);
-  _y.normalize(); _x.crossVectors(_y, _z);
-  return out.setFromRotationMatrix(_m.makeBasis(_x, _y, _z));
-}
-function backNormal(p0, p5, p17, out){
-  return out.subVectors(p5, p0).cross(_x.subVectors(p17, p0)).normalize().negate();
-}
-
-class RealHand {
-  constructor(template){
+class ProcHand {
+  constructor(){
     this.group = new THREE.Group(); scene.add(this.group);
-    this.root = SkeletonUtils.clone(template); this.group.add(this.root);
-    this.bones = XR.map(n => this.root.getObjectByName(n));
-    this.meshes = [];
-    this.root.traverse(o => { if (o.isSkinnedMesh){ o.frustumCulled = false; o.castShadow = true; this.meshes.push(o); } });
-    this.setMaterial(MATS[matKey]);
-    this.bindPos = this.bones.map(b => b.position.clone());
-    this.bindQuat = this.bones.map(b => b.quaternion.clone());
-    const bb = backNormal(this.bindPos[0], this.bindPos[6], this.bindPos[21], new THREE.Vector3());
-    this.bindFrameInv = this.bones.map((b, i) => {
-      const c = CHILD[i]; if (c < 0) return null;
-      const f = new THREE.Vector3().subVectors(this.bindPos[c], this.bindPos[i]).normalize();
-      return frameQuat(f, bb, new THREE.Quaternion()).invert();
-    });
-    this.bindSize = this.bindPos[11].distanceTo(this.bindPos[0]);
-    this.J = XR.map(() => new THREE.Vector3());
-    this.R = XR.map(() => new THREE.Quaternion());
-    this.L = Array.from({length:21}, () => new THREE.Vector3());
+    this.parts = [];
+    const add = (geo, kind='skin') => { const m = new THREE.Mesh(geo); m.castShadow = true; m.userData.kind = kind; this.group.add(m); this.parts.push(m); return m; };
+    this.joints = RADII.map((r, i) => { if (i === 0) return null; const m = add(unitSphere); m.scale.setScalar(r); return m; });
+    this.bones = FINGER_BONES.map(([a,b]) => add(new THREE.CylinderGeometry(RADII[b], RADII[a], 1, 28, 1, true)));
+    this.wrist = add(unitSphere);
+    this.arm = add(new THREE.CylinderGeometry(1, 1.12, 1, 32, 1, true));
+    this.nails = TIPS.map(() => add(unitSphere, 'nail'));
+    const pg = new THREE.BufferGeometry();
+    this.palmPos = new Float32Array(42*3);
+    pg.setAttribute('position', new THREE.BufferAttribute(this.palmPos, 3));
+    const idx = [], N = 8, I = i => 1+i, F = i => 9+i, M = i => 17+i, B = i => 25+i, Ib = i => 33+i;
+    const strip = (A, Bf) => { for (let i=0;i<N;i++){ const j=(i+1)%N; idx.push(A(i),Bf(i),A(j), A(j),Bf(i),Bf(j)); } };
+    for (let i=0;i<N;i++){ const j=(i+1)%N; idx.push(0,I(i),I(j)); idx.push(41,Ib(j),Ib(i)); }
+    strip(I,F); strip(F,M); strip(M,B); strip(B,Ib);
+    pg.setIndex(idx);
+    this.palm = add(pg);
+    this.setMaterial(matKey);
     this.lastSeen = -1e9; this.filters = null;
-    this._b = new THREE.Vector3(); this._f = new THREE.Vector3(); this._q = new THREE.Quaternion(); this._v = new THREE.Vector3();
+    this.q = Array.from({length:21}, () => new THREE.Vector3());
+    this.ring = Array.from({length:8}, () => new THREE.Vector3());
+    this.v = Array.from({length:8}, () => new THREE.Vector3());
   }
-  setMaterial(m){ this.meshes.forEach(x => x.material = m); }
+  setMaterial(key){
+    const m = MATS[key];
+    this.parts.forEach(p => p.material = (p.userData.kind === 'nail' && key === 'skin') ? NAIL : m);
+  }
   set visible(v){ this.group.visible = v; }
   get visible(){ return this.group.visible; }
-  // p: 21 scene points; right: geometric chirality of those points
-  pose(p, right){
-    const sx = right ? 1 : -1;
-    this.group.scale.set(sx*S, S, S);
-    const L = this.L;
-    for (let i=0;i<21;i++) L[i].set(p[i].x*sx/S, p[i].y/S, p[i].z/S);
-    const k = L[9].distanceTo(L[0]) / this.bindSize;
-    const b = backNormal(L[0], L[5], L[17], this._b);
-    const J = this.J, R = this.R, f = this._f, q = this._q;
-    J[0].copy(L[0]);
-    frameQuat(f.subVectors(L[9], L[0]).normalize(), b, q);
-    R[0].multiplyQuaternions(q, this.bindFrameInv[0]);
-    for (let i=1;i<25;i++){
-      if (MP_OF[i] >= 0) J[i].copy(L[MP_OF[i]]);
-      else J[i].copy(this._v.subVectors(this.bindPos[i], this.bindPos[0]).applyQuaternion(R[0]).multiplyScalar(k)).add(J[0]);
+  orient(mesh, X, Y, Z){ mesh.quaternion.setFromRotationMatrix(_m.makeBasis(X, Y, Z)); }
+  pose(p0, right){
+    const p = this.q;
+    for (let i=0;i<21;i++) p[i].copy(p0[i]);
+    const d = new THREE.Vector3(), X = new THREE.Vector3(), Y = new THREE.Vector3(), Z = new THREE.Vector3();
+    // 손끝 구가 실제 손끝을 넘지 않도록 안쪽으로
+    TIPS.forEach((t, k) => { d.subVectors(p[t], p[DIPS[k]]).normalize(); p[t].addScaledVector(d, -RADII[t]*0.6); });
+    const n = new THREE.Vector3().subVectors(p[5], p[0]).cross(X.subVectors(p[17], p[0])).normalize();
+    const back = right ? n.clone().negate() : n.clone();
+    const palmN = back.clone().negate();
+    // 관절·뼈
+    for (let i=1;i<21;i++) this.joints[i].position.copy(p[i]);
+    FINGER_BONES.forEach(([a,b], k) => {
+      const m = this.bones[k];
+      d.subVectors(p[b], p[a]); const len = d.length() || 1e-4;
+      m.position.addVectors(p[a], p[b]).multiplyScalar(0.5);
+      m.quaternion.setFromUnitVectors(UP, d.divideScalar(len));
+      m.scale.set(1, len, 1);
+    });
+    // 손톱
+    const side = new THREE.Vector3().subVectors(p[2], p[5]).normalize();
+    TIPS.forEach((t, k) => {
+      const dip = DIPS[k], m = this.nails[k];
+      d.subVectors(p[t], p[dip]); const len = d.length() || 1e-4;
+      Y.copy(d).divideScalar(len);
+      const bk = k === 0 ? side.clone().multiplyScalar(0.7).addScaledVector(back, 0.7) : back.clone();
+      Z.copy(bk).addScaledVector(Y, -bk.dot(Y)).normalize();
+      X.crossVectors(Y, Z);
+      this.orient(m, X, Y, Z);
+      const rr = (RADII[dip] + RADII[t]) / 2;
+      m.position.copy(p[dip]).addScaledVector(d, 0.62).addScaledVector(Z, rr*0.8);
+      m.scale.set(rr*0.78, len*0.42, rr*0.24);
+    });
+    // 손목·전완 (타원 단면)
+    Y.subVectors(p[9], p[0]).normalize();
+    X.subVectors(p[5], p[17]); X.addScaledVector(Y, -X.dot(Y)).normalize();
+    Z.crossVectors(X, Y);
+    this.orient(this.wrist, X, Y, Z);
+    this.wrist.position.copy(p[0]).addScaledVector(Y, -0.004*S);
+    this.wrist.scale.set(0.0236*S, 0.02*S, 0.0173*S);
+    const armLen = 0.11*S;
+    this.orient(this.arm, X, Y, Z);
+    this.arm.position.copy(p[0]).addScaledVector(Y, -armLen/2 - 0.004*S);
+    this.arm.scale.set(0.0235*S, armLen, 0.0172*S);
+    // 손바닥: 테두리 8점으로 둥근 슬래브 (가운데는 살짝 오목, 두덩은 볼록)
+    const ring = this.ring;
+    ring[0].copy(p[0]); ring[1].copy(p[1]); ring[2].copy(p[2]); ring[3].copy(p[5]);
+    ring[4].copy(p[9]); ring[5].copy(p[13]); ring[6].copy(p[17]); ring[7].lerpVectors(p[17], p[0], 0.5);
+    const c = new THREE.Vector3(); ring.forEach(r => c.add(r)); c.divideScalar(8);
+    const out = this.v, a = this.palmPos;
+    ring.forEach((r, i) => { out[i].subVectors(r, c); out[i].addScaledVector(palmN, -out[i].dot(palmN)).normalize(); });
+    const put = (k, v) => { a[k*3]=v.x; a[k*3+1]=v.y; a[k*3+2]=v.z; };
+    const t = new THREE.Vector3();
+    put(0, t.copy(c).addScaledVector(palmN, 0.0105*S));
+    put(41, t.copy(c).addScaledVector(palmN, -0.012*S));
+    for (let i=0;i<8;i++){
+      const r = ring[i], tr = RING_T[i];
+      put(1+i,  t.lerpVectors(c, r, 0.55).addScaledVector(palmN, 0.012*S + RING_BUMP[i]));
+      put(9+i,  t.copy(r).addScaledVector(palmN, tr*0.8).addScaledVector(out[i], tr*0.15));
+      put(17+i, t.copy(r).addScaledVector(out[i], tr*0.95));
+      put(25+i, t.copy(r).addScaledVector(palmN, -tr*0.8).addScaledVector(out[i], tr*0.15));
+      put(33+i, t.lerpVectors(c, r, 0.55).addScaledVector(palmN, -0.0125*S));
     }
-    for (let i=1;i<25;i++){
-      const c = CHILD[i];
-      if (c < 0){ R[i].copy(R[i-1]); continue; }
-      f.subVectors(J[c], J[i]);
-      if (f.lengthSq() < 1e-10){ R[i].copy(R[i-1]); continue; }
-      frameQuat(f.normalize(), b, q);
-      R[i].multiplyQuaternions(q, this.bindFrameInv[i]);
-    }
-    for (let i=0;i<25;i++){
-      const bone = this.bones[i];
-      bone.position.copy(J[i]);
-      bone.quaternion.multiplyQuaternions(R[i], this.bindQuat[i]);
-      bone.scale.setScalar(k);
-    }
+    this.palm.geometry.attributes.position.needsUpdate = true;
+    this.palm.geometry.computeVertexNormals();
+    this.palm.geometry.computeBoundingSphere();
   }
 }
 
@@ -381,6 +414,14 @@ class RealFace {
       this.group.add(eye); this.eyes.push(eye);
     });
     [this.head, this.teeth].forEach(m => { if (m){ m.castShadow = true; m.frustumCulled = false; } });
+    // 혀: 모델에 없어서 직접 만든 납작한 타원체 (치아 뒤에서 앞으로 밀려 나옴)
+    const tb = new THREE.Box3().setFromObject(this.teeth || this.head);
+    this.tPivot = new THREE.Group();
+    this.tRest = new THREE.Vector3(0, tb.min.y + 0.05, tb.max.z - 0.52);
+    this.tPivot.position.copy(this.tRest);
+    this.tongue = new THREE.Mesh(new THREE.SphereGeometry(1, 36, 22), TONGUE);
+    this.tongue.scale.set(0.15, 0.052, 0.26); this.tongue.position.z = 0.24;
+    this.tPivot.add(this.tongue); this.group.add(this.tPivot);
     this.group.scale.setScalar(0.74);              // 화면에 맞는 크기
     this.lastSeen = -1e9; this.pf = null; this.q = new THREE.Quaternion();
     this.shapes = {};
@@ -390,6 +431,7 @@ class RealFace {
     const m = MATS[key], real = key === 'skin';
     this.head.material = m;
     if (this.teeth) this.teeth.material = real ? TEETH : m;
+    if (this.tongue) this.tongue.material = real ? TONGUE : m;
     this.eyes.forEach(e => e.material = real ? EYE : m);
   }
   set visible(v){ this.group.visible = v; }
@@ -401,8 +443,20 @@ class RealFace {
   }
   // shapes: avatar-space ARKit names (Left = 아바타의 왼쪽)
   apply(shapes){
-    for (const n in shapes) this.setShape(n, shapes[n]);
     const g = n => shapes[n] || 0;
+    for (const n in shapes){
+      let v = shapes[n];
+      if (n.startsWith('eyeLookDown')) v *= 0.45;          // 아래를 볼 때 눈꺼풀이 과하게 덮이지 않게
+      this.setShape(n, v);
+    }
+    // 눈을 뜬 상태가 또렷하도록 약간의 기본 크게 뜨기
+    this.setShape('eyeWideLeft', Math.max(0.1, g('eyeWideLeft') - g('eyeBlinkLeft')));
+    this.setShape('eyeWideRight', Math.max(0.1, g('eyeWideRight') - g('eyeBlinkRight')));
+    // 혀
+    const t = THREE.MathUtils.clamp(g('tongueOut'), 0, 1), j = g('jawOpen');
+    this.tPivot.position.set(0, this.tRest.y - j*0.26 - t*0.06, this.tRest.z + t*0.58);
+    this.tPivot.rotation.x = j*0.25 + t*0.32;
+    this.tongue.scale.set(0.15 - t*0.02, 0.052, 0.26 + t*0.04);
     this.eyes.forEach(e => {
       const L = e.userData.side === 'L', s = L ? 'Left' : 'Right';
       const yaw = L ? g('eyeLookOut'+s) - g('eyeLookIn'+s) : g('eyeLookIn'+s) - g('eyeLookOut'+s);
@@ -461,16 +515,17 @@ function demoHand(time){
 /* ---------- Demo face (camera off) ---------- */
 function demoFace(t){
   const blink = Math.max(0, 1 - Math.abs(((t % 3600) - 180) / 90));
-  const ph = (t / 5200) % 1;
+  const ph = (t / 9000) % 1;
   const env = (a, b) => ph > a && ph < b ? Math.sin((ph-a)/(b-a)*Math.PI) : 0;
-  const smile = env(0.05, 0.4), jaw = env(0.45, 0.7), brow = env(0.48, 0.72), pucker = env(0.75, 0.97);
+  const smile = env(0.02, 0.22), jaw = env(0.25, 0.42), brow = env(0.27, 0.42), pucker = env(0.45, 0.6), roll = env(0.62, 0.74), tongue = env(0.77, 0.98);
   const look = Math.sin(t/1500)*0.5;
   return {
     q: new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.sin(t/2600)*0.12, Math.sin(t/2100)*0.35, Math.sin(t/3100)*0.06)),
     shapes: { eyeBlinkLeft:blink, eyeBlinkRight:blink, mouthSmileLeft:smile*0.9, mouthSmileRight:smile*0.9,
-      cheekSquintLeft:smile*0.4, cheekSquintRight:smile*0.4, jawOpen:jaw*0.55, browInnerUp:brow*0.8,
+      cheekSquintLeft:smile*0.4, cheekSquintRight:smile*0.4, browInnerUp:brow*0.8,
       browOuterUpLeft:brow*0.6, browOuterUpRight:brow*0.6, eyeWideLeft:brow*0.5, eyeWideRight:brow*0.5,
-      mouthPucker:pucker*0.8, mouthFunnel:pucker*0.3,
+      mouthPucker:pucker*1.3, mouthFunnel:pucker*0.4, mouthRollLower:roll*1.1, mouthRollUpper:roll*1.1,
+      tongueOut:tongue, jawOpen:Math.max(jaw*0.55, tongue*0.28),
       eyeLookOutLeft:Math.max(0,look), eyeLookInRight:Math.max(0,look), eyeLookInLeft:Math.max(0,-look), eyeLookOutRight:Math.max(0,-look) }
   };
 }
@@ -497,19 +552,23 @@ function analyzeFace(s){
   const bl = g('eyeBlinkLeft'), br = g('eyeBlinkRight');
   const smile = (g('mouthSmileLeft') + g('mouthSmileRight'))/2;
   const brow = Math.max(g('browInnerUp'), (g('browOuterUpLeft') + g('browOuterUpRight'))/2);
-  const jaw = g('jawOpen');
+  const jaw = g('jawOpen'), tongue = g('tongueOut');
+  const roll = Math.max(g('mouthRollLower'), g('mouthRollUpper'));
+  const lips = Math.max(g('mouthPucker'), g('mouthFunnel'), roll);
   let name = '무표정';
-  if (jaw > 0.35 && brow > 0.4) name = '놀람';
+  if (tongue > 0.5) name = '혀 내밀기';
+  else if (jaw > 0.35 && brow > 0.4) name = '놀람';
   else if (Math.abs(bl - br) > 0.45 && Math.max(bl, br) > 0.55) name = '윙크';
   else if (bl > 0.6 && br > 0.6) name = '눈 감음';
   else if (jaw > 0.3) name = '입 벌림';
+  else if (g('mouthPucker') > 0.45) name = '입술 내밀기';
+  else if (roll > 0.4) name = '입술 말아 넣기';
   else if (smile > 0.4) name = '미소';
-  else if (g('mouthPucker') > 0.5) name = '입술 내밀기';
   else if ((g('browDownLeft') + g('browDownRight'))/2 > 0.4) name = '찡그림';
   else if (g('cheekPuff') > 0.4) name = '볼 부풀림';
-  return { name, metric: Math.round(jaw*100) + '%', chips: [Math.max(bl,br) > 0.5, jaw > 0.25, smile > 0.4, brow > 0.35, g('cheekPuff') > 0.35] };
+  return { name, metric: Math.round(jaw*100) + '%', chips: [Math.max(bl,br) > 0.5, jaw > 0.25, smile > 0.4, lips > 0.4, tongue > 0.5] };
 }
-const CHIP_LABELS = { hand:['엄지','검지','중지','약지','소지'], face:['깜빡임','입 벌림','미소','눈썹','볼'] };
+const CHIP_LABELS = { hand:['엄지','검지','중지','약지','소지'], face:['깜빡임','입 벌림','미소','입술','혀'] };
 const chipEls = [...$('chips').children];
 let lastUI = 0;
 function renderReadout(r, src, t){
@@ -670,6 +729,52 @@ function trackHands(now, res){
 }
 
 /* ---------- Face tracking ---------- */
+// 눈: 사람마다 뜬 눈의 기본 점수가 달라서(0.2~0.4) 최솟값을 따라가며 0점을 다시 잡음
+const eyeBase = {}; let eyeT = 0;
+function calibrateEyes(raw, now){
+  const dt = eyeT ? Math.min(0.2, (now - eyeT)/1000) : 0; eyeT = now;
+  for (const sd of ['Left','Right']){
+    const k = 'eyeBlink' + sd, v = raw[k] || 0;
+    eyeBase[k] = Math.min((eyeBase[k] ?? v) + dt*0.02, v);
+    const b = Math.min(eyeBase[k], 0.5);
+    raw[k] = THREE.MathUtils.clamp((v - b - 0.04) / Math.max(0.25, 0.78 - b), 0, 1);
+    const sq = 'eyeSquint' + sd; raw[sq] = (raw[sq] || 0) * 0.45;
+  }
+}
+// 입술·혀 움직임은 점수가 작게 나오는 편이라 모델에 더 크게 반영
+const GAIN = { mouthPucker:[1.8,1.5], mouthFunnel:[1.6,1.4], mouthRollLower:[1.7,1.3], mouthRollUpper:[1.7,1.3],
+  mouthPressLeft:[1.4,1.2], mouthPressRight:[1.4,1.2], mouthShrugLower:[1.3,1.2], mouthShrugUpper:[1.3,1.2],
+  jawForward:[1.5,1.2], cheekPuff:[1.5,1.2], eyeWideLeft:[1.6,1], eyeWideRight:[1.6,1] };
+function tuneShape(n, v){ const g = GAIN[n]; return g ? Math.min(g[1], v * g[0]) : v; }
+
+// 혀: MediaPipe 점수는 거의 0이라, 아랫입술 아래 영역이 볼 피부보다 붉어지는 정도로 판단
+const tcv = document.createElement('canvas'); tcv.width = 192; tcv.height = 144;
+const tctx = tcv.getContext('2d', { willReadFrequently:true });
+let tongueS = 0;
+function detectTongue(lm){
+  const W = 192, H = 144;
+  tctx.drawImage(video, 0, 0, W, H);
+  const d = tctx.getImageData(0, 0, W, H).data;
+  const at = (x, y) => ((Math.min(H-1, Math.max(0, y|0)))*W + Math.min(W-1, Math.max(0, x|0)))*4;
+  let rr = 0, n = 0;
+  for (const id of [205, 425, 50, 280]) for (let dy=-2; dy<=2; dy++) for (let dx=-2; dx<=2; dx++){
+    const i = at(lm[id].x*W + dx, lm[id].y*H + dy); rr += d[i] - d[i+1]; n++;
+  }
+  const ref = rr / n;
+  const L = lm[61], R = lm[291], lo = lm[17], ch = lm[152];
+  const x0 = (L.x + (R.x-L.x)*0.22)*W, x1 = (L.x + (R.x-L.x)*0.78)*W;
+  const y0 = lo.y*H + 1, y1 = (lo.y + (ch.y - lo.y)*0.6)*H;
+  let red = 0, tot = 0;
+  for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++){
+    const i = at(x, y), r = d[i], g = d[i+1], b = d[i+2];
+    if (r - g > ref + 24 && r > b + 12 && r > 60) red++;
+    tot++;
+  }
+  const frac = tot ? red / tot : 0;
+  const v = THREE.MathUtils.clamp((frac - 0.14) / 0.3, 0, 1);
+  tongueS += (v - tongueS) * (v > tongueS ? 0.5 : 0.25);
+  return tongueS;
+}
 const _fm = new THREE.Matrix4(), _fp = new THREE.Vector3(), _fq = new THREE.Quaternion(), _fs = new THREE.Vector3();
 function trackFace(now, res){
   const lm = res.faceLandmarks?.[0];
@@ -691,13 +796,17 @@ function trackFace(now, res){
   face.group.quaternion.copy(face.q);
   // 블렌드셰이프: 비반전 영상 기준 Left = 화면 왼쪽 눈 → 거울 모드는 그대로, 아니면 좌우 교체
   const raw = {}, shapes = {}, a = 0.35 + smooth*0.6;
-  for (const c of res.faceBlendshapes[0].categories){
-    raw[c.categoryName] = c.score;
-    const n = mirror ? c.categoryName
-      : c.categoryName.endsWith('Left') ? c.categoryName.slice(0,-4) + 'Right'
-      : c.categoryName.endsWith('Right') ? c.categoryName.slice(0,-5) + 'Left' : c.categoryName;
-    const prev = face.shapes[n] ?? c.score;
-    shapes[n] = prev + (c.score - prev) * a;
+  for (const c of res.faceBlendshapes[0].categories) raw[c.categoryName] = c.score;
+  calibrateEyes(raw, now);
+  raw.tongueOut = Math.max(raw.tongueOut || 0, detectTongue(lm));
+  for (const name in raw){
+    const v = tuneShape(name, raw[name]);
+    const n = mirror ? name
+      : name.endsWith('Left') ? name.slice(0,-4) + 'Right'
+      : name.endsWith('Right') ? name.slice(0,-5) + 'Left' : name;
+    const prev = face.shapes[n] ?? v;
+    const k = name.startsWith('eyeBlink') ? Math.max(a, 0.85) : a;     // 깜빡임은 빠르게
+    shapes[n] = prev + (v - prev) * k;
   }
   face.shapes = shapes; face.apply(shapes);
   face.visible = true; face.lastSeen = now;
@@ -825,7 +934,7 @@ $('mats').onclick = (e) => {
   const b = e.target.closest('button'); if (!b) return;
   matKey = b.dataset.m;
   [...$('mats').children].forEach(x => x.setAttribute('aria-pressed', String(x === b)));
-  hands.forEach(h => h.setMaterial(MATS[matKey]));
+  hands.forEach(h => h.setMaterial(matKey));
   if (face) face.setMaterial(matKey);
 };
 $('smooth').oninput = (e) => smooth = +e.target.value;
@@ -850,11 +959,8 @@ sheet.classList.add('dragging'); measureSheet(); setOff(maxOff);
 requestAnimationFrame(() => sheet.classList.remove('dragging'));
 resize();
 requestAnimationFrame(loop);
-loadGLB(HAND_GLB).then(g => {
-  hands.push(new RealHand(g.scene), new RealHand(g.scene));
-  applyModeVisibility();
-  if (!tracking) idlePill();
-}).catch(() => showErr('손 모델(assets/hand-right.glb)을 불러오지 못했습니다.'));
+hands.push(new ProcHand(), new ProcHand());
+applyModeVisibility(); idlePill();
 </script>
 </body>
 </html>

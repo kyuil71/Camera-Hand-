@@ -184,6 +184,10 @@ button{font:inherit;color:inherit;cursor:pointer}
         <div class="lab">떨림 보정</div>
         <label class="slide">안정<input id="smooth" type="range" min="0" max="1" step="0.01" value="0.35">반응</label>
       </div>
+      <div>
+        <div class="lab">눈 크기 (얼굴)</div>
+        <label class="slide">작게<input id="eyeOpen" type="range" min="0" max="1" step="0.01" value="0.45">크게</label>
+      </div>
       <div class="toggles">
         <button id="tMirror" aria-pressed="true">거울 모드</button>
         <button id="tPip" aria-pressed="true">미리보기</button>
@@ -266,13 +270,15 @@ const EYE = new THREE.MeshPhysicalMaterial({ map:makeEyeTexture(), roughness:0.3
 function makeEyeTexture(){
   const c = document.createElement('canvas'); c.width = 512; c.height = 256;
   const g = c.getContext('2d');
-  g.fillStyle = '#efe8e0'; g.fillRect(0,0,512,256);
-  const cx = 128, cy = 128, R = 38;              // u=0.25 → 정면(+z)
-  const ir = g.createRadialGradient(cx,cy,4,cx,cy,R);
-  ir.addColorStop(0,'#1a120c'); ir.addColorStop(0.35,'#4a3020'); ir.addColorStop(0.8,'#6b4529'); ir.addColorStop(1,'#2a1a10');
+  const cx = 128, cy = 128, R = 52;              // u=0.25 → 정면(+z), 홍채 지름 ≈ 안구의 절반
+  const sc = g.createRadialGradient(cx,cy,R,cx,cy,230);
+  sc.addColorStop(0,'#ebe3da'); sc.addColorStop(0.5,'#d8ccc1'); sc.addColorStop(1,'#b9a99c');
+  g.fillStyle = sc; g.fillRect(0,0,512,256);
+  const ir = g.createRadialGradient(cx,cy,10,cx,cy,R);
+  ir.addColorStop(0,'#24170e'); ir.addColorStop(0.4,'#3d2716'); ir.addColorStop(0.78,'#55361f'); ir.addColorStop(0.93,'#2c1b10'); ir.addColorStop(1,'rgba(30,20,14,0)');
   g.fillStyle = ir; g.beginPath(); g.arc(cx,cy,R,0,7); g.fill();
-  g.strokeStyle = 'rgba(20,12,8,.8)'; g.lineWidth = 3; g.stroke();
-  g.fillStyle = '#070505'; g.beginPath(); g.arc(cx,cy,14,0,7); g.fill();
+  g.strokeStyle = 'rgba(14,9,6,.55)'; g.lineWidth = 5; g.beginPath(); g.arc(cx,cy,R-4,0,7); g.stroke();
+  g.fillStyle = '#060404'; g.beginPath(); g.arc(cx,cy,17,0,7); g.fill();
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
   return t;
 }
@@ -286,7 +292,7 @@ const loadGLB = (url) => new Promise((res, rej) => loader.load(url, res, undefin
 const RADII = [17, 15,12,10.5,9, 10.5,9.6,8.4,7.6, 11,10,8.8,7.9, 10.2,9.3,8.2,7.4, 9,8,7.1,6.5].map(v => v/1000*S);
 const FINGER_BONES = [[1,2],[2,3],[3,4],[5,6],[6,7],[7,8],[9,10],[10,11],[11,12],[13,14],[14,15],[15,16],[17,18],[18,19],[19,20]];
 const TIPS = [4,8,12,16,20], DIPS = [3,7,11,15,19];
-const RING_T = [13,14,10,11,11,11,10,12].map(v => v/1000*S);        // 손바닥 테두리 반두께
+const RING_T = [13,14,10,9.5,10,9.5,8.5,12].map(v => v/1000*S);        // 손바닥 테두리 반두께
 const RING_BUMP = [4,7,4,2,1,2,5,6].map(v => v/1000*S);              // 엄지두덩·새끼두덩 볼륨
 const UP = new THREE.Vector3(0,1,0);
 const unitSphere = new THREE.SphereGeometry(1, 28, 20);
@@ -312,7 +318,7 @@ class ProcHand {
     pg.setIndex(idx);
     this.palm = add(pg);
     this.setMaterial(matKey);
-    this.lastSeen = -1e9; this.filters = null;
+    this.lastSeen = -1e9; this.filters = null; this.chir = null; this.flipN = 0;
     this.q = Array.from({length:21}, () => new THREE.Vector3());
     this.ring = Array.from({length:8}, () => new THREE.Vector3());
     this.v = Array.from({length:8}, () => new THREE.Vector3());
@@ -323,6 +329,22 @@ class ProcHand {
   }
   set visible(v){ this.group.visible = v; }
   get visible(){ return this.group.visible; }
+  // 좌우 판별: 라벨 대신 형태로. 손가락은 손바닥 쪽으로만 굽고, 엄지 뿌리는 손바닥 쪽에 있음
+  chirality(p, guess){
+    const n = new THREE.Vector3().subVectors(p[5], p[0]).cross(new THREE.Vector3().subVectors(p[17], p[0])).normalize();
+    const mid = new THREE.Vector3(), t = new THREE.Vector3();
+    let flex = 0;
+    for (const [m,pp,dd,tip] of [[5,6,7,8],[9,10,11,12],[13,14,15,16],[17,18,19,20]]){
+      mid.addVectors(p[m], p[tip]).multiplyScalar(0.5); flex += t.subVectors(p[pp], mid).dot(n);
+      mid.addVectors(p[pp], p[tip]).multiplyScalar(0.5); flex += t.subVectors(p[dd], mid).dot(n);
+    }
+    const thumb = t.subVectors(p[2], p[0]).dot(n) + t.subVectors(p[3], p[0]).dot(n)*0.5;
+    const score = (thumb*0.6 - flex) / S;                      // m, >0 → 손바닥이 n 쪽 → 오른손 형태
+    if (this.chir === null) this.chir = Math.abs(score) > 0.004 ? score > 0 : guess;
+    else if ((score > 0) !== this.chir && Math.abs(score) > 0.006){ if (++this.flipN > 4){ this.chir = !this.chir; this.flipN = 0; } }
+    else this.flipN = 0;
+    return this.chir;
+  }
   orient(mesh, X, Y, Z){ mesh.quaternion.setFromRotationMatrix(_m.makeBasis(X, Y, Z)); }
   pose(p0, right){
     const p = this.q;
@@ -335,25 +357,35 @@ class ProcHand {
     const palmN = back.clone().negate();
     // 관절·뼈
     for (let i=1;i<21;i++) this.joints[i].position.copy(p[i]);
+    const side = new THREE.Vector3().subVectors(p[2], p[5]).normalize();
+    const thumbBack = side.clone().multiplyScalar(0.7).addScaledVector(back, 0.7).normalize();
+    // 손가락 마디: 살짝 납작한 타원 단면(폭 > 두께)
     FINGER_BONES.forEach(([a,b], k) => {
       const m = this.bones[k];
       d.subVectors(p[b], p[a]); const len = d.length() || 1e-4;
+      Y.copy(d).divideScalar(len);
+      const bk = a <= 3 ? thumbBack : back;
+      Z.copy(bk).addScaledVector(Y, -bk.dot(Y)).normalize();
+      X.crossVectors(Y, Z);
+      this.orient(m, X, Y, Z);
       m.position.addVectors(p[a], p[b]).multiplyScalar(0.5);
-      m.quaternion.setFromUnitVectors(UP, d.divideScalar(len));
-      m.scale.set(1, len, 1);
+      m.scale.set(1.04, len, 0.94);
+      // 관절 구도 같은 방향·단면으로 맞춰 마디 경계가 튀지 않게
+      for (const j of (b === 4 || b % 4 === 0 ? [a, b] : [a])){
+        const jm = this.joints[j]; jm.quaternion.copy(m.quaternion); jm.scale.set(RADII[j]*1.04, RADII[j], RADII[j]*0.94);
+      }
     });
-    // 손톱
-    const side = new THREE.Vector3().subVectors(p[2], p[5]).normalize();
+    // 손톱 (손등 쪽)
     TIPS.forEach((t, k) => {
       const dip = DIPS[k], m = this.nails[k];
       d.subVectors(p[t], p[dip]); const len = d.length() || 1e-4;
       Y.copy(d).divideScalar(len);
-      const bk = k === 0 ? side.clone().multiplyScalar(0.7).addScaledVector(back, 0.7) : back.clone();
+      const bk = k === 0 ? thumbBack : back;
       Z.copy(bk).addScaledVector(Y, -bk.dot(Y)).normalize();
       X.crossVectors(Y, Z);
       this.orient(m, X, Y, Z);
       const rr = (RADII[dip] + RADII[t]) / 2;
-      m.position.copy(p[dip]).addScaledVector(d, 0.62).addScaledVector(Z, rr*0.8);
+      m.position.copy(p[dip]).addScaledVector(d, 0.6).addScaledVector(Z, rr*0.78);
       m.scale.set(rr*0.78, len*0.42, rr*0.24);
     });
     // 손목·전완 (타원 단면)
@@ -369,8 +401,9 @@ class ProcHand {
     this.arm.scale.set(0.0235*S, armLen, 0.0172*S);
     // 손바닥: 테두리 8점으로 둥근 슬래브 (가운데는 살짝 오목, 두덩은 볼록)
     const ring = this.ring;
-    ring[0].copy(p[0]); ring[1].copy(p[1]); ring[2].copy(p[2]); ring[3].copy(p[5]);
-    ring[4].copy(p[9]); ring[5].copy(p[13]); ring[6].copy(p[17]); ring[7].lerpVectors(p[17], p[0], 0.5);
+    ring[0].copy(p[0]); ring[1].copy(p[1]); ring[2].lerpVectors(p[2], p[3], 0.12);
+    ring[3].lerpVectors(p[5], p[6], 0.18); ring[4].lerpVectors(p[9], p[10], 0.18);      // 손가락 사이 물갈퀴 살
+    ring[5].lerpVectors(p[13], p[14], 0.18); ring[6].lerpVectors(p[17], p[18], 0.16); ring[7].lerpVectors(p[17], p[0], 0.5);
     const c = new THREE.Vector3(); ring.forEach(r => c.add(r)); c.divideScalar(8);
     const out = this.v, a = this.palmPos;
     ring.forEach((r, i) => { out[i].subVectors(r, c); out[i].addScaledVector(palmN, -out[i].dot(palmN)).normalize(); });
@@ -409,8 +442,8 @@ class RealFace {
       const box = new THREE.Box3().setFromObject(src);
       const c = box.getCenter(new THREE.Vector3()), s = box.getSize(new THREE.Vector3());
       src.visible = false;
-      const eye = new THREE.Mesh(new THREE.SphereGeometry(Math.min(s.x,s.y,s.z)/2*0.92, 40, 24), EYE);
-      eye.position.copy(c).z -= Math.min(s.x,s.y,s.z)*0.03; eye.userData.side = c.x > 0 ? 'L' : 'R';   // 아바타 기준 왼쪽 눈 = +x
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(Math.min(s.x,s.y,s.z)/2*0.94, 40, 24), EYE);
+      eye.position.copy(c).z -= Math.min(s.x,s.y,s.z)*0.02; eye.userData.side = c.x > 0 ? 'L' : 'R';   // 아바타 기준 왼쪽 눈 = +x
       this.group.add(eye); this.eyes.push(eye);
     });
     [this.head, this.teeth].forEach(m => { if (m){ m.castShadow = true; m.frustumCulled = false; } });
@@ -446,12 +479,14 @@ class RealFace {
     const g = n => shapes[n] || 0;
     for (const n in shapes){
       let v = shapes[n];
-      if (n.startsWith('eyeLookDown')) v *= 0.45;          // 아래를 볼 때 눈꺼풀이 과하게 덮이지 않게
+      if (n.startsWith('eyeLookDown')) v *= 0.2;           // 폰을 내려다볼 때 눈꺼풀이 덮이지 않게
+      else if (n.startsWith('eyeLookUp')) v *= 0.5;
       this.setShape(n, v);
     }
     // 눈을 뜬 상태가 또렷하도록 약간의 기본 크게 뜨기
-    this.setShape('eyeWideLeft', Math.max(0.1, g('eyeWideLeft') - g('eyeBlinkLeft')));
-    this.setShape('eyeWideRight', Math.max(0.1, g('eyeWideRight') - g('eyeBlinkRight')));
+    const wb = eyeOpen * 0.55;                              // 눈 크기 보정
+    this.setShape('eyeWideLeft', Math.max(wb, g('eyeWideLeft')) * (1 - g('eyeBlinkLeft')));
+    this.setShape('eyeWideRight', Math.max(wb, g('eyeWideRight')) * (1 - g('eyeBlinkRight')));
     // 혀
     const t = THREE.MathUtils.clamp(g('tongueOut'), 0, 1), j = g('jawOpen');
     this.tPivot.position.set(0, this.tRest.y - j*0.26 - t*0.06, this.tRest.z + t*0.58);
@@ -461,7 +496,7 @@ class RealFace {
       const L = e.userData.side === 'L', s = L ? 'Left' : 'Right';
       const yaw = L ? g('eyeLookOut'+s) - g('eyeLookIn'+s) : g('eyeLookIn'+s) - g('eyeLookOut'+s);
       const pitch = g('eyeLookDown'+s) - g('eyeLookUp'+s);
-      e.rotation.set(pitch*0.45, yaw*0.6, 0, 'YXZ');
+      e.rotation.set(pitch*0.22, yaw*0.55, 0, 'YXZ');
     });
   }
 }
@@ -478,7 +513,7 @@ class OneEuro {
     return this.x;
   }
 }
-let smooth = 0.35;
+let smooth = 0.35, eyeOpen = 0.45;
 const filterParams = () => ({ minC: 0.4 + smooth*5, beta: 0.04 + smooth*0.6 });
 
 /* ---------- Demo hand pose (camera off) ---------- */
@@ -706,17 +741,17 @@ function trackHands(now, res){
   const used = [false,false];
   (res.landmarks || []).forEach((lm, i) => {
     const label = res.handednesses?.[i]?.[0]?.categoryName;
-    const realRight = label === 'Left';                  // 좌우반전 안 된 영상이 들어가므로 라벨이 뒤집혀 나옴
+    const realRight = label === 'Right';
     let slot = realRight ? 0 : 1;
     if (used[slot]) slot = 1 - slot;
     used[slot] = true;
     const h = hands[slot];
     const pts = handToScene(lm, res.worldLandmarks[i], tmp);
-    if (!h.filters || now - h.lastSeen > 350) h.filters = Array.from({length:63}, () => new OneEuro());
+    if (!h.filters || now - h.lastSeen > 350){ h.filters = Array.from({length:63}, () => new OneEuro()); h.chir = null; }
     const { minC, beta } = filterParams();
     for (let j=0;j<21;j++)
       pts[j].set(h.filters[j*3].f(pts[j].x, now, minC, beta), h.filters[j*3+1].f(pts[j].y, now, minC, beta), h.filters[j*3+2].f(pts[j].z, now, minC, beta));
-    h.pose(pts, mirror ? !realRight : realRight);
+    h.pose(pts, h.chirality(pts, mirror ? !realRight : realRight));
     h.visible = true; h.lastSeen = now;
     if (i === 0) renderReadout(analyzeHand(pts), 'live', now);
   });
@@ -737,8 +772,8 @@ function calibrateEyes(raw, now){
     const k = 'eyeBlink' + sd, v = raw[k] || 0;
     eyeBase[k] = Math.min((eyeBase[k] ?? v) + dt*0.02, v);
     const b = Math.min(eyeBase[k], 0.5);
-    raw[k] = THREE.MathUtils.clamp((v - b - 0.04) / Math.max(0.25, 0.78 - b), 0, 1);
-    const sq = 'eyeSquint' + sd; raw[sq] = (raw[sq] || 0) * 0.45;
+    raw[k] = THREE.MathUtils.clamp((v - b - 0.07) / Math.max(0.25, 0.78 - b), 0, 1);
+    const sq = 'eyeSquint' + sd; raw[sq] = (raw[sq] || 0) * 0.3;
   }
 }
 // 입술·혀 움직임은 점수가 작게 나오는 편이라 모델에 더 크게 반영
@@ -747,35 +782,54 @@ const GAIN = { mouthPucker:[1.8,1.5], mouthFunnel:[1.6,1.4], mouthRollLower:[1.7
   jawForward:[1.5,1.2], cheekPuff:[1.5,1.2], eyeWideLeft:[1.6,1], eyeWideRight:[1.6,1] };
 function tuneShape(n, v){ const g = GAIN[n]; return g ? Math.min(g[1], v * g[0]) : v; }
 
-// 혀: MediaPipe 점수는 거의 0이라, 아랫입술 아래 영역이 볼 피부보다 붉어지는 정도로 판단
-const tcv = document.createElement('canvas'); tcv.width = 192; tcv.height = 144;
+// 혀: MediaPipe 점수는 거의 0이라 영상으로 직접 판단.
+// 입~턱 영역만 원본 해상도로 잘라 와서, 아랫입술 색(=혀와 비슷)과 볼 피부색의 중간값을 기준으로
+// 아랫입술 아래 턱 방향으로 '입술색'이 얼마나 길게 이어지는지 측정 → 혀가 나온 길이.
+const TC = 128;
+const tcv = document.createElement('canvas'); tcv.width = TC; tcv.height = TC;
 const tctx = tcv.getContext('2d', { willReadFrequently:true });
-let tongueS = 0;
-function detectTongue(lm){
-  const W = 192, H = 144;
-  tctx.drawImage(video, 0, 0, W, H);
-  const d = tctx.getImageData(0, 0, W, H).data;
-  const at = (x, y) => ((Math.min(H-1, Math.max(0, y|0)))*W + Math.min(W-1, Math.max(0, x|0)))*4;
-  let rr = 0, n = 0;
-  for (const id of [205, 425, 50, 280]) for (let dy=-2; dy<=2; dy++) for (let dx=-2; dx<=2; dx++){
-    const i = at(lm[id].x*W + dx, lm[id].y*H + dy); rr += d[i] - d[i+1]; n++;
+let tongueS = 0, tongueBase = null, tongueT = 0;
+const chroma = (r, g, b) => (r - g) / (r + g + b + 1);
+function detectTongue(lm, now){
+  const VW = video.videoWidth, VH = video.videoHeight;
+  const P = id => ({ x: lm[id].x*VW, y: lm[id].y*VH });
+  const mL = P(61), mR = P(291), up = P(0), lo = P(17), ch = P(152), il = P(14), iu = P(13);
+  const ck = [P(205), P(425)];
+  const pad = (mR.x - mL.x) * 0.35;
+  const x0 = Math.max(0, Math.min(mL.x, mR.x, ck[0].x, ck[1].x) - pad), x1 = Math.min(VW, Math.max(mL.x, mR.x, ck[0].x, ck[1].x) + pad);
+  const y0 = Math.max(0, Math.min(up.y, ck[0].y, ck[1].y) - pad*0.5), y1 = Math.min(VH, ch.y + pad*0.5);
+  const bw = x1 - x0, bh = y1 - y0;
+  if (bw < 8 || bh < 8) return tongueS;
+  tctx.drawImage(video, x0, y0, bw, bh, 0, 0, TC, TC);
+  const d = tctx.getImageData(0, 0, TC, TC).data;
+  const map = q => ({ x:(q.x - x0)/bw*TC, y:(q.y - y0)/bh*TC });
+  const cAt = (x, y) => { const i = ((Math.min(TC-1, Math.max(0, y|0)))*TC + Math.min(TC-1, Math.max(0, x|0)))*4; return chroma(d[i], d[i+1], d[i+2]); };
+  const patch = (q, r) => { let s = 0, n = 0; for (let dy=-r; dy<=r; dy++) for (let dx=-r; dx<=r; dx++){ s += cAt(q.x+dx, q.y+dy); n++; } return s/n; };
+  const skin = (patch(map(ck[0]), 3) + patch(map(ck[1]), 3)) / 2;
+  const LO = map(lo), IL = map(il), IU = map(iu), CH = map(ch), ML = map(mL), MR = map(mR);
+  const lip = patch({ x:(IL.x+LO.x)/2, y:(IL.y+LO.y)/2 }, 1);
+  if (lip - skin < 0.025) { tongueS *= 0.9; return tongueS; }     // 입술과 피부 구분이 안 되는 조명
+  const thr = skin + (lip - skin) * 0.5;
+  // 아랫입술 → 턱 축을 따라 한 줄씩 검사
+  let ux = CH.x - LO.x, uy = CH.y - LO.y; const L = Math.hypot(ux, uy) || 1; ux /= L; uy /= L;
+  const vx = -uy, vy = ux, hw = Math.max(2, Math.hypot(MR.x-ML.x, MR.y-ML.y) * 0.17);
+  const rowLip = s0 => { let k = 0, n = 0; for (let t = -hw; t <= hw; t++){ if (cAt(LO.x + ux*s0 + vx*t, LO.y + uy*s0 + vy*t) > thr) k++; n++; } return k / n; };
+  let end = -0.15*L, miss = 0;
+  for (let s0 = -0.15*L; s0 < 0.9*L; s0 += 0.5){
+    if (rowLip(s0) > 0.45){ end = s0; miss = 0; } else if (++miss > 3) break;
   }
-  const ref = rr / n;
-  const L = lm[61], R = lm[291], lo = lm[17], ch = lm[152];
-  const x0 = (L.x + (R.x-L.x)*0.22)*W, x1 = (L.x + (R.x-L.x)*0.78)*W;
-  const y0 = lo.y*H + 1, y1 = (lo.y + (ch.y - lo.y)*0.6)*H;
-  let red = 0, tot = 0;
-  for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++){
-    const i = at(x, y), r = d[i], g = d[i+1], b = d[i+2];
-    if (r - g > ref + 24 && r > b + 12 && r > 60) red++;
-    tot++;
-  }
-  const frac = tot ? red / tot : 0;
-  const v = THREE.MathUtils.clamp((frac - 0.14) / 0.3, 0, 1);
-  tongueS += (v - tongueS) * (v > tongueS ? 0.5 : 0.25);
+  const ext = Math.max(0, end) / L;                                 // 0 = 입술에서 끝남, 0.5 = 턱 중간까지
+  // 입술 사이로 혀끝만 살짝 나온 경우: 거의 다문 입 틈이 입술색으로 채워짐
+  const gap = Math.hypot(IL.x-IU.x, IL.y-IU.y);
+  let between = 0;
+  if (gap > 1.5 && gap < L*0.6){ let k = 0, n = 0; for (let f = 0.2; f <= 0.8; f += 0.1){ for (let t = -hw*0.6; t <= hw*0.6; t++){ if (cAt(IU.x + (IL.x-IU.x)*f + vx*t, IU.y + (IL.y-IU.y)*f + vy*t) > thr) k++; n++; } } between = k / n; }
+  const dt = tongueT ? Math.min(0.2, (now - tongueT)/1000) : 0; tongueT = now;
+  tongueBase = tongueBase === null ? ext : Math.min(tongueBase + dt*0.01, ext);   // 사람마다 다른 입술 아래 그늘 보정
+  let v = THREE.MathUtils.clamp((ext - Math.min(tongueBase, 0.15) - 0.06) / 0.4, 0, 1);
+  if (between > 0.6) v = Math.max(v, 0.3 * (between - 0.6) / 0.4 + 0.15);
+  tongueS += (v - tongueS) * (v > tongueS ? 0.55 : 0.35);
   return tongueS;
 }
-const _fm = new THREE.Matrix4(), _fp = new THREE.Vector3(), _fq = new THREE.Quaternion(), _fs = new THREE.Vector3();
 function trackFace(now, res){
   const lm = res.faceLandmarks?.[0];
   if (!lm || !face){
@@ -798,7 +852,7 @@ function trackFace(now, res){
   const raw = {}, shapes = {}, a = 0.35 + smooth*0.6;
   for (const c of res.faceBlendshapes[0].categories) raw[c.categoryName] = c.score;
   calibrateEyes(raw, now);
-  raw.tongueOut = Math.max(raw.tongueOut || 0, detectTongue(lm));
+  raw.tongueOut = Math.max(raw.tongueOut || 0, detectTongue(lm, now));
   for (const name in raw){
     const v = tuneShape(name, raw[name]);
     const n = mirror ? name
@@ -938,10 +992,11 @@ $('mats').onclick = (e) => {
   if (face) face.setMaterial(matKey);
 };
 $('smooth').oninput = (e) => smooth = +e.target.value;
+$('eyeOpen').oninput = (e) => eyeOpen = +e.target.value;
 function syncMirror(){
   $('tMirror').setAttribute('aria-pressed', String(mirror));
   $('pip').classList.toggle('mirror', mirror);
-  hands.forEach(h => h.filters = null);
+  hands.forEach(h => { h.filters = null; h.chir = null; });
   if (face) face.pf = null;
 }
 $('tMirror').onclick = () => { mirror = !mirror; syncMirror(); };

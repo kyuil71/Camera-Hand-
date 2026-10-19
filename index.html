@@ -186,7 +186,7 @@ button{font:inherit;color:inherit;cursor:pointer}
       </div>
       <div>
         <div class="lab">눈 크기 (얼굴)</div>
-        <label class="slide">작게<input id="eyeOpen" type="range" min="0" max="1" step="0.01" value="0.45">크게</label>
+        <label class="slide">작게<input id="eyeOpen" type="range" min="0" max="1" step="0.01" value="0.5">크게</label>
       </div>
       <div class="toggles">
         <button id="tMirror" aria-pressed="true">거울 모드</button>
@@ -264,13 +264,12 @@ const MATS = {
 let matKey = 'skin';
 const TEETH = new THREE.MeshStandardMaterial({ color:0xece6da, roughness:0.4 });
 const NAIL = new THREE.MeshPhysicalMaterial({ color:0xe0a896, roughness:0.22, clearcoat:0.9, clearcoatRoughness:0.15 });
-const TONGUE = new THREE.MeshPhysicalMaterial({ color:0x9e434c, roughness:0.45, side:THREE.DoubleSide, clearcoat:0.35, clearcoatRoughness:0.3, sheen:0.25, sheenColor:new THREE.Color(0xe88a90) });
 const EYE = new THREE.MeshPhysicalMaterial({ map:makeEyeTexture(), roughness:0.3, clearcoat:1, clearcoatRoughness:0.05 });
 
 function makeEyeTexture(){
   const c = document.createElement('canvas'); c.width = 512; c.height = 256;
   const g = c.getContext('2d');
-  const cx = 128, cy = 128, R = 52;              // u=0.25 → 정면(+z), 홍채 지름 ≈ 안구의 절반
+  const cx = 128, cy = 128, R = 42;              // u=0.25 → 정면(+z). 홍채 11.7mm / 안구 24mm ≈ 각반경 29°
   const sc = g.createRadialGradient(cx,cy,R,cx,cy,230);
   sc.addColorStop(0,'#ebe3da'); sc.addColorStop(0.5,'#d8ccc1'); sc.addColorStop(1,'#b9a99c');
   g.fillStyle = sc; g.fillRect(0,0,512,256);
@@ -278,7 +277,7 @@ function makeEyeTexture(){
   ir.addColorStop(0,'#24170e'); ir.addColorStop(0.4,'#3d2716'); ir.addColorStop(0.78,'#55361f'); ir.addColorStop(0.93,'#2c1b10'); ir.addColorStop(1,'rgba(30,20,14,0)');
   g.fillStyle = ir; g.beginPath(); g.arc(cx,cy,R,0,7); g.fill();
   g.strokeStyle = 'rgba(14,9,6,.55)'; g.lineWidth = 5; g.beginPath(); g.arc(cx,cy,R-4,0,7); g.stroke();
-  g.fillStyle = '#060404'; g.beginPath(); g.arc(cx,cy,17,0,7); g.fill();
+  g.fillStyle = '#060404'; g.beginPath(); g.arc(cx,cy,12,0,7); g.fill();
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
   return t;
 }
@@ -425,71 +424,6 @@ class ProcHand {
   }
 }
 
-/* ---------- Tongue: lofted along a path (root inside mouth → over lower lip → droops) ---------- */
-// 좌표는 얼굴 그룹 기준(모델 측정값): 입술 앞 z≈1.26, 아랫입술 윗면 y≈-0.585, 턱을 끝까지 벌리면 아랫입술이 약 0.38 내려감
-class Tongue {
-  constructor(){
-    this.RINGS = 40; this.SEG = 22;
-    this.LEN = 0.6;                      // 혀 길이
-    const nv = this.RINGS*this.SEG + 1;
-    this.pos = new Float32Array(nv*3);
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(this.pos, 3));
-    const idx = [], S_ = this.SEG;
-    for (let r=0;r<this.RINGS-1;r++) for (let k=0;k<S_;k++){
-      const a = r*S_+k, b = r*S_+(k+1)%S_, c = a+S_, d = b+S_;
-      idx.push(a,c,b, b,c,d);
-    }
-    const tip = this.RINGS*S_;
-    for (let k=0;k<S_;k++) idx.push((this.RINGS-1)*S_+k, tip, (this.RINGS-1)*S_+(k+1)%S_);
-    g.setIndex(idx);
-    this.mesh = new THREE.Mesh(g, TONGUE);
-    this.mesh.frustumCulled = false;
-    this.X = new THREE.Vector3(1,0,0);
-    this.root = new THREE.Vector3(); this.p1 = new THREE.Vector3(); this.dirA = new THREE.Vector3(); this.n0 = new THREE.Vector3();
-    this._p = new THREE.Vector3(); this._t = new THREE.Vector3(); this._n = new THREE.Vector3();
-    this.update(0, 0);
-  }
-  path(s, outP, outT){
-    const d0 = this.d0, rc = 0.28, fmax = 1.2;
-    if (s <= d0){ outP.copy(this.root).addScaledVector(this.dirA, Math.max(s, -0.2)); outT.copy(this.dirA); return; }
-    const e = s - d0, f = Math.min(e/rc, fmax);
-    outP.copy(this.p1).addScaledVector(this.dirA, rc*Math.sin(f)).addScaledVector(this.n0, -rc*(1 - Math.cos(f)));
-    outT.copy(this.dirA).multiplyScalar(Math.cos(f)).addScaledVector(this.n0, -Math.sin(f));
-    if (e > rc*fmax) outP.addScaledVector(outT, e - rc*fmax);
-  }
-  update(t, j){
-    const yLL = -0.585 - 0.38*j;                       // 아랫입술 윗면
-    this.root.set(0, -0.67 - 0.22*j, 0.6);
-    this.p1.set(0, yLL + 0.045, 1.22);
-    this.dirA.subVectors(this.p1, this.root); this.d0 = this.dirA.length(); this.dirA.divideScalar(this.d0);
-    this.n0.crossVectors(this.dirA, this.X);
-    const shift = t * 0.62, a = this.pos, R = this.RINGS, S_ = this.SEG;
-    const P = this._p, T = this._t, N = this._n;
-    for (let r=0;r<R;r++){
-      const u = r/(R-1);
-      this.path(shift + u*this.LEN, P, T);
-      N.crossVectors(T, this.X);
-      let w = 0.165*(1 - 0.2*u*u), h = 0.058*(1 - 0.3*u);
-      if (u > 0.8){ const k = Math.sqrt(Math.max(0, 1 - ((u-0.8)/0.2)**2)); w *= k; h *= Math.max(k, 0.15); }
-      const groove = 0.014*(1 - u)*(0.5 + 0.5*t);
-      for (let k=0;k<S_;k++){
-        const th = k/S_*Math.PI*2, c = Math.cos(th), sn = Math.sin(th);
-        let x = w*c, y = h*sn;
-        if (sn > 0) y -= groove*Math.exp(-((c/0.35)**2))*sn; else y *= 0.85;   // 윗면 가운데 홈, 아랫면은 조금 납작
-        const i = (r*S_+k)*3;
-        a[i]   = P.x + x;
-        a[i+1] = P.y + N.y*y;
-        a[i+2] = P.z + N.z*y;
-      }
-    }
-    this.path(shift + this.LEN + 0.004, P, T);
-    const i = R*S_*3; a[i] = P.x; a[i+1] = P.y; a[i+2] = P.z;
-    this.mesh.geometry.attributes.position.needsUpdate = true;
-    this.mesh.geometry.computeVertexNormals();
-  }
-}
-
 /* ---------- Face (ARKit blendshapes + head pose) ---------- */
 class RealFace {
   constructor(gltf){
@@ -512,8 +446,6 @@ class RealFace {
       this.group.add(eye); this.eyes.push(eye);
     });
     [this.head, this.teeth].forEach(m => { if (m){ m.castShadow = true; m.frustumCulled = false; } });
-    // 혀: 모델에 없어서 직접 만든 메시. 입안 깊은 곳에서 입술 위로 미끄러져 나와 아래로 늘어짐
-    this.tongue = new Tongue(); this.group.add(this.tongue.mesh);
     this.group.scale.setScalar(0.74);              // 화면에 맞는 크기
     this.lastSeen = -1e9; this.pf = null; this.q = new THREE.Quaternion();
     this.shapes = {};
@@ -523,7 +455,6 @@ class RealFace {
     const m = MATS[key], real = key === 'skin';
     this.head.material = m;
     if (this.teeth) this.teeth.material = real ? TEETH : m;
-    if (this.tongue) this.tongue.mesh.material = real ? TONGUE : m;
     this.eyes.forEach(e => e.material = real ? EYE : m);
   }
   set visible(v){ this.group.visible = v; }
@@ -538,22 +469,19 @@ class RealFace {
     const g = n => shapes[n] || 0;
     for (const n in shapes){
       let v = shapes[n];
-      if (n.startsWith('eyeLookDown')) v *= 0.2;           // 폰을 내려다볼 때 눈꺼풀이 덮이지 않게
+      if (n.startsWith('eyeLookDown')) v *= 0.5;           // 폰을 내려다볼 때 눈꺼풀이 과하게 덮이지 않게
       else if (n.startsWith('eyeLookUp')) v *= 0.5;
       this.setShape(n, v);
     }
     // 눈을 뜬 상태가 또렷하도록 약간의 기본 크게 뜨기
-    const wb = eyeOpen * 0.55;                              // 눈 크기 보정
-    this.setShape('eyeWideLeft', Math.max(wb, g('eyeWideLeft')) * (1 - g('eyeBlinkLeft')));
-    this.setShape('eyeWideRight', Math.max(wb, g('eyeWideRight')) * (1 - g('eyeBlinkRight')));
+    // 눈 크기 보정 슬라이더: 가운데(0.5)가 인식값 그대로, 오른쪽은 더 크게, 왼쪽은 더 감기게
+    const wb = Math.max(0, eyeOpen - 0.5) * 0.6, lid = Math.max(0, 0.5 - eyeOpen) * 0.6;
+    for (const sd of ['Left','Right']){
+      const bl = Math.min(1, g('eyeBlink'+sd) + lid*(1 - g('eyeBlink'+sd)));
+      this.setShape('eyeBlink'+sd, bl);
+      this.setShape('eyeWide'+sd, Math.max(wb, g('eyeWide'+sd)) * (1 - bl));
+    }
     // 혀
-    const t = THREE.MathUtils.clamp(g('tongueOut'), 0, 1);
-    // 혀가 나올 자리: 입을 벌리고 아랫입술을 내림
-    const j = Math.max(g('jawOpen'), t*0.28);
-    this.setShape('jawOpen', j);
-    this.setShape('mouthLowerDownLeft', Math.max(g('mouthLowerDownLeft'), t*0.6));
-    this.setShape('mouthLowerDownRight', Math.max(g('mouthLowerDownRight'), t*0.6));
-    this.tongue.update(t, j);
     this.eyes.forEach(e => {
       const L = e.userData.side === 'L', s = L ? 'Left' : 'Right';
       const yaw = L ? g('eyeLookOut'+s) - g('eyeLookIn'+s) : g('eyeLookIn'+s) - g('eyeLookOut'+s);
@@ -575,7 +503,7 @@ class OneEuro {
     return this.x;
   }
 }
-let smooth = 0.35, eyeOpen = 0.45;
+let smooth = 0.35, eyeOpen = 0.5;
 const filterParams = () => ({ minC: 0.4 + smooth*5, beta: 0.04 + smooth*0.6 });
 
 /* ---------- Demo hand pose (camera off) ---------- */
@@ -612,9 +540,9 @@ function demoHand(time){
 /* ---------- Demo face (camera off) ---------- */
 function demoFace(t){
   const blink = Math.max(0, 1 - Math.abs(((t % 3600) - 180) / 90));
-  const ph = (t / 9000) % 1;
+  const ph = (t / 7600) % 1;
   const env = (a, b) => ph > a && ph < b ? Math.sin((ph-a)/(b-a)*Math.PI) : 0;
-  const smile = env(0.02, 0.22), jaw = env(0.25, 0.42), brow = env(0.27, 0.42), pucker = env(0.45, 0.6), roll = env(0.62, 0.74), tongue = env(0.77, 0.98);
+  const smile = env(0.02, 0.22), jaw = env(0.25, 0.42), brow = env(0.27, 0.42), pucker = env(0.45, 0.6), roll = env(0.62, 0.74);
   const look = Math.sin(t/1500)*0.5;
   return {
     q: new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.sin(t/2600)*0.12, Math.sin(t/2100)*0.35, Math.sin(t/3100)*0.06)),
@@ -622,7 +550,7 @@ function demoFace(t){
       cheekSquintLeft:smile*0.4, cheekSquintRight:smile*0.4, browInnerUp:brow*0.8,
       browOuterUpLeft:brow*0.6, browOuterUpRight:brow*0.6, eyeWideLeft:brow*0.5, eyeWideRight:brow*0.5,
       mouthPucker:pucker*1.3, mouthFunnel:pucker*0.4, mouthRollLower:roll*1.1, mouthRollUpper:roll*1.1,
-      tongueOut:tongue, jawOpen:Math.max(jaw*0.55, tongue*0.28),
+      jawOpen:jaw*0.55,
       eyeLookOutLeft:Math.max(0,look), eyeLookInRight:Math.max(0,look), eyeLookInLeft:Math.max(0,-look), eyeLookOutRight:Math.max(0,-look) }
   };
 }
@@ -649,12 +577,11 @@ function analyzeFace(s){
   const bl = g('eyeBlinkLeft'), br = g('eyeBlinkRight');
   const smile = (g('mouthSmileLeft') + g('mouthSmileRight'))/2;
   const brow = Math.max(g('browInnerUp'), (g('browOuterUpLeft') + g('browOuterUpRight'))/2);
-  const jaw = g('jawOpen'), tongue = g('tongueOut');
+  const jaw = g('jawOpen');
   const roll = Math.max(g('mouthRollLower'), g('mouthRollUpper'));
   const lips = Math.max(g('mouthPucker'), g('mouthFunnel'), roll);
   let name = '무표정';
-  if (tongue > 0.5) name = '혀 내밀기';
-  else if (jaw > 0.35 && brow > 0.4) name = '놀람';
+  if (jaw > 0.35 && brow > 0.4) name = '놀람';
   else if (Math.abs(bl - br) > 0.45 && Math.max(bl, br) > 0.55) name = '윙크';
   else if (bl > 0.6 && br > 0.6) name = '눈 감음';
   else if (jaw > 0.3) name = '입 벌림';
@@ -663,9 +590,9 @@ function analyzeFace(s){
   else if (smile > 0.4) name = '미소';
   else if ((g('browDownLeft') + g('browDownRight'))/2 > 0.4) name = '찡그림';
   else if (g('cheekPuff') > 0.4) name = '볼 부풀림';
-  return { name, metric: Math.round(jaw*100) + '%', chips: [Math.max(bl,br) > 0.5, jaw > 0.25, smile > 0.4, lips > 0.4, tongue > 0.5] };
+  return { name, metric: Math.round(jaw*100) + '%', chips: [Math.max(bl,br) > 0.5, jaw > 0.25, smile > 0.4, lips > 0.4, brow > 0.35] };
 }
-const CHIP_LABELS = { hand:['엄지','검지','중지','약지','소지'], face:['깜빡임','입 벌림','미소','입술','혀'] };
+const CHIP_LABELS = { hand:['엄지','검지','중지','약지','소지'], face:['깜빡임','입 벌림','미소','입술','눈썹'] };
 const chipEls = [...$('chips').children];
 let lastUI = 0;
 function renderReadout(r, src, t){
@@ -833,9 +760,9 @@ function calibrateEyes(raw, now){
   for (const sd of ['Left','Right']){
     const k = 'eyeBlink' + sd, v = raw[k] || 0;
     eyeBase[k] = Math.min((eyeBase[k] ?? v) + dt*0.02, v);
-    const b = Math.min(eyeBase[k], 0.5);
-    raw[k] = THREE.MathUtils.clamp((v - b - 0.07) / Math.max(0.25, 0.78 - b), 0, 1);
-    const sq = 'eyeSquint' + sd; raw[sq] = (raw[sq] || 0) * 0.3;
+    const b = Math.min(eyeBase[k], 0.5) * 0.5;              // 평소 눈 뜬 정도의 절반만 보정 → 실제 눈매 유지
+    raw[k] = THREE.MathUtils.clamp((v - b) / Math.max(0.3, 0.85 - b), 0, 1);
+    const sq = 'eyeSquint' + sd; raw[sq] = (raw[sq] || 0) * 0.7;
   }
 }
 // 입술·혀 움직임은 점수가 작게 나오는 편이라 모델에 더 크게 반영
@@ -844,54 +771,6 @@ const GAIN = { mouthPucker:[1.8,1.5], mouthFunnel:[1.6,1.4], mouthRollLower:[1.7
   jawForward:[1.5,1.2], cheekPuff:[1.5,1.2], eyeWideLeft:[1.6,1], eyeWideRight:[1.6,1] };
 function tuneShape(n, v){ const g = GAIN[n]; return g ? Math.min(g[1], v * g[0]) : v; }
 
-// 혀: MediaPipe 점수는 거의 0이라 영상으로 직접 판단.
-// 입~턱 영역만 원본 해상도로 잘라 와서, 아랫입술 색(=혀와 비슷)과 볼 피부색의 중간값을 기준으로
-// 아랫입술 아래 턱 방향으로 '입술색'이 얼마나 길게 이어지는지 측정 → 혀가 나온 길이.
-const TC = 128;
-const tcv = document.createElement('canvas'); tcv.width = TC; tcv.height = TC;
-const tctx = tcv.getContext('2d', { willReadFrequently:true });
-let tongueS = 0, tongueBase = null, tongueT = 0;
-const chroma = (r, g, b) => (r - g) / (r + g + b + 1);
-function detectTongue(lm, now){
-  const VW = video.videoWidth, VH = video.videoHeight;
-  const P = id => ({ x: lm[id].x*VW, y: lm[id].y*VH });
-  const mL = P(61), mR = P(291), up = P(0), lo = P(17), ch = P(152), il = P(14), iu = P(13);
-  const ck = [P(205), P(425)];
-  const pad = (mR.x - mL.x) * 0.35;
-  const x0 = Math.max(0, Math.min(mL.x, mR.x, ck[0].x, ck[1].x) - pad), x1 = Math.min(VW, Math.max(mL.x, mR.x, ck[0].x, ck[1].x) + pad);
-  const y0 = Math.max(0, Math.min(up.y, ck[0].y, ck[1].y) - pad*0.5), y1 = Math.min(VH, ch.y + pad*0.5);
-  const bw = x1 - x0, bh = y1 - y0;
-  if (bw < 8 || bh < 8) return tongueS;
-  tctx.drawImage(video, x0, y0, bw, bh, 0, 0, TC, TC);
-  const d = tctx.getImageData(0, 0, TC, TC).data;
-  const map = q => ({ x:(q.x - x0)/bw*TC, y:(q.y - y0)/bh*TC });
-  const cAt = (x, y) => { const i = ((Math.min(TC-1, Math.max(0, y|0)))*TC + Math.min(TC-1, Math.max(0, x|0)))*4; return chroma(d[i], d[i+1], d[i+2]); };
-  const patch = (q, r) => { let s = 0, n = 0; for (let dy=-r; dy<=r; dy++) for (let dx=-r; dx<=r; dx++){ s += cAt(q.x+dx, q.y+dy); n++; } return s/n; };
-  const skin = (patch(map(ck[0]), 3) + patch(map(ck[1]), 3)) / 2;
-  const LO = map(lo), IL = map(il), IU = map(iu), CH = map(ch), ML = map(mL), MR = map(mR);
-  const lip = patch({ x:(IL.x+LO.x)/2, y:(IL.y+LO.y)/2 }, 1);
-  if (lip - skin < 0.025) { tongueS *= 0.9; return tongueS; }     // 입술과 피부 구분이 안 되는 조명
-  const thr = skin + (lip - skin) * 0.5;
-  // 아랫입술 → 턱 축을 따라 한 줄씩 검사
-  let ux = CH.x - LO.x, uy = CH.y - LO.y; const L = Math.hypot(ux, uy) || 1; ux /= L; uy /= L;
-  const vx = -uy, vy = ux, hw = Math.max(2, Math.hypot(MR.x-ML.x, MR.y-ML.y) * 0.17);
-  const rowLip = s0 => { let k = 0, n = 0; for (let t = -hw; t <= hw; t++){ if (cAt(LO.x + ux*s0 + vx*t, LO.y + uy*s0 + vy*t) > thr) k++; n++; } return k / n; };
-  let end = -0.15*L, miss = 0;
-  for (let s0 = -0.15*L; s0 < 0.9*L; s0 += 0.5){
-    if (rowLip(s0) > 0.45){ end = s0; miss = 0; } else if (++miss > 3) break;
-  }
-  const ext = Math.max(0, end) / L;                                 // 0 = 입술에서 끝남, 0.5 = 턱 중간까지
-  // 입술 사이로 혀끝만 살짝 나온 경우: 거의 다문 입 틈이 입술색으로 채워짐
-  const gap = Math.hypot(IL.x-IU.x, IL.y-IU.y);
-  let between = 0;
-  if (gap > 1.5 && gap < L*0.6){ let k = 0, n = 0; for (let f = 0.2; f <= 0.8; f += 0.1){ for (let t = -hw*0.6; t <= hw*0.6; t++){ if (cAt(IU.x + (IL.x-IU.x)*f + vx*t, IU.y + (IL.y-IU.y)*f + vy*t) > thr) k++; n++; } } between = k / n; }
-  const dt = tongueT ? Math.min(0.2, (now - tongueT)/1000) : 0; tongueT = now;
-  tongueBase = tongueBase === null ? ext : Math.min(tongueBase + dt*0.01, ext);   // 사람마다 다른 입술 아래 그늘 보정
-  let v = THREE.MathUtils.clamp((ext - Math.min(tongueBase, 0.15) - 0.06) / 0.4, 0, 1);
-  if (between > 0.6) v = Math.max(v, 0.3 * (between - 0.6) / 0.4 + 0.15);
-  tongueS += (v - tongueS) * (v > tongueS ? 0.55 : 0.35);
-  return tongueS;
-}
 const _fm = new THREE.Matrix4(), _fp = new THREE.Vector3(), _fq = new THREE.Quaternion(), _fs = new THREE.Vector3();
 function trackFace(now, res){
   const lm = res.faceLandmarks?.[0];
@@ -915,7 +794,6 @@ function trackFace(now, res){
   const raw = {}, shapes = {}, a = 0.35 + smooth*0.6;
   for (const c of res.faceBlendshapes[0].categories) raw[c.categoryName] = c.score;
   calibrateEyes(raw, now);
-  raw.tongueOut = Math.max(raw.tongueOut || 0, detectTongue(lm, now));
   for (const name in raw){
     const v = tuneShape(name, raw[name]);
     const n = mirror ? name

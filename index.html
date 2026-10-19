@@ -71,6 +71,8 @@ button{font:inherit;color:inherit;cursor:pointer}
   pointer-events:none;
 }
 .hint.low{top:74%}
+.hint .bar{display:block;height:4px;border-radius:2px;background:var(--line);margin-top:8px;overflow:hidden}
+.hint .bar i{display:block;height:100%;background:var(--accent);transition:width .2s}
 .hint small{display:block;color:var(--mute);font-size:14px;margin-top:2px}
 
 /* Bottom sheet */
@@ -196,6 +198,7 @@ button{font:inherit;color:inherit;cursor:pointer}
         <button id="tPip" aria-pressed="true">미리보기</button>
         <button id="tFlip">전면/후면 전환</button>
         <button id="tReset">시점 초기화</button>
+        <button id="tRebuild" hidden>내 얼굴 다시 만들기</button>
       </div>
     </div>
   </div>
@@ -270,15 +273,17 @@ const TEETH = new THREE.MeshStandardMaterial({ color:0xece6da, roughness:0.4 });
 const NAIL = new THREE.MeshPhysicalMaterial({ color:0xe0a896, roughness:0.22, clearcoat:0.9, clearcoatRoughness:0.15 });
 const EYE = new THREE.MeshPhysicalMaterial({ map:makeEyeTexture(), roughness:0.3, clearcoat:1, clearcoatRoughness:0.05 });
 
-function makeEyeTexture(){
+function makeEyeTexture(iris, sclera){
   const c = document.createElement('canvas'); c.width = 512; c.height = 256;
   const g = c.getContext('2d');
   const cx = 128, cy = 128, R = 42;              // u=0.25 → 정면(+z). 홍채 11.7mm / 안구 24mm ≈ 각반경 29°
   const sc = g.createRadialGradient(cx,cy,R,cx,cy,230);
-  sc.addColorStop(0,'#ebe3da'); sc.addColorStop(0.5,'#d8ccc1'); sc.addColorStop(1,'#b9a99c');
+  const sk = new THREE.Color(sclera || 0xebe3da), sv = (k) => '#' + sk.clone().multiplyScalar(k).getHexString();
+  sc.addColorStop(0,sv(1)); sc.addColorStop(0.5,sv(0.92)); sc.addColorStop(1,sv(0.78));
   g.fillStyle = sc; g.fillRect(0,0,512,256);
   const ir = g.createRadialGradient(cx,cy,10,cx,cy,R);
-  ir.addColorStop(0,'#24170e'); ir.addColorStop(0.4,'#3d2716'); ir.addColorStop(0.78,'#55361f'); ir.addColorStop(0.93,'#2c1b10'); ir.addColorStop(1,'rgba(30,20,14,0)');
+  const ic = new THREE.Color(iris || 0x55361f), sh = (k) => '#' + ic.clone().multiplyScalar(k).getHexString();
+  ir.addColorStop(0,sh(0.42)); ir.addColorStop(0.4,sh(0.72)); ir.addColorStop(0.78,sh(1)); ir.addColorStop(0.93,sh(0.5)); ir.addColorStop(1,'rgba(30,20,14,0)');
   g.fillStyle = ir; g.beginPath(); g.arc(cx,cy,R,0,7); g.fill();
   g.strokeStyle = 'rgba(14,9,6,.55)'; g.lineWidth = 5; g.beginPath(); g.arc(cx,cy,R-4,0,7); g.stroke();
   g.fillStyle = '#060404'; g.beginPath(); g.arc(cx,cy,12,0,7); g.fill();
@@ -440,6 +445,13 @@ class RealFace {
     this.group.updateMatrixWorld(true);
     this.head = this.model.getObjectByName('head_mesh');
     this.teeth = this.model.getObjectByName('teeth_mesh');
+    // UV는 정수로 압축돼 있어 원래 재질의 텍스처 변환(배율·이동)을 직접 적용 → 0~1 좌표
+    { const ua = this.head.geometry.attributes.uv;
+      if (ua && !(ua.array instanceof Float32Array)){
+        const f = new Float32Array(ua.count*2);
+        for (let i=0;i<ua.count;i++){ f[i*2] = ua.getX(i)*0.000238723238 + 0.00724834995; f[i*2+1] = ua.getY(i)*0.000239208952 + 0.0100790262; }
+        this.head.geometry.setAttribute('uv', new THREE.BufferAttribute(f, 2));
+      } }
     this.dict = this.head.morphTargetDictionary;
     this.inf = this.head.morphTargetInfluences;
     this.eyes = [];
@@ -453,35 +465,44 @@ class RealFace {
       this.group.add(eye); this.eyes.push(eye);
     });
     [this.head, this.teeth].forEach(m => { if (m){ m.castShadow = true; m.frustumCulled = false; } });
-    // 코끝(얼굴 로컬) — 손+얼굴 모드에서 영상의 코끝 위치에 정확히 맞추는 기준점
+    this.buildRefs();
+    this.group.scale.setScalar(FACE_SCALE);        // 화면에 맞는 크기
+    this.lastSeen = -1e9; this.pf = null; this.q = new THREE.Quaternion();
+    this.shapes = {};
+    this.setMaterial(matKey);
+  }
+  // 얼굴 로컬 좌표로 본 머리 메시 정점 변환 (그룹 이동·크기와 무관)
+  headToLocal(){
     this.group.updateMatrixWorld(true);
+    return new THREE.Matrix4().copy(this.group.matrixWorld).invert().multiply(this.head.matrixWorld);
+  }
+  buildRefs(){
+    // 코끝(얼굴 로컬) — 손+얼굴 모드에서 영상의 코끝 위치에 정확히 맞추는 기준점
+    const HM = this.headToLocal();
     const pa = this.head.geometry.attributes.position, v = new THREE.Vector3();
     this.noseLocal = new THREE.Vector3(0, 0, -Infinity);
-    for (let i=0;i<pa.count;i++){ v.fromBufferAttribute(pa, i).applyMatrix4(this.head.matrixWorld); if (Math.abs(v.x) < 0.08 && v.z > this.noseLocal.z) this.noseLocal.copy(v); }
+    for (let i=0;i<pa.count;i++){ v.fromBufferAttribute(pa, i).applyMatrix4(HM); if (Math.abs(v.x) < 0.08 && v.z > this.noseLocal.z) this.noseLocal.copy(v); }
     // 얼굴 앞면 깊이 지도 (충돌 방지용)
-    const box = new THREE.Box3().setFromObject(this.head), nx = 40, ny = 48;
+    const box = new THREE.Box3(), nx = 40, ny = 48;
+    for (let i=0;i<pa.count;i++) box.expandByPoint(v.fromBufferAttribute(pa, i).applyMatrix4(HM));
     const D = { x0: box.min.x, y0: box.min.y, dx: (box.max.x-box.min.x)/nx, dy: (box.max.y-box.min.y)/ny, nx, ny, z: new Float32Array(nx*ny).fill(-Infinity) };
     // 광선 검사(수천 번 × 52개 표정 모핑) 대신 삼각형을 격자에 직접 래스터화 → 수 ms
     const idx = this.head.geometry.index, tri = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
     const nTri = idx ? idx.count/3 : pa.count/3;
     for (let t=0;t<nTri;t++){
-      for (let k=0;k<3;k++) tri[k].fromBufferAttribute(pa, idx ? idx.getX(t*3+k) : t*3+k).applyMatrix4(this.head.matrixWorld);
+      for (let k=0;k<3;k++) tri[k].fromBufferAttribute(pa, idx ? idx.getX(t*3+k) : t*3+k).applyMatrix4(HM);
       const zMax = Math.max(tri[0].z, tri[1].z, tri[2].z);
       const i0 = Math.max(0, Math.floor((Math.min(tri[0].x,tri[1].x,tri[2].x) - D.x0)/D.dx)), i1 = Math.min(nx-1, Math.floor((Math.max(tri[0].x,tri[1].x,tri[2].x) - D.x0)/D.dx));
       const j0 = Math.max(0, Math.floor((Math.min(tri[0].y,tri[1].y,tri[2].y) - D.y0)/D.dy)), j1 = Math.min(ny-1, Math.floor((Math.max(tri[0].y,tri[1].y,tri[2].y) - D.y0)/D.dy));
       for (let j=j0;j<=j1;j++) for (let i=i0;i<=i1;i++) if (zMax > D.z[j*nx+i]) D.z[j*nx+i] = zMax;
     }
     this.depth = D;
-    this.group.scale.setScalar(FACE_SCALE);        // 화면에 맞는 크기
-    this.lastSeen = -1e9; this.pf = null; this.q = new THREE.Quaternion();
-    this.shapes = {};
-    this.setMaterial(matKey);
   }
   setMaterial(key){
     const m = MATS[key], real = key === 'skin';
-    this.head.material = m;
+    this.head.material = real && this.photoMat ? this.photoMat : m;      // 내 얼굴 아바타: '피부' = 촬영한 얼굴 텍스처
     if (this.teeth) this.teeth.material = real ? TEETH : m;
-    this.eyes.forEach(e => e.material = real ? EYE : m);
+    this.eyes.forEach(e => e.material = real ? (this.eyeMat || EYE) : m);
   }
   set visible(v){ this.group.visible = v; }
   get visible(){ return this.group.visible; }
@@ -696,11 +717,16 @@ async function ensureDetector(){
   } catch (e) { showErr('인식 모델을 불러오지 못했습니다. 인터넷 연결을 확인하세요.'); }
   loadingDet = false; lastVideoTime = -1;
 }
+let baseFace = null, myAvatar = null;
+const activeFace = () => (mode === 'myface' && myAvatar) ? myAvatar : baseFace;
 async function ensureFace(){
-  if (face) return face;
-  setPill('얼굴 모델 불러오는 중…', 'busy');
-  face = new RealFace(await loadGLB(FACE_GLB));
-  face.visible = false;
+  if (!baseFace){
+    setPill('얼굴 모델 불러오는 중…', 'busy');
+    baseFace = new RealFace(await loadGLB(FACE_GLB));
+    baseFace.visible = false;
+  }
+  if (mode === 'myface' && !myAvatar) await loadSavedAvatar();
+  face = activeFace();
   return face;
 }
 
@@ -1036,8 +1062,8 @@ function track(now){
   lastVideoTime = video.currentTime;
   octx.clearRect(0,0,ov.width,ov.height);
   const labels = [];
-  if (mode === 'myface') labels.push(trackMyFace(now, det.face.detectForVideo(video, now)));
-  else if (avatar) labels.push(trackFace(now, det.face.detectForVideo(video, now)));
+  if (mode === 'myface' && !myAvatar) labels.push(trackMyFace(now, det.face.detectForVideo(video, now)));
+  else if (avatar || mode === 'myface') labels.push(trackFace(now, det.face.detectForVideo(video, now)));
   if (usesHand()) labels.push(trackHands(now, det.hand.detectForVideo(video, now)));
   detCount++;
   if (now - fpsT > 1000){ detFps = detCount * 1000 / (now - fpsT); detCount = 0; fpsT = now; }
@@ -1048,7 +1074,7 @@ function track(now){
     if (!fv && hv) lastFaceName = '';
   }
   const label = labels.join(' · ');
-  const live = mode === 'hand' ? hv : mode === 'face' ? fv : mode === 'myface' ? !!myFace?.mesh.visible : (hv || fv);
+  const live = mode === 'hand' ? hv : mode === 'face' ? fv : mode === 'myface' ? (myAvatar ? fv : !!myFace?.mesh.visible) : (hv || fv);
   setPill(`${label} · ${detFps.toFixed(0)} fps`, live ? 'live' : '');
 }
 
@@ -1107,30 +1133,335 @@ class MyFace {
   }
 }
 let myFace = null;
+
+/* ---------- 내 얼굴 아바타: 짧게 촬영 → 내 얼굴형으로 변형한 머리 + 내 얼굴 피부 ---------- */
+// 1) 촬영: 정면(여러 장 평균) · 왼쪽 · 오른쪽 프레임과 얼굴 점 478개를 모음
+// 2) 형태: 정면 얼굴 점을 표준 얼굴(MediaPipe 평균 얼굴, cm)에 맞춰 정렬 → '나 - 평균' 차이를 아바타 머리에 옮김
+//    아바타 정점마다 표준 얼굴 삼각형 위의 위치(무게중심 좌표)를 붙여 두고, 얼굴 밖(두피·목·귀)은 부드럽게 이어지게 확산
+// 3) 피부: 같은 연결로 각 정점이 세 장의 사진 어디에 찍혔는지 계산 → 정점이 카메라를 향한 정도로 섞어 UV 텍스처로 굽기
+// 4) 이후는 '얼굴' 모드와 같은 표정 52가지 + 고개 추적
+// 표준 얼굴 좌표: face-mesh-face-geometry (MIT License, © 2020 Jaume Sanchez) — MediaPipe canonical face model
+const FCANON = [0,-3.406,5.98,0,-1.127,7.476,0,-2.089,6.058,-0.464,0.955,6.634,0,-0.463,7.587,0,0.366,7.243,0,2.473,5.789,-4.253,2.578,3.28,0,4.019,5.285,0,4.886,5.385,0,8.262,4.482,0,-3.707,5.865,0,-3.918,5.569,0,-3.994,5.219,0,-4.542,5.405,0,-4.746,5.529,0,-5.02,5.601,0,-5.365,5.535,0,-6.15,5.071,0,-1.501,7.112,-0.416,-1.466,6.448,-7.088,5.435,0.1,-2.629,2.036,3.848,-3.198,1.986,3.797,-3.775,2.039,3.646,-4.466,2.423,3.155,-2.164,2.19,3.852,-3.208,3.224,4.116,-2.674,3.205,4.092,-3.745,3.165,3.972,-4.161,3.059,3.72,-5.062,1.934,2.776,-2.267,-7.426,4.39,-4.446,2.664,3.173,-7.215,2.263,0.073,-5.8,2.35,2.204,-2.845,-0.721,4.433,-0.711,-3.329,5.877,-0.606,-3.925,5.445,-1.432,-3.501,5.496,-1.915,-3.803,5.029,-1.131,-3.974,5.19,-1.564,-4.083,4.842,-2.65,-5.004,4.188,-0.427,-1.094,7.361,-0.496,-0.476,7.44,-5.253,3.882,3.363,-1.719,0.975,4.558,-1.609,-0.943,5.814,-1.651,-0.611,5.581,-4.766,-0.702,3.535,-0.478,0.296,7.101,-3.735,4.508,4.55,-4.589,4.302,4.048,-6.279,6.615,1.426,-1.221,4.142,5.106,-2.193,3.1,4.001,-3.103,-4.353,4.096,-6.72,-4.789,-1.745,-1.194,-1.307,5.738,-0.73,-1.594,5.833,-2.456,-4.343,4.284,-2.205,-4.305,4.162,-4.986,4.802,3.752,-1.592,-1.258,5.457,-2.645,4.525,4.922,-2.76,5.101,5.016,-3.524,8.006,3.729,-5.6,5.715,2.724,-3.064,6.566,4.53,-5.721,4.255,2.831,-6.374,4.786,1.592,-0.673,-3.688,5.738,-1.263,-3.788,5.418,-1.733,-3.953,5.001,-1.044,-1.465,5.662,-2.321,-4.329,4.258,-2.057,-4.478,4.521,-2.153,-4.276,4.038,-0.947,-1.035,6.512,-1.469,-4.036,4.605,-1.024,-3.99,4.927,-0.533,-3.993,5.138,-0.77,-6.095,4.986,-0.7,-5.292,5.448,-0.67,-4.95,5.51,-0.631,-4.695,5.449,-0.583,-4.518,5.34,-1.537,-4.423,4.745,-1.616,-4.476,4.814,-1.729,-4.619,4.854,-1.839,-4.829,4.824,-2.368,-3.106,4.868,-7.542,-1.049,-2.431,0,-1.724,6.601,-1.827,-4.4,4.399,-1.93,-4.412,4.497,-0.597,-2.014,5.866,-1.406,-1.714,5.241,-0.662,-1.819,5.864,-2.342,0.572,4.294,-3.327,0.105,4.114,-1.726,-0.919,5.273,-5.133,7.486,2.66,-4.539,6.32,3.683,-3.987,5.109,4.466,-2.17,-5.44,4.456,-1.396,5.012,5.316,-1.619,6.599,4.921,-1.891,8.236,4.275,-4.196,2.235,3.375,-5.733,1.412,2.432,-1.86,2.356,3.843,-4.989,3.075,3.084,-1.303,1.416,4.831,-1.306,-0.673,6.416,-6.465,0.937,1.69,-5.259,0.946,2.974,-4.432,0.722,3.523,-3.301,0.862,3.873,-2.43,1.131,4.039,-1.821,1.468,4.224,-0.563,2.308,5.567,-6.338,-0.529,1.881,-5.588,3.208,2.688,-0.243,-1.463,7.071,-1.611,0.339,4.895,-7.743,2.365,-2.005,-1.391,1.851,4.449,-1.786,-0.978,4.85,-4.671,2.664,3.084,-1.334,-0.284,6.097,-7.271,-2.891,-2.252,-1.856,2.585,3.758,-0.923,0.073,6.672,-5.001,-6.135,1.893,-5.085,-7.179,0.715,-7.159,-0.812,-0.072,-5.843,-5.248,0.924,-6.847,3.663,0.725,-2.413,-8.259,4.119,-0.18,-1.69,6.573,-2.104,-0.164,4.566,-6.408,2.236,1.561,-3.67,2.36,3.635,-3.177,2.294,3.776,-2.196,-4.598,4.48,-6.235,-1.944,1.664,-1.293,-9.296,4.094,-3.211,-8.533,2.802,-4.069,-7.993,1.925,0,6.545,5.027,0,-9.403,4.264,-2.724,2.316,3.777,-2.288,2.399,3.698,-1.998,2.497,3.689,-6.13,3.399,2.039,-2.288,2.887,3.775,-2.724,2.962,3.872,-3.177,2.964,3.877,-3.67,2.928,3.724,-4.018,2.857,3.483,-7.556,4.107,-0.992,-4.018,2.484,3.441,0,-2.522,5.932,-1.776,-2.684,5.213,-1.222,-1.182,5.952,-0.731,-2.537,5.815,0,3.271,5.236,-4.135,-6.997,2.672,-3.312,-7.661,3.383,-1.314,-8.64,4.702,-5.941,-6.224,-0.631,-1.998,2.744,3.744,-0.901,1.237,5.754,0,-8.765,4.891,-2.309,-8.974,3.609,-6.954,-2.44,-0.131,-1.099,-4.459,5.121,-1.181,-4.58,5.19,-1.256,-4.788,5.237,-1.325,-5.107,5.205,-1.546,-5.819,4.758,-1.954,-4.184,4.432,-2.118,-4.137,4.555,-2.285,-4.051,4.582,-2.85,-3.666,4.485,-5.279,-2.239,2.861,-0.947,1.908,5.197,-1.314,3.105,4.231,-1.78,2.86,3.882,-1.845,-4.099,4.247,-5.436,-4.03,2.11,-0.766,3.182,4.861,-1.939,-6.614,4.521,0,1.059,6.775,-0.517,1.584,6.148,0,1.728,6.317,-1.247,0.23,5.681,0,-7.942,5.181,0,-6.991,5.153,-0.998,-6.931,4.98,-3.289,-5.383,3.796,-2.312,-1.566,4.59,-2.68,-6.112,4.096,-3.833,-1.537,4.138,-2.962,-2.274,4.441,-4.387,-2.683,3.644,-1.217,-7.834,4.969,-1.542,-0.137,5.201,-3.878,-6.042,3.311,-3.084,-6.81,3.814,-3.747,-4.504,3.726,-6.094,-3.206,1.473,-4.589,-4.729,2.983,-6.583,-3.941,0.07,-3.493,-3.196,4.13,-1.256,0.802,5.308,-1.126,-0.934,6.539,-1.443,-1.143,5.905,-0.923,-0.529,7.003,-1.755,3.529,4.328,-2.633,3.714,4.365,-3.388,3.722,4.309,-4.076,3.675,4.076,-4.623,3.475,3.646,-5.172,2.536,2.671,-7.297,0.763,-0.049,-4.707,1.651,3.11,-4.072,1.477,3.477,-3.27,1.471,3.732,-2.528,1.617,3.865,-1.971,1.859,3.962,-1.58,2.098,4.085,-7.664,0.673,-2.436,-1.397,-1.34,5.63,-0.885,0.659,6.233,-0.767,-0.968,7.078,-0.46,-1.334,6.787,-0.749,-1.068,6.798,-1.236,-1.586,5.48,-0.387,-1.41,6.958,-0.32,-1.608,6.509,-1.64,2.556,3.864,-1.256,2.467,4.204,-1.031,2.383,4.616,-4.253,2.772,3.315,-4.53,2.91,3.34,0.464,0.955,6.634,4.253,2.578,3.28,0.416,-1.466,6.448,7.088,5.435,0.1,2.629,2.036,3.848,3.198,1.986,3.797,3.775,2.039,3.646,4.466,2.423,3.155,2.164,2.19,3.852,3.208,3.224,4.116,2.674,3.205,4.092,3.745,3.165,3.972,4.161,3.059,3.72,5.062,1.934,2.776,2.267,-7.426,4.39,4.446,2.664,3.173,7.215,2.263,0.073,5.8,2.35,2.204,2.845,-0.721,4.433,0.711,-3.329,5.877,0.606,-3.925,5.445,1.432,-3.501,5.496,1.915,-3.803,5.029,1.131,-3.974,5.19,1.564,-4.083,4.842,2.65,-5.004,4.188,0.427,-1.094,7.361,0.496,-0.476,7.44,5.253,3.882,3.363,1.719,0.975,4.558,1.609,-0.943,5.814,1.651,-0.611,5.581,4.766,-0.702,3.535,0.478,0.296,7.101,3.735,4.508,4.55,4.589,4.302,4.048,6.279,6.615,1.426,1.221,4.142,5.106,2.193,3.1,4.001,3.103,-4.353,4.096,6.72,-4.789,-1.745,1.194,-1.307,5.738,0.73,-1.594,5.833,2.456,-4.343,4.284,2.205,-4.305,4.162,4.986,4.802,3.752,1.592,-1.258,5.457,2.645,4.525,4.922,2.76,5.101,5.016,3.524,8.006,3.729,5.6,5.715,2.724,3.064,6.566,4.53,5.721,4.255,2.831,6.374,4.786,1.592,0.673,-3.688,5.738,1.263,-3.788,5.418,1.733,-3.953,5.001,1.044,-1.465,5.662,2.321,-4.329,4.258,2.057,-4.478,4.521,2.153,-4.276,4.038,0.947,-1.035,6.512,1.469,-4.036,4.605,1.024,-3.99,4.927,0.533,-3.993,5.138,0.77,-6.095,4.986,0.7,-5.292,5.448,0.67,-4.95,5.51,0.631,-4.695,5.449,0.583,-4.518,5.34,1.537,-4.423,4.745,1.616,-4.476,4.814,1.729,-4.619,4.854,1.839,-4.829,4.824,2.368,-3.106,4.868,7.542,-1.049,-2.431,1.827,-4.4,4.399,1.93,-4.412,4.497,0.597,-2.014,5.866,1.406,-1.714,5.241,0.662,-1.819,5.864,2.342,0.572,4.294,3.327,0.105,4.114,1.726,-0.919,5.273,5.133,7.486,2.66,4.539,6.32,3.683,3.987,5.109,4.466,2.17,-5.44,4.456,1.396,5.012,5.316,1.619,6.599,4.921,1.891,8.236,4.275,4.196,2.235,3.375,5.733,1.412,2.432,1.86,2.356,3.843,4.989,3.075,3.084,1.303,1.416,4.831,1.306,-0.673,6.416,6.465,0.937,1.69,5.259,0.946,2.974,4.432,0.722,3.523,3.301,0.862,3.873,2.43,1.131,4.039,1.821,1.468,4.224,0.563,2.308,5.567,6.338,-0.529,1.881,5.588,3.208,2.688,0.243,-1.463,7.071,1.611,0.339,4.895,7.743,2.365,-2.005,1.391,1.851,4.449,1.786,-0.978,4.85,4.671,2.664,3.084,1.334,-0.284,6.097,7.271,-2.891,-2.252,1.856,2.585,3.758,0.923,0.073,6.672,5.001,-6.135,1.893,5.085,-7.179,0.715,7.159,-0.812,-0.072,5.843,-5.248,0.924,6.847,3.663,0.725,2.413,-8.259,4.119,0.18,-1.69,6.573,2.104,-0.164,4.566,6.408,2.236,1.561,3.67,2.36,3.635,3.177,2.294,3.776,2.196,-4.598,4.48,6.235,-1.944,1.664,1.293,-9.296,4.094,3.211,-8.533,2.802,4.069,-7.993,1.925,2.724,2.316,3.777,2.288,2.399,3.698,1.998,2.497,3.689,6.13,3.399,2.039,2.288,2.887,3.775,2.724,2.962,3.872,3.177,2.964,3.877,3.67,2.928,3.724,4.018,2.857,3.483,7.556,4.107,-0.992,4.018,2.484,3.441,1.776,-2.684,5.213,1.222,-1.182,5.952,0.731,-2.537,5.815,4.135,-6.997,2.672,3.312,-7.661,3.383,1.314,-8.64,4.702,5.941,-6.224,-0.631,1.998,2.744,3.744,0.901,1.237,5.754,2.309,-8.974,3.609,6.954,-2.44,-0.131,1.099,-4.459,5.121,1.181,-4.58,5.19,1.256,-4.788,5.237,1.325,-5.107,5.205,1.546,-5.819,4.758,1.954,-4.184,4.432,2.118,-4.137,4.555,2.285,-4.051,4.582,2.85,-3.666,4.485,5.279,-2.239,2.861,0.947,1.908,5.197,1.314,3.105,4.231,1.78,2.86,3.882,1.845,-4.099,4.247,5.436,-4.03,2.11,0.766,3.182,4.861,1.939,-6.614,4.521,0.517,1.584,6.148,1.247,0.23,5.681,0.998,-6.931,4.98,3.289,-5.383,3.796,2.312,-1.566,4.59,2.68,-6.112,4.096,3.833,-1.537,4.138,2.962,-2.274,4.441,4.387,-2.683,3.644,1.217,-7.834,4.969,1.542,-0.137,5.201,3.878,-6.042,3.311,3.084,-6.81,3.814,3.747,-4.504,3.726,6.094,-3.206,1.473,4.589,-4.729,2.983,6.583,-3.941,0.07,3.493,-3.196,4.13,1.256,0.802,5.308,1.126,-0.934,6.539,1.443,-1.143,5.905,0.923,-0.529,7.003,1.755,3.529,4.328,2.633,3.714,4.365,3.388,3.722,4.309,4.076,3.675,4.076,4.623,3.475,3.646,5.172,2.536,2.671,7.297,0.763,-0.049,4.707,1.651,3.11,4.072,1.477,3.477,3.27,1.471,3.732,2.528,1.617,3.865,1.971,1.859,3.962,1.58,2.098,4.085,7.664,0.673,-2.436,1.397,-1.34,5.63,0.885,0.659,6.233,0.767,-0.968,7.078,0.46,-1.334,6.787,0.749,-1.068,6.798,1.236,-1.586,5.48,0.387,-1.41,6.958,0.32,-1.608,6.509,1.64,2.556,3.864,1.256,2.467,4.204,1.031,2.383,4.616,4.253,2.772,3.315,4.53,2.91,3.34];
+const CP = i => new THREE.Vector3(FCANON[i*3], FCANON[i*3+1], FCANON[i*3+2]);
+const AVATAR_KEY = 'handmirror.myface.v1';
+
+// 얼굴 점 → 회전 행렬 (x = 피사체 왼쪽, y = 위, z = 정면). headQuat과 같은 정의
+function frameOf(get){
+  const X = new THREE.Vector3().subVectors(get(263), get(33)).normalize();
+  const Y = new THREE.Vector3().subVectors(get(10), get(152)); Y.addScaledVector(X, -Y.dot(X)).normalize();
+  const Z = new THREE.Vector3().crossVectors(X, Y);
+  return new THREE.Matrix4().makeBasis(X, Y, Z);
+}
+const lmVec = (lm, i, VW, VH) => new THREE.Vector3(lm[i].x*VW, -lm[i].y*VH, -lm[i].z*VW);
+function headAngles(lm){
+  const VW = video.videoWidth, VH = video.videoHeight;
+  const M = frameOf(i => lmVec(lm, i, VW, VH)), Z = new THREE.Vector3().setFromMatrixColumn(M, 2);
+  return { yaw: THREE.MathUtils.radToDeg(Math.atan2(Z.x, Z.z)), pitch: THREE.MathUtils.radToDeg(Math.asin(THREE.MathUtils.clamp(Z.y, -1, 1))) };
+}
+// 정면 얼굴 점을 표준 얼굴 좌표계(cm)로 정렬
+function alignToCanon(lm, VW, VH){
+  const U = []; for (let i=0;i<468;i++) U.push(lmVec(lm, i, VW, VH));
+  const Ru = frameOf(i => U[i]), Rc = frameOf(CP);
+  const R = new THREE.Matrix4().multiplyMatrices(Rc, Ru.clone().invert());
+  const cu = new THREE.Vector3(), cc = new THREE.Vector3();
+  for (let i=0;i<468;i++){ cu.add(U[i]); cc.add(CP(i)); } cu.divideScalar(468); cc.divideScalar(468);
+  let num = 0, den = 0; const A = [];
+  for (let i=0;i<468;i++){ const u = U[i].clone().sub(cu).applyMatrix4(R); A.push(u); const c = CP(i).sub(cc); num += u.dot(c); den += u.dot(u); }
+  const k = num / (den || 1);
+  return A.map(u => u.multiplyScalar(k).add(cc));
+}
+
+class Capture {
+  constructor(){ this.step = 'front'; this.front = []; this.frontImg = null; this.side = { L:null, R:null }; this.t0 = performance.now(); }
+  grab(lm){
+    const c = document.createElement('canvas'); c.width = video.videoWidth; c.height = video.videoHeight;
+    c.getContext('2d', { willReadFrequently:true }).drawImage(video, 0, 0);
+    return { img:c, lm: lm.map(p => ({ x:p.x, y:p.y, z:p.z })) };
+  }
+  feed(lm){
+    const { yaw, pitch } = headAngles(lm);
+    if (this.step === 'front'){
+      if (Math.abs(yaw) < 8 && Math.abs(pitch) < 12){
+        const f = this.grab(lm); this.front.push(f.lm);
+        if (this.front.length === 6) this.frontImg = f;
+        if (this.front.length >= 12) this.step = 'L';
+      }
+      return { title:'1/3 · 정면을 바라보세요', sub:`가만히 있어 주세요 (${Math.min(12, this.front.length)}/12)`, pct: this.front.length/12/3 };
+    }
+    const want = this.step === 'L' ? 1 : -1, a = yaw * want;          // L: 피사체 왼쪽으로 돌림 = yaw > 0
+    if (a > 18 && a < 45 && Math.abs(pitch) < 18){
+      const cur = this.side[this.step], score = -Math.abs(a - 30);
+      if (!cur || score > cur.score){ this.side[this.step] = Object.assign(this.grab(lm), { score }); }
+      if (a > 24) this.holdN = (this.holdN || 0) + 1;          // 충분히 돌린 상태로 몇 프레임 유지되면 다음 단계
+      if (this.holdN > 4){ this.holdN = 0; this.step = this.step === 'L' ? 'R' : 'done'; }
+    }
+    if (this.step === 'done') return { title:'내 얼굴 만드는 중…', sub:'잠시만 기다려 주세요', pct:1 };
+    return this.step === 'L'
+      ? { title:'2/3 · 고개를 천천히 왼쪽으로', sub:`내 왼쪽 어깨 쪽으로 30°쯤 돌려 주세요 (지금 ${Math.max(0, Math.round(a))}°)`, pct: 1/3 + Math.min(1, Math.max(0,a)/30)/3 }
+      : { title:'3/3 · 이번엔 오른쪽으로', sub:`내 오른쪽 어깨 쪽으로 30°쯤 돌려 주세요 (지금 ${Math.max(0, Math.round(a))}°)`, pct: 2/3 + Math.min(1, Math.max(0,a)/30)/3 };
+  }
+}
+
+// 사진 일부 평균 색 (얼굴 점 주변)
+function sampleColor(img, lm, ids, r){
+  const g = img.getContext('2d', { willReadFrequently:true }), W = img.width, H = img.height; let R = 0, G = 0, B = 0, n = 0;
+  for (const id of ids){
+    const x = Math.round(lm[id].x*W), y = Math.round(lm[id].y*H), rr = Math.max(2, Math.round(r*W));
+    const d = g.getImageData(Math.max(0, x-rr), Math.max(0, y-rr), rr*2, rr*2).data;
+    for (let i=0;i<d.length;i+=4){ R += d[i]; G += d[i+1]; B += d[i+2]; n++; }
+  }
+  return [R/n/255, G/n/255, B/n/255];
+}
+
+async function buildAvatar(cap){
+  const VW = cap.frontImg.img.width, VH = cap.frontImg.img.height;
+  // --- 정면 얼굴 형태 (12장 평균) ---
+  const avg = Array.from({length:468}, () => new THREE.Vector3());
+  for (const lm of cap.front){ const A = alignToCanon(lm, VW, VH); for (let i=0;i<468;i++) avg[i].add(A[i]); }
+  avg.forEach(v => v.divideScalar(cap.front.length));
+
+  const F = new RealFace(await loadGLB(FACE_GLB));
+  const head = F.head, geo = head.geometry, pa = geo.attributes.position, uvA = geo.attributes.uv, N = pa.count;
+  const HM = F.headToLocal(), HMinv = HM.clone().invert();
+  const P = [], Nrm = [];
+  const na = geo.attributes.normal, nm = new THREE.Matrix3().getNormalMatrix(HM);
+  for (let i=0;i<N;i++){ P.push(new THREE.Vector3().fromBufferAttribute(pa, i).applyMatrix4(HM)); Nrm.push(new THREE.Vector3().fromBufferAttribute(na, i).applyMatrix3(nm).normalize()); }
+
+  // --- 표준 얼굴(cm) → 아바타 얼굴 좌표: 두 눈 중심·턱·코끝으로 축별 배율 ---
+  const eyeA = F.eyes.map(e => e.position.clone()), eL = eyeA.find((e,i) => F.eyes[i].userData.side === 'L'), eR = eyeA.find((e,i) => F.eyes[i].userData.side === 'R');
+  const cEL = CP(263).add(CP(362)).multiplyScalar(0.5), cER = CP(33).add(CP(133)).multiplyScalar(0.5), cEM = cEL.clone().add(cER).multiplyScalar(0.5);
+  let chinA = null;
+  for (const v of P) if (Math.abs(v.x) < 0.06 && v.z > F.noseLocal.z - 0.9 && (!chinA || v.y < chinA.y)) chinA = v;
+  const aEM = eL.clone().add(eR).multiplyScalar(0.5);
+  const sx = eL.distanceTo(eR) / cEL.distanceTo(cER), sy = (aEM.y - chinA.y) / (cEM.y - CP(152).y), sz = sx;
+  const toA = c => new THREE.Vector3(aEM.x + (c.x - cEM.x)*sx, aEM.y + (c.y - cEM.y)*sy, F.noseLocal.z + (c.z - CP(1).z)*sz);
+  const CA = []; for (let i=0;i<468;i++) CA.push(toA(CP(i)));
+
+  // --- 정점 ↔ 표준 얼굴 삼각형 연결 (정면에서 본 xy 안에 있고 깊이가 가까운 삼각형) ---
+  const att = new Int32Array(N).fill(-1), bary = new Float32Array(N*3);
+  const T = FACE_TRIS, nT = T.length/3;
+  for (let i=0;i<N;i++){
+    const v = P[i]; if (Nrm[i].z < -0.15) continue;
+    let best = 0.22, bt = -1, b0 = 0, b1 = 0, b2 = 0;
+    for (let t=0;t<nT;t++){
+      const a = CA[T[t*3]], b = CA[T[t*3+1]], c = CA[T[t*3+2]];
+      const d = (b.y - c.y)*(a.x - c.x) + (c.x - b.x)*(a.y - c.y); if (Math.abs(d) < 1e-9) continue;
+      const w0 = ((b.y - c.y)*(v.x - c.x) + (c.x - b.x)*(v.y - c.y)) / d, w1 = ((c.y - a.y)*(v.x - c.x) + (a.x - c.x)*(v.y - c.y)) / d, w2 = 1 - w0 - w1;
+      if (w0 < -0.02 || w1 < -0.02 || w2 < -0.02) continue;
+      const dz = Math.abs(w0*a.z + w1*b.z + w2*c.z - v.z);
+      if (dz < best){ best = dz; bt = t; b0 = w0; b1 = w1; b2 = w2; }
+    }
+    if (bt >= 0){ att[i] = bt; bary[i*3] = b0; bary[i*3+1] = b1; bary[i*3+2] = b2; }
+  }
+  const interp = (i, arr, out) => { const t = att[i]; return out.set(0,0,0).addScaledVector(arr[T[t*3]], bary[i*3]).addScaledVector(arr[T[t*3+1]], bary[i*3+1]).addScaledVector(arr[T[t*3+2]], bary[i*3+2]); };
+
+  // --- 같은 위치 정점 묶기(UV 이음매) + 이웃 ---
+  const key = v => `${Math.round(v.x*2000)},${Math.round(v.y*2000)},${Math.round(v.z*2000)}`;
+  const gid = new Int32Array(N), gmap = new Map(); let G = 0;
+  for (let i=0;i<N;i++){ const k = key(P[i]); if (!gmap.has(k)) gmap.set(k, G++); gid[i] = gmap.get(k); }
+  const nb = Array.from({length:G}, () => new Set()), idx = geo.index;
+  for (let t=0;t<idx.count;t+=3){ const a = gid[idx.getX(t)], b = gid[idx.getX(t+1)], c = gid[idx.getX(t+2)]; nb[a].add(b).add(c); nb[b].add(a).add(c); nb[c].add(a).add(b); }
+  const gAtt = new Uint8Array(G); for (let i=0;i<N;i++) if (att[i] >= 0) gAtt[gid[i]] = 1;
+
+  // --- 형태 변형: 얼굴은 (나 - 평균) 차이, 나머지는 이웃 평균으로 확산 ---
+  const D = Array.from({length:468}, (_, i) => { const d = avg[i].clone().sub(CP(i)); return new THREE.Vector3(d.x*sx, d.y*sy, d.z*sz*0.6); });
+  const gD = Array.from({length:G}, () => new THREE.Vector3()), tv = new THREE.Vector3(), cnt = new Float32Array(G);
+  for (let i=0;i<N;i++) if (att[i] >= 0){ gD[gid[i]].add(interp(i, D, tv)); cnt[gid[i]]++; }
+  for (let g=0;g<G;g++) if (cnt[g]) gD[g].divideScalar(cnt[g]);
+  for (let it=0; it<60; it++) for (let g=0;g<G;g++){ if (gAtt[g]) continue; tv.set(0,0,0); let n = 0; for (const h of nb[g]){ tv.add(gD[h]); n++; } if (n) gD[g].copy(tv.divideScalar(n)); }
+  gD.forEach(d => { if (d.length() > 0.3) d.setLength(0.3); });
+
+  // 새 기본 형태 (머리 메시 로컬 좌표로 되돌려 Float32로 저장)
+  const newPos = new Float32Array(N*3), Pn = [];
+  for (let i=0;i<N;i++){ const w = P[i].clone().add(gD[gid[i]]); Pn.push(w); const l = w.clone().applyMatrix4(HMinv); newPos[i*3] = l.x; newPos[i*3+1] = l.y; newPos[i*3+2] = l.z; }
+  // 눈·치아도 주변 변형만큼 이동
+  const nearShift = (c, r) => { const s = new THREE.Vector3(); let n = 0; for (let i=0;i<N;i++) if (P[i].distanceTo(c) < r){ s.add(gD[gid[i]]); n++; } return n ? s.divideScalar(n) : s; };
+  const eyeShift = F.eyes.map(e => nearShift(e.position, e.geometry.parameters.radius*1.6));
+  const mouthC = toA(CP(13).add(CP(14)).multiplyScalar(0.5)), teethShift = nearShift(mouthC, 0.35);
+
+  // --- 피부 굽기 ---
+  const front = cap.frontImg, frames = [front, cap.side.L, cap.side.R].filter(Boolean);
+  const skin = sampleColor(front.img, front.lm, [205, 425, 151, 50, 280], 0.012);
+  const hairUp = (() => { const lm = front.lm, dy = (lm[152].y - lm[10].y)*0.18; const tmp = lm.map(p => p); tmp.push({ x: lm[10].x, y: Math.max(0, lm[10].y - dy) }); return sampleColor(front.img, tmp, [tmp.length-1], 0.02); })();
+  const lum = c => 0.3*c[0] + 0.59*c[1] + 0.11*c[2];
+  const hairCol = lum(hairUp) < lum(skin) * 0.7 ? hairUp : null;           // 머리카락이 보이면 그 색으로 두피를 칠함
+  const iris = sampleColor(front.img, front.lm, [468, 473], 0.004);
+  const mouthCol = [0.36, 0.17, 0.17];
+
+  // 피사체 좌표계에서 각 사진의 카메라 방향 (정점 법선과 비교해 가장 정면으로 찍힌 사진을 우선)
+  const camDirs = frames.map(f => { const M = frameOf(i => lmVec(f.lm, i, VW, VH)); return new THREE.Vector3(0,0,1).applyMatrix4(M.clone().transpose()); });
+  // 얼굴 경계 쪽으로 부드럽게 (연결 안 된 정점에서 몇 칸 떨어졌는지)
+  const hop = new Int32Array(G).fill(99), q = [];
+  for (let g=0;g<G;g++) if (!gAtt[g]){ hop[g] = 0; q.push(g); }
+  for (let qi=0; qi<q.length; qi++){ const g = q[qi]; for (const h of nb[g]) if (hop[h] > hop[g] + 1){ hop[h] = hop[g] + 1; q.push(h); } }
+  // 새 법선
+  const tmpGeo = new THREE.BufferGeometry(); tmpGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(Pn.flatMap(v => [v.x,v.y,v.z])), 3)); tmpGeo.setIndex(idx.clone()); tmpGeo.computeVertexNormals();
+  const gN = Array.from({length:G}, () => new THREE.Vector3()); const nn = tmpGeo.attributes.normal;
+  for (let i=0;i<N;i++) gN[gid[i]].add(tv.fromBufferAttribute(nn, i));
+  gN.forEach(v => v.normalize());
+  let yHair = -Infinity; { const lm10 = toA(avg[10]); yHair = lm10.y - 0.05; }
+  const zMid = Pn.reduce((a, v) => a + v.z, 0) / N;
+
+  const bakeGeo = new THREE.BufferGeometry();
+  bakeGeo.setAttribute('uv', uvA.clone()); bakeGeo.setIndex(idx.clone());
+  bakeGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N*3), 3));
+  const cov = new Float32Array(N), baseCol = new Float32Array(N*3), imgUV = new Float32Array(N*2), wgt = new Float32Array(N);
+  const W = frames.map(() => new Float32Array(N));
+  for (let i=0;i<N;i++){
+    const g = gid[i];
+    let ws = 0;
+    if (att[i] >= 0) frames.forEach((f, k) => { const d = Math.max(0, gN[g].dot(camDirs[k])); const w = Math.pow(d, 4) * (k === 0 ? 1.6 : 1); W[k][i] = w; ws += w; });
+    if (ws > 1e-4) frames.forEach((f, k) => W[k][i] /= ws); else frames.forEach((f, k) => W[k][i] = 0);
+    cov[i] = ws > 1e-4 ? Math.min(1, hop[g] / 3) : 0;
+    let c = skin;
+    const v = Pn[i];
+    if (hairCol){ const hm = THREE.MathUtils.smoothstep(v.y, yHair - 0.02, yHair + 0.18) * (v.z < zMid + 0.6 ? 1 : 0.5) + (v.z < zMid - 0.2 && v.y > F.noseLocal.y - 0.3 ? THREE.MathUtils.smoothstep(zMid - v.z, 0.2, 0.6) : 0);
+      const m = Math.min(1, hm); c = [skin[0]*(1-m) + hairCol[0]*m, skin[1]*(1-m) + hairCol[1]*m, skin[2]*(1-m) + hairCol[2]*m]; }
+    if (att[i] < 0 && Nrm[i].z > -0.15 && Math.abs(v.x - mouthC.x) < 0.45 && Math.abs(v.y - mouthC.y) < 0.25 && v.z < mouthC.z - 0.05) c = mouthCol;   // 입 안
+    baseCol[i*3] = c[0]; baseCol[i*3+1] = c[1]; baseCol[i*3+2] = c[2];
+  }
+  bakeGeo.setAttribute('baseCol', new THREE.BufferAttribute(baseCol, 3));
+  bakeGeo.setAttribute('cov', new THREE.BufferAttribute(cov, 1));
+  bakeGeo.setAttribute('imgUV', new THREE.BufferAttribute(imgUV, 2));
+  bakeGeo.setAttribute('wgt', new THREE.BufferAttribute(wgt, 1));
+  const bakeMat = new THREE.ShaderMaterial({
+    uniforms: { frame:{ value:null }, pass0:{ value:1 } },
+    vertexShader: `attribute vec3 baseCol; attribute float cov; attribute vec2 imgUV; attribute float wgt;
+      varying vec3 vb; varying float vc; varying vec2 vi; varying float vw;
+      void main(){ vb = baseCol; vc = cov; vi = imgUV; vw = wgt; gl_Position = vec4(uv*2.0-1.0, 0.0, 1.0); }`,
+    fragmentShader: `uniform sampler2D frame; uniform float pass0; varying vec3 vb; varying float vc; varying vec2 vi; varying float vw;
+      void main(){ if (pass0 > 0.5) gl_FragColor = vec4(vb*(1.0-vc), 1.0); else gl_FragColor = vec4(texture2D(frame, vi).rgb*vw*vc, 1.0); }`,
+    side: THREE.DoubleSide, depthTest:false, depthWrite:false, toneMapped:false,
+  });
+  const bakeMesh = new THREE.Mesh(bakeGeo, bakeMat); bakeMesh.frustumCulled = false;
+  const bakeScene = new THREE.Scene(); bakeScene.add(bakeMesh);
+  const SZ = 1024, rt = new THREE.WebGLRenderTarget(SZ, SZ, { depthBuffer:false });
+  const prevRT = renderer.getRenderTarget(), prevClear = renderer.getClearColor(new THREE.Color()), prevAlpha = renderer.getClearAlpha(), prevAuto = renderer.autoClear;
+  renderer.setRenderTarget(rt);
+  renderer.setClearColor(new THREE.Color().setRGB(skin[0], skin[1], skin[2], THREE.LinearSRGBColorSpace), 1);
+  renderer.clear();
+  renderer.autoClear = false;
+  bakeMat.blending = THREE.NoBlending; bakeMat.uniforms.pass0.value = 1;
+  renderer.render(bakeScene, camera);
+  bakeMat.blending = THREE.CustomBlending; bakeMat.blendEquation = THREE.AddEquation; bakeMat.blendSrc = THREE.OneFactor; bakeMat.blendDst = THREE.OneFactor;
+  bakeMat.uniforms.pass0.value = 0;
+  frames.forEach((f, k) => {
+    const tx = new THREE.CanvasTexture(f.img); tx.colorSpace = THREE.NoColorSpace; tx.minFilter = THREE.LinearFilter; tx.generateMipmaps = false;
+    for (let i=0;i<N;i++){
+      if (att[i] < 0){ imgUV[i*2] = 0; imgUV[i*2+1] = 0; wgt[i] = 0; continue; }
+      const t = att[i]; let x = 0, y = 0;
+      for (let k3=0;k3<3;k3++){ const p = f.lm[T[t*3+k3]]; x += p.x*bary[i*3+k3]; y += p.y*bary[i*3+k3]; }
+      imgUV[i*2] = x; imgUV[i*2+1] = 1 - y; wgt[i] = W[k][i];
+    }
+    bakeGeo.attributes.imgUV.needsUpdate = true; bakeGeo.attributes.wgt.needsUpdate = true;
+    bakeMat.uniforms.frame.value = tx;
+    renderer.render(bakeScene, camera);
+    tx.dispose();
+  });
+  const px = new Uint8Array(SZ*SZ*4); renderer.readRenderTargetPixels(rt, 0, 0, SZ, SZ, px);
+  renderer.setRenderTarget(prevRT); renderer.setClearColor(prevClear, prevAlpha); renderer.autoClear = prevAuto;
+  rt.dispose(); bakeGeo.dispose(); bakeMat.dispose();
+  const cv = document.createElement('canvas'); cv.width = SZ; cv.height = SZ;
+  const id = new ImageData(new Uint8ClampedArray(px.buffer), SZ, SZ); cv.getContext('2d').putImageData(id, 0, 0);
+
+  const data = { pos: newPos, eyes: F.eyes.map((e, k) => e.position.clone().add(eyeShift[k]).toArray()), teeth: teethShift.toArray(),
+    tex: cv.toDataURL('image/jpeg', 0.88), iris: '#' + new THREE.Color().setRGB(iris[0], iris[1], iris[2], THREE.LinearSRGBColorSpace).getHexString(),
+    sclera: '#' + new THREE.Color().setRGB(0.86*0.65 + skin[0]*0.35, 0.83*0.65 + skin[1]*0.35, 0.79*0.65 + skin[2]*0.35, THREE.LinearSRGBColorSpace).getHexString() };
+  F.group.removeFromParent();
+  return data;
+}
+// 저장된 데이터(형태·피부)로 아바타 구성
+async function applyAvatarData(data){
+  const F = new RealFace(await loadGLB(FACE_GLB));
+  const geo = F.head.geometry;
+  geo.setAttribute('position', new THREE.BufferAttribute(data.pos, 3));
+  geo.deleteAttribute('normal');                  // 압축된(8비트) 법선에 누적 계산하면 값이 뭉개짐 → 새 Float32로 다시 계산
+  geo.computeVertexNormals();
+  // UV 이음매에서 법선이 갈라지지 않게 같은 위치 정점의 법선을 평균
+  { const pa = geo.attributes.position, na = geo.attributes.normal, m = new Map(), v = new THREE.Vector3();
+    for (let i=0;i<pa.count;i++){ const k = `${pa.getX(i).toFixed(4)},${pa.getY(i).toFixed(4)},${pa.getZ(i).toFixed(4)}`; if (!m.has(k)) m.set(k, []); m.get(k).push(i); }
+    for (const ids of m.values()){ if (ids.length < 2) continue; v.set(0,0,0); for (const i of ids) v.add(new THREE.Vector3().fromBufferAttribute(na, i)); v.normalize(); for (const i of ids) na.setXYZ(i, v.x, v.y, v.z); }
+    na.needsUpdate = true; }
+  geo.computeBoundingSphere();
+  F.eyes.forEach((e, k) => e.position.fromArray(data.eyes[k]));
+  if (F.teeth){   // 얼굴 로컬 이동량 → 치아 부모 좌표계 이동량
+    F.group.updateMatrixWorld(true);
+    const M = new THREE.Matrix4().copy(F.teeth.parent.matrixWorld).invert().multiply(F.group.matrixWorld);
+    F.teeth.position.add(new THREE.Vector3().fromArray(data.teeth).applyMatrix3(new THREE.Matrix3().setFromMatrix4(M)));
+  }
+  const img = new Image(); img.src = data.tex; await img.decode();
+  const tex = new THREE.Texture(img); tex.flipY = false; tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4; tex.needsUpdate = true;
+  F.photoMat = new THREE.MeshStandardMaterial({ map:tex, roughness:0.62, metalness:0, side:THREE.DoubleSide });
+  F.eyeMat = new THREE.MeshPhysicalMaterial({ map:makeEyeTexture(data.iris, data.sclera), roughness:0.3, clearcoat:1, clearcoatRoughness:0.05 });
+  F.buildRefs();
+  F.setMaterial(matKey);
+  F.visible = false;
+  return F;
+}
+async function loadSavedAvatar(){
+  let d = null;
+  try { d = JSON.parse(localStorage.getItem(AVATAR_KEY) || 'null'); } catch {}
+  if (!d) return;
+  try {
+    const bin = atob(d.pos), u8 = new Uint8Array(bin.length); for (let i=0;i<bin.length;i++) u8[i] = bin.charCodeAt(i);
+    d.pos = new Float32Array(u8.buffer);
+    myAvatar = await applyAvatarData(d);
+  } catch (e) { try { localStorage.removeItem(AVATAR_KEY); } catch {} }
+}
+function saveAvatar(data){
+  try {
+    const u8 = new Uint8Array(data.pos.buffer); let bin = ''; for (let i=0;i<u8.length;i+=8192) bin += String.fromCharCode.apply(null, u8.subarray(i, i+8192));
+    localStorage.setItem(AVATAR_KEY, JSON.stringify(Object.assign({}, data, { pos: btoa(bin) })));
+  } catch {}
+}
+
+let capture = null, building = false;
 function trackMyFace(now, res){
-  const lm = res.faceLandmarks?.[0];
   if (!myFace) myFace = new MyFace();
+  const lm = res.faceLandmarks?.[0];
   if (!lm){
     if (now - myFace.lastSeen > 300) myFace.mesh.visible = false;
-    showHint(now - myFace.lastSeen > 900, '얼굴을 카메라 정면에 맞춰 주세요', '밝은 곳에서 얼굴 전체가 보이게 해 주세요');
+    if (!building) showHint(now - myFace.lastSeen > 900, '얼굴을 카메라 정면에 맞춰 주세요', '밝은 곳에서 얼굴 전체가 보이게 해 주세요');
     return '얼굴 없음';
   }
-  myFace.update(lm);
-  showHint(false);
-  const raw = {};
-  for (const c of res.faceBlendshapes?.[0]?.categories || []) raw[c.categoryName] = c.score;
-  const bl = measureBlink(lm, now); raw.eyeBlinkLeft = bl.Left; raw.eyeBlinkRight = bl.Right;
-  raw.jawOpen = Math.max(Math.min(1, (raw.jawOpen || 0) * 1.5), measureJaw(lm));
-  renderReadout(analyzeFace(raw), 'live', now);
-  return '내 얼굴';
+  myFace.update(lm);                                     // 촬영하는 동안 내 얼굴 미리보기
+  if (building) return '내 얼굴 만드는 중';
+  if (!capture) capture = new Capture();
+  const st = capture.feed(lm);
+  showHint(true, st.title, st.sub + `<span class="bar"><i style="width:${Math.round(st.pct*100)}%"></i></span>`, true);
+  if (capture.step === 'done'){
+    building = true;
+    const cap = capture;
+    setTimeout(async () => {
+      try {
+        const data = await buildAvatar(cap);
+        saveAvatar(data);
+        myAvatar = await applyAvatarData(data);
+        if (mode === 'myface'){ face = myAvatar; myFace.mesh.visible = false; face.pf = null; }
+        showHint(false);
+      } catch (e) { console.error(e); showErr('내 얼굴을 만들지 못했습니다. 밝은 곳에서 다시 시도해 주세요.'); }
+      building = false; capture = null;
+    }, 30);
+  }
+  return '내 얼굴 촬영';
+}
+function resetAvatar(){
+  try { localStorage.removeItem(AVATAR_KEY); } catch {}
+  if (myAvatar){ myAvatar.group.removeFromParent(); myAvatar = null; }
+  capture = null; face = activeFace();
+  applyModeVisibility();
 }
 
 /* ---------- Mode ---------- */
 function applyModeVisibility(){
   hands.forEach((h, i) => h.visible = usesHand() && !tracking && i === 0);
+  face = activeFace();
+  if (baseFace && baseFace !== face) baseFace.visible = false;
+  if (myAvatar && myAvatar !== face) myAvatar.visible = false;
   if (face) face.visible = usesFace() && !tracking;
-  if (myFace && (mode !== 'myface' || !tracking)) myFace.mesh.visible = false;
-  if (tracking && mode === 'myface' && face) face.visible = false;
+  if (myFace && (mode !== 'myface' || !tracking || myAvatar)) myFace.mesh.visible = false;
+  if (tracking && mode === 'myface' && !myAvatar && face) face.visible = false;
+  $('tRebuild').hidden = mode !== 'myface';
 }
 async function setMode(m){
   if (m === mode) return;
@@ -1170,7 +1501,7 @@ function loop(now){
       face.group.position.set(both ? -0.45 : 0, both ? 0.35 : 0, 0); face.group.quaternion.copy(d.q);
       face.apply(d.shapes); face.visible = true;
       const fr = analyzeFace(d.shapes);
-      if (mode === 'myface') showHint(true, '카메라를 켜면 이 자리에 내 얼굴이 나타납니다', '카메라에 찍힌 얼굴을 그대로 입힌 3D 얼굴이 표정을 따라 합니다', true);
+      if (mode === 'myface' && !myAvatar) showHint(true, '카메라를 켜면 내 얼굴을 촬영해 3D 머리를 만듭니다', '정면 → 왼쪽 → 오른쪽으로 고개를 천천히 돌리면 10초 안에 완성됩니다', true);
       if (!both) renderReadout(fr, 'demo', now);
       else if (hands[0]){ const r = analyzeHand(demoPts); r.name = `${r.name} · ${fr.name}`; renderReadout(r, 'demo', now); }
     }
@@ -1235,9 +1566,10 @@ $('mats').onclick = (e) => {
   matKey = b.dataset.m;
   [...$('mats').children].forEach(x => x.setAttribute('aria-pressed', String(x === b)));
   hands.forEach(h => h.setMaterial(matKey));
-  if (face) face.setMaterial(matKey);
+  [baseFace, myAvatar].forEach(f => f && f.setMaterial(matKey));
 };
 $('smooth').oninput = (e) => smooth = +e.target.value;
+$('tRebuild').onclick = () => { resetAvatar(); if (!tracking) startCam(); snapSheet(false); };
 $('eyeOpen').oninput = (e) => eyeOpen = +e.target.value;
 function syncMirror(){
   $('tMirror').setAttribute('aria-pressed', String(mirror));

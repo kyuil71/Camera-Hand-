@@ -8,10 +8,10 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans+KR:wght@400;600&display=swap">
 <style>
-/* Layout: full-bleed 3D studio, camera PiP top-right, compact bottom dock (max 430px) */
+/* Layout: full-bleed 3D studio · top-right camera PiP + on/off button · bottom sheet (peek = mode switch) */
 :root{
-  --bg:#0f1114; --bg2:#1d2228; --panel:rgba(20,23,28,.86); --line:#2d343c;
-  --fg:#e8ebee; --mute:#8d96a0; --accent:#8fd0e0; --accent-ink:#0c2228; --warn:#f0b46a;
+  --bg:#0f1114; --bg2:#1d2228; --panel:rgba(20,23,28,.88); --line:#2d343c;
+  --fg:#e8ebee; --mute:#8d96a0; --accent:#8fd0e0; --accent-ink:#0c2228; --warn:#f0b46a; --rec:#e8796b;
   --sans:"IBM Plex Sans KR",system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
   --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
   color-scheme:dark;
@@ -24,6 +24,8 @@ body{
   -webkit-tap-highlight-color:transparent;
 }
 #gl{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+button{font:inherit;color:inherit;cursor:pointer}
+[hidden]{display:none!important}
 
 .top{
   position:fixed;left:0;top:0;right:0;pointer-events:none;
@@ -40,18 +42,27 @@ body{
   padding:7px 10px;border-radius:99px;background:var(--panel);border:1px solid var(--line);color:var(--mute);
   display:flex;gap:8px;align-items:center;font-variant-numeric:tabular-nums;
 }
-.dot{width:8px;height:8px;border-radius:50%;background:var(--mute)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--mute);flex:none}
 .pill.live .dot{background:var(--accent);box-shadow:0 0 0 3px rgba(143,208,224,.2)}
 .pill.busy .dot{background:var(--warn)}
 
+.cam{display:flex;flex-direction:column;gap:8px;width:118px;flex:none;pointer-events:auto}
 .pip{
-  position:relative;width:118px;flex:none;border-radius:12px;overflow:hidden;
-  border:1px solid var(--line);background:#000;aspect-ratio:3/4;pointer-events:auto;
+  position:relative;width:100%;border-radius:12px;overflow:hidden;
+  border:1px solid var(--line);background:#000;aspect-ratio:3/4;
 }
 .pip video,.pip canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:fill}
 .pip.mirror video,.pip.mirror canvas{transform:scaleX(-1)}
 .pip .ph{position:absolute;inset:0;display:grid;place-items:center;text-align:center;
   font-size:13px;color:var(--mute);padding:8px;line-height:1.35}
+.cam-btn{
+  min-height:44px;border-radius:12px;border:1px solid var(--accent);background:var(--accent);
+  color:var(--accent-ink);font-size:15px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:7px;
+}
+.cam-btn.on{background:var(--panel);color:var(--fg);border-color:var(--line)}
+.cam-btn.on::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--rec)}
+.cam-btn:disabled{opacity:.6}
+.cam-btn:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
 
 .hint{
   position:fixed;left:50%;top:42%;transform:translate(-50%,-50%);
@@ -59,69 +70,65 @@ body{
   padding:12px 16px;font-size:16px;text-align:center;max-width:min(320px,calc(100% - 32px));
   pointer-events:none;
 }
+.hint small{display:block;color:var(--mute);font-size:14px;margin-top:2px}
 
+/* Bottom sheet */
 .dock{
   position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;
   padding-left:max(8px,env(safe-area-inset-left,0px));
   padding-right:max(8px,env(safe-area-inset-right,0px));
   pointer-events:none;
 }
-/* 바텀 시트: 기본은 내려가 있고 손잡이 바만 보임 */
-.dock-in{
-  width:100%;max-width:430px;pointer-events:auto;
+.sheet{
+  position:relative;width:100%;max-width:430px;pointer-events:auto;
   background:var(--panel);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
   border:1px solid var(--line);border-bottom:0;border-radius:20px 20px 0 0;
   padding:0 14px calc(16px + env(safe-area-inset-bottom,0px));
   display:flex;flex-direction:column;gap:12px;
-  transform:translateY(calc(100% - 30px - env(safe-area-inset-bottom,0px)));
+  transform:translateY(calc(100% - 88px - env(safe-area-inset-bottom,0px)));
   transition:transform .34s cubic-bezier(.2,.8,.2,1);will-change:transform;
 }
-.dock-in.dragging{transition:none}
+.sheet.dragging{transition:none}
 .grab{
-  display:flex;justify-content:center;align-items:center;height:30px;margin:0 -14px -6px;
+  display:flex;justify-content:center;align-items:center;height:26px;margin:0 -14px -8px;
   cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;
 }
 .grab span{width:46px;height:5px;border-radius:3px;background:var(--mute);opacity:.85}
 .grab:focus-visible{outline:none}
 .grab:focus-visible span{background:var(--accent)}
-.dock-in:not(.open) > :not(.grab){opacity:.0;transition:opacity .2s}
-.dock-in.open > :not(.grab), .dock-in.dragging > :not(.grab){opacity:1}
+.mode{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;border-radius:14px;background:rgba(0,0,0,.28);border:1px solid var(--line)}
+.mode button{min-height:44px;border:0;border-radius:10px;background:transparent;font-size:16px;font-weight:600;color:var(--mute)}
+.mode button[aria-pressed="true"]{background:var(--fg);color:var(--bg)}
+.mode button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.more{display:flex;flex-direction:column;gap:12px;transition:opacity .2s}
+.sheet:not(.open):not(.dragging) .more{opacity:0;pointer-events:none}
+
 .read{display:flex;flex-direction:column;gap:8px}
 .read-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
-.gesture{font-size:20px;font-weight:600}
+.gesture{font-size:20px;font-weight:600;min-width:0}
 .gesture small{font:500 12px var(--mono);color:var(--mute);margin-left:6px;letter-spacing:.06em;text-transform:uppercase}
 .metric{font:500 14px var(--mono);color:var(--mute);font-variant-numeric:tabular-nums;white-space:nowrap}
 .metric b{color:var(--fg);font-weight:500}
-.fingers{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
-.fg{
-  text-align:center;font-size:14px;padding:7px 0;border-radius:9px;
+.chips{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.chip{
+  text-align:center;font-size:14px;padding:7px 0;border-radius:9px;white-space:nowrap;
   border:1px solid var(--line);color:var(--mute);transition:background .12s,color .12s;
 }
-.fg.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
-
-.row{display:flex;gap:8px}
-button{font:inherit;color:inherit;cursor:pointer}
-.btn{
-  flex:1;min-height:48px;border-radius:12px;border:1px solid var(--line);
-  background:transparent;font-size:16px;font-weight:600;
-}
-.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
-.btn.icon{flex:none;width:56px;font-size:15px}
-.btn:focus-visible,.seg button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.btn[aria-expanded="true"]{background:var(--bg2)}
+.chip.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+.err{color:var(--warn);font-size:15px}
 
 .settings{display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--line);padding-top:12px}
 .lab{font:500 12px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--mute);margin-bottom:6px}
-.seg{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
-.seg button{min-height:42px;border-radius:10px;border:1px solid var(--line);background:transparent;font-size:15px}
+.seg{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.seg button{min-height:42px;border-radius:10px;border:1px solid var(--line);background:transparent;font-size:15px;padding:0}
 .seg button[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg);font-weight:600}
 .slide{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--mute)}
-.slide input{flex:1;accent-color:var(--accent);height:28px}
-.toggles{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+.slide input{flex:1;accent-color:var(--accent);height:28px;min-width:0}
+.toggles{display:grid;grid-template-columns:1fr 1fr;gap:6px}
 .toggles button{min-height:42px;border-radius:10px;border:1px solid var(--line);background:transparent;font-size:15px}
 .toggles button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
-.err{color:var(--warn);font-size:15px}
-@media (prefers-reduced-motion:reduce){.fg{transition:none}}
+.seg button:focus-visible,.toggles button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){.chip,.sheet,.more{transition:none}}
 </style>
 </head>
 <body>
@@ -130,52 +137,59 @@ button{font:inherit;color:inherit;cursor:pointer}
 <header class="top">
   <div class="brand">
     <h1>핸드 미러 <span>3D</span></h1>
-    <div class="pill" id="pill"><span class="dot"></span><span id="pillText">데모 재생 중</span></div>
+    <div class="pill" id="pill"><span class="dot"></span><span id="pillText">모델 불러오는 중…</span></div>
   </div>
-  <div class="pip mirror" id="pip">
-    <video id="video" playsinline muted></video>
-    <canvas id="ov"></canvas>
-    <div class="ph" id="pipPh">카메라<br>대기</div>
+  <div class="cam">
+    <div class="pip mirror" id="pip">
+      <video id="video" playsinline muted></video>
+      <canvas id="ov"></canvas>
+      <div class="ph" id="pipPh">카메라<br>꺼짐</div>
+    </div>
+    <button class="cam-btn" id="camBtn">카메라 켜기</button>
   </div>
 </header>
 
-<div class="hint" id="hint" hidden>손바닥을 카메라에 보여주세요<br><span style="color:var(--mute);font-size:14px">30–60cm 거리, 밝은 곳이 가장 정확합니다</span></div>
+<div class="hint" id="hint" hidden></div>
 
 <div class="safe-probe" id="safeProbe" style="position:fixed;bottom:0;left:0;width:0;height:env(safe-area-inset-bottom,0px);pointer-events:none"></div>
-<div class="dock"><div class="dock-in" id="dock">
+<div class="dock"><div class="sheet" id="sheet">
   <div class="grab" id="grab" role="button" tabindex="0" aria-expanded="false" aria-label="옵션 열기/닫기"><span></span></div>
-  <div class="read">
-    <div class="read-h">
-      <div class="gesture" id="gesture">펼친 손<small id="src">demo</small></div>
-      <div class="metric">핀치 <b id="pinch">—</b></div>
-    </div>
-    <div class="fingers" id="fingers">
-      <div class="fg">엄지</div><div class="fg">검지</div><div class="fg">중지</div><div class="fg">약지</div><div class="fg">소지</div>
-    </div>
+  <div class="mode" id="modeRow" role="group" aria-label="따라 할 대상">
+    <button data-mode="hand" aria-pressed="true">손</button>
+    <button data-mode="face" aria-pressed="false">얼굴</button>
   </div>
-  <div class="err" id="err" hidden></div>
-  <div class="row">
-    <button class="btn primary" id="start">카메라 시작</button>
-    <button class="btn icon" id="flip" title="전면/후면 카메라 전환" aria-label="카메라 전환">전환</button>
-  </div>
-  <div class="settings" id="settings">
-    <div>
-      <div class="lab">손 소재</div>
-      <div class="seg" id="mats">
-        <button data-m="clay" aria-pressed="true">클레이</button>
-        <button data-m="chrome" aria-pressed="false">크롬</button>
-        <button data-m="glass" aria-pressed="false">유리</button>
-        <button data-m="wire" aria-pressed="false">골격</button>
+  <div class="more" id="more">
+    <div class="read">
+      <div class="read-h">
+        <div class="gesture" id="gesture">펼친 손<small id="src">demo</small></div>
+        <div class="metric"><span id="metricLab">핀치</span> <b id="metricVal">—</b></div>
+      </div>
+      <div class="chips" id="chips">
+        <div class="chip"></div><div class="chip"></div><div class="chip"></div><div class="chip"></div><div class="chip"></div>
       </div>
     </div>
-    <div>
-      <div class="lab">떨림 보정</div>
-      <label class="slide">안정<input id="smooth" type="range" min="0" max="1" step="0.01" value="0.35">반응</label>
-    </div>
-    <div class="toggles">
-      <button id="tMirror" aria-pressed="true">거울 모드</button>
-      <button id="tPip" aria-pressed="true">미리보기</button>
-      <button id="tReset">시점 초기화</button>
+    <div class="err" id="err" hidden></div>
+    <div class="settings">
+      <div>
+        <div class="lab">소재</div>
+        <div class="seg" id="mats">
+          <button data-m="skin" aria-pressed="true">피부</button>
+          <button data-m="clay" aria-pressed="false">클레이</button>
+          <button data-m="chrome" aria-pressed="false">크롬</button>
+          <button data-m="glass" aria-pressed="false">유리</button>
+          <button data-m="wire" aria-pressed="false">와이어</button>
+        </div>
+      </div>
+      <div>
+        <div class="lab">떨림 보정</div>
+        <label class="slide">안정<input id="smooth" type="range" min="0" max="1" step="0.01" value="0.35">반응</label>
+      </div>
+      <div class="toggles">
+        <button id="tMirror" aria-pressed="true">거울 모드</button>
+        <button id="tPip" aria-pressed="true">미리보기</button>
+        <button id="tFlip">전면/후면 전환</button>
+        <button id="tReset">시점 초기화</button>
+      </div>
     </div>
   </div>
 </div></div>
@@ -190,25 +204,27 @@ button{font:inherit;color:inherit;cursor:pointer}
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 
-const MP_VER = '0.10.14';
-const MP_URL = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VER}`;
-const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+const MP_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
+const HAND_TASK = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+const FACE_TASK = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
+const HAND_GLB = 'assets/hand-right.glb';   // WebXR generic-hand (25 joints, skinned)
+const FACE_GLB = 'assets/facecap.glb';      // ARKit 52 blendshape face
 
 const $ = id => document.getElementById(id);
-const S = 11;                       // 미터 → 씬 단위 (손 ~18cm ≈ 2 units)
-const BONES = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],
+const S = 11;                                // 미터 → 씬 단위
+const BONES2D = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],
   [9,13],[13,14],[14,15],[15,16],[13,17],[0,17],[17,18],[18,19],[19,20]];
-// 관절 반지름 (mm) — 손목, 엄지, 검지, 중지, 약지, 소지
-const RADII = [16, 13,11,9.5,8, 9.5,8.5,7.5,6.8, 10,9,8,7.2, 9.5,8.5,7.5,6.8, 8.5,7.5,6.6,6].map(v => v/1000*S);
-const PALM_RING = [0,1,5,9,13,17];
 
 /* ---------- Renderer / scene ---------- */
 const canvas = $('gl');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
+renderer.toneMappingExposure = 1.0;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -223,82 +239,178 @@ const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true; controls.enablePan = false;
 controls.minDistance = 3.5; controls.maxDistance = 14;
 
-scene.add(new THREE.HemisphereLight(0xdfe8f0, 0x1a1c20, 0.5));
-const key = new THREE.DirectionalLight(0xffffff, 1.6);
+scene.add(new THREE.HemisphereLight(0xe6eef5, 0x2a2420, 0.55));
+const key = new THREE.DirectionalLight(0xfff4ea, 1.7);
 key.position.set(3, 6, 5); key.castShadow = true;
 key.shadow.mapSize.set(1024, 1024);
 Object.assign(key.shadow.camera, { left:-5, right:5, top:5, bottom:-5, near:1, far:20 });
-key.shadow.bias = -0.0005;
+key.shadow.bias = -0.0005; key.shadow.normalBias = 0.02;
 scene.add(key);
-const rim = new THREE.DirectionalLight(0x9fd8ff, 0.7); rim.position.set(-4, 2, -4); scene.add(rim);
-
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), new THREE.ShadowMaterial({ opacity:0.32 }));
+const rim = new THREE.DirectionalLight(0xa9dcff, 0.8); rim.position.set(-4, 2, -4); scene.add(rim);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), new THREE.ShadowMaterial({ opacity:0.16 }));
 ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
 
 /* ---------- Materials (CMF) ---------- */
 const MATS = {
-  clay:   new THREE.MeshStandardMaterial({ color:0xd8cdbf, roughness:0.82, metalness:0, side:THREE.DoubleSide }),
+  skin:   new THREE.MeshPhysicalMaterial({ color:0xcf977b, roughness:0.5, metalness:0, sheen:0.6, sheenRoughness:0.45,
+            sheenColor:new THREE.Color(0xffb8a0), clearcoat:0.08, clearcoatRoughness:0.6, side:THREE.DoubleSide }),
+  clay:   new THREE.MeshStandardMaterial({ color:0xd8cdbf, roughness:0.85, metalness:0, side:THREE.DoubleSide }),
   chrome: new THREE.MeshStandardMaterial({ color:0xeceef2, roughness:0.12, metalness:1, side:THREE.DoubleSide }),
   glass:  new THREE.MeshPhysicalMaterial({ color:0xd6ecff, roughness:0.06, metalness:0, transmission:1, thickness:0.6, ior:1.45, side:THREE.DoubleSide }),
   wire:   new THREE.MeshBasicMaterial({ color:0x8fd0e0, wireframe:true }),
 };
-let matKey = 'clay';
+let matKey = 'skin';
+const TEETH = new THREE.MeshStandardMaterial({ color:0xece6da, roughness:0.4 });
+const EYE = new THREE.MeshPhysicalMaterial({ map:makeEyeTexture(), roughness:0.3, clearcoat:1, clearcoatRoughness:0.05 });
 
-/* ---------- Procedural hand ---------- */
-const UP = new THREE.Vector3(0,1,0);
-const unitSphere = new THREE.SphereGeometry(1, 22, 16);
-class Hand {
-  constructor(){
+function makeEyeTexture(){
+  const c = document.createElement('canvas'); c.width = 512; c.height = 256;
+  const g = c.getContext('2d');
+  g.fillStyle = '#efe8e0'; g.fillRect(0,0,512,256);
+  const cx = 128, cy = 128, R = 38;              // u=0.25 → 정면(+z)
+  const ir = g.createRadialGradient(cx,cy,4,cx,cy,R);
+  ir.addColorStop(0,'#1a120c'); ir.addColorStop(0.35,'#4a3020'); ir.addColorStop(0.8,'#6b4529'); ir.addColorStop(1,'#2a1a10');
+  g.fillStyle = ir; g.beginPath(); g.arc(cx,cy,R,0,7); g.fill();
+  g.strokeStyle = 'rgba(20,12,8,.8)'; g.lineWidth = 3; g.stroke();
+  g.fillStyle = '#070505'; g.beginPath(); g.arc(cx,cy,14,0,7); g.fill();
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return t;
+}
+
+/* ---------- Asset loading ---------- */
+const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+const loadGLB = (url) => new Promise((res, rej) => loader.load(url, res, undefined, rej));
+
+/* ---------- Realistic skinned hand (WebXR joints driven by MediaPipe landmarks) ---------- */
+const FINGERS = ['index','middle','ring','pinky'];
+const XR = ['wrist','thumb-metacarpal','thumb-phalanx-proximal','thumb-phalanx-distal','thumb-tip',
+  ...FINGERS.flatMap(f => ['metacarpal','phalanx-proximal','phalanx-intermediate','phalanx-distal','tip'].map(s => `${f}-finger-${s}`))];
+const MP_OF = [0, 1,2,3,4, -1,5,6,7,8, -1,9,10,11,12, -1,13,14,15,16, -1,17,18,19,20];
+const CHILD = XR.map((n,i) => i === 0 ? 11 : n.endsWith('tip') ? -1 : i+1);
+
+const _m = new THREE.Matrix4(), _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3();
+function frameQuat(f, b, out){
+  _z.copy(f);
+  _y.copy(b).addScaledVector(_z, -b.dot(_z));
+  if (_y.lengthSq() < 1e-8) _y.set(0,1,0).addScaledVector(_z, -_z.y);
+  _y.normalize(); _x.crossVectors(_y, _z);
+  return out.setFromRotationMatrix(_m.makeBasis(_x, _y, _z));
+}
+function backNormal(p0, p5, p17, out){
+  return out.subVectors(p5, p0).cross(_x.subVectors(p17, p0)).normalize().negate();
+}
+
+class RealHand {
+  constructor(template){
     this.group = new THREE.Group(); scene.add(this.group);
+    this.root = SkeletonUtils.clone(template); this.group.add(this.root);
+    this.bones = XR.map(n => this.root.getObjectByName(n));
     this.meshes = [];
-    const add = (geo) => { const m = new THREE.Mesh(geo, MATS[matKey]); m.castShadow = true; this.group.add(m); this.meshes.push(m); return m; };
-    this.joints = RADII.map(r => { const m = add(unitSphere); m.scale.setScalar(r); return m; });
-    this.bones = BONES.map(([a,b]) => add(new THREE.CylinderGeometry(RADII[b], RADII[a], 1, 16, 1, true)));
-    this.arm = add(new THREE.CylinderGeometry(0.021*S, 0.026*S, 1, 22, 1, true));
-    const pg = new THREE.BufferGeometry();
-    this.palmPos = new Float32Array(14*3);
-    pg.setAttribute('position', new THREE.BufferAttribute(this.palmPos, 3));
-    const idx = [];
-    for (let i=0;i<6;i++){ const j=(i+1)%6;
-      idx.push(0,1+i,1+j, 7,8+j,8+i, 1+i,8+i,1+j, 1+j,8+i,8+j); }
-    pg.setIndex(idx);
-    this.palm = add(pg);
+    this.root.traverse(o => { if (o.isSkinnedMesh){ o.frustumCulled = false; o.castShadow = true; this.meshes.push(o); } });
+    this.setMaterial(MATS[matKey]);
+    this.bindPos = this.bones.map(b => b.position.clone());
+    this.bindQuat = this.bones.map(b => b.quaternion.clone());
+    const bb = backNormal(this.bindPos[0], this.bindPos[6], this.bindPos[21], new THREE.Vector3());
+    this.bindFrameInv = this.bones.map((b, i) => {
+      const c = CHILD[i]; if (c < 0) return null;
+      const f = new THREE.Vector3().subVectors(this.bindPos[c], this.bindPos[i]).normalize();
+      return frameQuat(f, bb, new THREE.Quaternion()).invert();
+    });
+    this.bindSize = this.bindPos[11].distanceTo(this.bindPos[0]);
+    this.J = XR.map(() => new THREE.Vector3());
+    this.R = XR.map(() => new THREE.Quaternion());
+    this.L = Array.from({length:21}, () => new THREE.Vector3());
     this.lastSeen = -1e9; this.filters = null;
-    this._v = new THREE.Vector3(); this._n = new THREE.Vector3(); this._c = new THREE.Vector3();
+    this._b = new THREE.Vector3(); this._f = new THREE.Vector3(); this._q = new THREE.Quaternion(); this._v = new THREE.Vector3();
   }
   setMaterial(m){ this.meshes.forEach(x => x.material = m); }
   set visible(v){ this.group.visible = v; }
   get visible(){ return this.group.visible; }
-  update(p){
-    for (let i=0;i<21;i++) this.joints[i].position.copy(p[i]);
-    const d = this._v;
-    BONES.forEach(([a,b], k) => {
-      const m = this.bones[k];
-      d.subVectors(p[b], p[a]); const len = d.length() || 1e-4;
-      m.position.addVectors(p[a], p[b]).multiplyScalar(0.5);
-      m.quaternion.setFromUnitVectors(UP, d.divideScalar(len));
-      m.scale.set(1, len, 1);
-    });
-    // 전완부: 손목에서 중지 반대 방향
-    d.subVectors(p[0], p[9]).normalize();
-    const armLen = 0.075*S;
-    this.arm.position.copy(p[0]).addScaledVector(d, armLen/2);
-    this.arm.quaternion.setFromUnitVectors(UP, d.clone().negate());
-    this.arm.scale.set(1, armLen, 1);
-    // 손바닥 슬래브
-    const n = this._n.subVectors(p[5], p[0]).cross(this._c.subVectors(p[17], p[0])).normalize();
-    const c = this._c.set(0,0,0); PALM_RING.forEach(i => c.add(p[i])); c.divideScalar(6);
-    const t = 0.0105*S, a = this.palmPos;
-    const put = (k, v, s) => { a[k*3]=v.x+n.x*s; a[k*3+1]=v.y+n.y*s; a[k*3+2]=v.z+n.z*s; };
-    put(0, c, t); put(7, c, -t);
-    PALM_RING.forEach((pi, i) => { put(1+i, p[pi], t*0.85); put(8+i, p[pi], -t*0.85); });
-    this.palm.geometry.attributes.position.needsUpdate = true;
-    this.palm.geometry.computeVertexNormals();
-    this.palm.geometry.computeBoundingSphere();
+  // p: 21 scene points; right: geometric chirality of those points
+  pose(p, right){
+    const sx = right ? 1 : -1;
+    this.group.scale.set(sx*S, S, S);
+    const L = this.L;
+    for (let i=0;i<21;i++) L[i].set(p[i].x*sx/S, p[i].y/S, p[i].z/S);
+    const k = L[9].distanceTo(L[0]) / this.bindSize;
+    const b = backNormal(L[0], L[5], L[17], this._b);
+    const J = this.J, R = this.R, f = this._f, q = this._q;
+    J[0].copy(L[0]);
+    frameQuat(f.subVectors(L[9], L[0]).normalize(), b, q);
+    R[0].multiplyQuaternions(q, this.bindFrameInv[0]);
+    for (let i=1;i<25;i++){
+      if (MP_OF[i] >= 0) J[i].copy(L[MP_OF[i]]);
+      else J[i].copy(this._v.subVectors(this.bindPos[i], this.bindPos[0]).applyQuaternion(R[0]).multiplyScalar(k)).add(J[0]);
+    }
+    for (let i=1;i<25;i++){
+      const c = CHILD[i];
+      if (c < 0){ R[i].copy(R[i-1]); continue; }
+      f.subVectors(J[c], J[i]);
+      if (f.lengthSq() < 1e-10){ R[i].copy(R[i-1]); continue; }
+      frameQuat(f.normalize(), b, q);
+      R[i].multiplyQuaternions(q, this.bindFrameInv[i]);
+    }
+    for (let i=0;i<25;i++){
+      const bone = this.bones[i];
+      bone.position.copy(J[i]);
+      bone.quaternion.multiplyQuaternions(R[i], this.bindQuat[i]);
+      bone.scale.setScalar(k);
+    }
   }
 }
-const hands = [new Hand(), new Hand()];
-hands[1].visible = false;
+
+/* ---------- Face (ARKit blendshapes + head pose) ---------- */
+class RealFace {
+  constructor(gltf){
+    this.group = new THREE.Group(); scene.add(this.group);
+    this.model = gltf.scene; this.group.add(this.model);
+    this.model.position.set(0, -0.15, 0.6);      // 머리 회전 중심을 목 쪽으로
+    this.group.updateMatrixWorld(true);
+    this.head = this.model.getObjectByName('head_mesh');
+    this.teeth = this.model.getObjectByName('teeth_mesh');
+    this.dict = this.head.morphTargetDictionary;
+    this.inf = this.head.morphTargetInfluences;
+    this.eyes = [];
+    ['eyeLeft_mesh','eyeRight_mesh'].forEach(n => {
+      const src = this.model.getObjectByName(n); if (!src) return;
+      const box = new THREE.Box3().setFromObject(src);
+      const c = box.getCenter(new THREE.Vector3()), s = box.getSize(new THREE.Vector3());
+      src.visible = false;
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(Math.min(s.x,s.y,s.z)/2*0.92, 40, 24), EYE);
+      eye.position.copy(c).z -= Math.min(s.x,s.y,s.z)*0.03; eye.userData.side = c.x > 0 ? 'L' : 'R';   // 아바타 기준 왼쪽 눈 = +x
+      this.group.add(eye); this.eyes.push(eye);
+    });
+    [this.head, this.teeth].forEach(m => { if (m){ m.castShadow = true; m.frustumCulled = false; } });
+    this.group.scale.setScalar(0.74);              // 화면에 맞는 크기
+    this.lastSeen = -1e9; this.pf = null; this.q = new THREE.Quaternion();
+    this.shapes = {};
+    this.setMaterial(matKey);
+  }
+  setMaterial(key){
+    const m = MATS[key], real = key === 'skin';
+    this.head.material = m;
+    if (this.teeth) this.teeth.material = real ? TEETH : m;
+    this.eyes.forEach(e => e.material = real ? EYE : m);
+  }
+  set visible(v){ this.group.visible = v; }
+  get visible(){ return this.group.visible; }
+  setShape(name, v){
+    let i = this.dict[name.replace(/Left$/, '_L').replace(/Right$/, '_R')];
+    if (i === undefined) i = this.dict[name];
+    if (i !== undefined) this.inf[i] = v;
+  }
+  // shapes: avatar-space ARKit names (Left = 아바타의 왼쪽)
+  apply(shapes){
+    for (const n in shapes) this.setShape(n, shapes[n]);
+    const g = n => shapes[n] || 0;
+    this.eyes.forEach(e => {
+      const L = e.userData.side === 'L', s = L ? 'Left' : 'Right';
+      const yaw = L ? g('eyeLookOut'+s) - g('eyeLookIn'+s) : g('eyeLookIn'+s) - g('eyeLookOut'+s);
+      const pitch = g('eyeLookDown'+s) - g('eyeLookUp'+s);
+      e.rotation.set(pitch*0.45, yaw*0.6, 0, 'YXZ');
+    });
+  }
+}
 
 /* ---------- One Euro filter ---------- */
 const alpha = (dt, fc) => 1 / (1 + (1/(2*Math.PI*fc))/dt);
@@ -315,7 +427,7 @@ class OneEuro {
 let smooth = 0.35;
 const filterParams = () => ({ minC: 0.4 + smooth*5, beta: 0.04 + smooth*0.6 });
 
-/* ---------- Demo pose (camera off) ---------- */
+/* ---------- Demo hand pose (camera off) ---------- */
 const CANON = [[0,0],[-25,20],[-45,40],[-60,60],[-72,80],[-25,85],[-28,120],[-30,143],[-31,162],
   [-2,90],[-2,130],[-2,155],[-2,175],[20,85],[23,120],[25,143],[26,160],[38,75],[45,100],[50,117],[53,132]]
   .map(([x,y]) => new THREE.Vector3(x/1000, (y-85)/1000, 0));
@@ -323,7 +435,7 @@ const CHAINS = [[1,2,3,4],[5,6,7,8],[9,10,11,12],[13,14,15,16],[17,18,19,20]];
 const THUMB_AXIS = new THREE.Vector3(0.8,0.6,0).normalize(), X_AXIS = new THREE.Vector3(1,0,0);
 const POSES = [[0,0,0,0,0],[1,1,1,1,1],[1,0,0,1,1],[1,0,1,1,1],[0,1,1,1,1],[0.6,0.55,0,0,0],[0,0,0,0,0]];
 const demoPts = Array.from({length:21}, () => new THREE.Vector3());
-function demoPose(time){
+function demoHand(time){
   const T = 1700, k = Math.floor(time/T) % (POSES.length-1), f = (time % T)/T;
   const e = f < 0.55 ? 0 : (f-0.55)/0.45, s = e*e*(3-2*e);
   const curl = POSES[k].map((v,i) => v + (POSES[k+1][i]-v)*s);
@@ -343,12 +455,29 @@ function demoPose(time){
   });
   const sway = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.sin(time/2300)*0.15, Math.sin(time/1900)*0.45, 0));
   demoPts.forEach(p => p.multiplyScalar(S).applyQuaternion(sway));
-  return demoPts;
+  return demoPts;   // 손바닥이 화면을 향한 왼손 형태
 }
 
-/* ---------- Finger state readout ---------- */
+/* ---------- Demo face (camera off) ---------- */
+function demoFace(t){
+  const blink = Math.max(0, 1 - Math.abs(((t % 3600) - 180) / 90));
+  const ph = (t / 5200) % 1;
+  const env = (a, b) => ph > a && ph < b ? Math.sin((ph-a)/(b-a)*Math.PI) : 0;
+  const smile = env(0.05, 0.4), jaw = env(0.45, 0.7), brow = env(0.48, 0.72), pucker = env(0.75, 0.97);
+  const look = Math.sin(t/1500)*0.5;
+  return {
+    q: new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.sin(t/2600)*0.12, Math.sin(t/2100)*0.35, Math.sin(t/3100)*0.06)),
+    shapes: { eyeBlinkLeft:blink, eyeBlinkRight:blink, mouthSmileLeft:smile*0.9, mouthSmileRight:smile*0.9,
+      cheekSquintLeft:smile*0.4, cheekSquintRight:smile*0.4, jawOpen:jaw*0.55, browInnerUp:brow*0.8,
+      browOuterUpLeft:brow*0.6, browOuterUpRight:brow*0.6, eyeWideLeft:brow*0.5, eyeWideRight:brow*0.5,
+      mouthPucker:pucker*0.8, mouthFunnel:pucker*0.3,
+      eyeLookOutLeft:Math.max(0,look), eyeLookInRight:Math.max(0,look), eyeLookInLeft:Math.max(0,-look), eyeLookOutRight:Math.max(0,-look) }
+  };
+}
+
+/* ---------- Readout ---------- */
 const ang = (a,b,c,d) => { const u = new THREE.Vector3().subVectors(b,a).normalize(), v = new THREE.Vector3().subVectors(d,c).normalize(); return Math.acos(THREE.MathUtils.clamp(u.dot(v),-1,1)); };
-function analyze(p){
+function analyzeHand(p){
   const ext = CHAINS.map((ch, i) => {
     const bend = ang(p[ch[0]],p[ch[1]],p[ch[1]],p[ch[2]]) + ang(p[ch[1]],p[ch[2]],p[ch[2]],p[ch[3]]);
     if (i === 0) return bend < THREE.MathUtils.degToRad(50) && p[4].distanceTo(p[9]) > p[3].distanceTo(p[9]);
@@ -361,60 +490,94 @@ function analyze(p){
   let name = NAMES[code] || '움직이는 중';
   if (pinch < 2.2 && !ext[1]) name = '핀치';
   else if (pinch < 2.2 && ext[2]) name = 'OK';
-  return { ext, pinch, name };
+  return { name, metric: pinch.toFixed(1) + 'cm', chips: ext };
 }
-const fingerEls = [...$('fingers').children];
+function analyzeFace(s){
+  const g = n => s[n] || 0;
+  const bl = g('eyeBlinkLeft'), br = g('eyeBlinkRight');
+  const smile = (g('mouthSmileLeft') + g('mouthSmileRight'))/2;
+  const brow = Math.max(g('browInnerUp'), (g('browOuterUpLeft') + g('browOuterUpRight'))/2);
+  const jaw = g('jawOpen');
+  let name = '무표정';
+  if (jaw > 0.35 && brow > 0.4) name = '놀람';
+  else if (Math.abs(bl - br) > 0.45 && Math.max(bl, br) > 0.55) name = '윙크';
+  else if (bl > 0.6 && br > 0.6) name = '눈 감음';
+  else if (jaw > 0.3) name = '입 벌림';
+  else if (smile > 0.4) name = '미소';
+  else if (g('mouthPucker') > 0.5) name = '입술 내밀기';
+  else if ((g('browDownLeft') + g('browDownRight'))/2 > 0.4) name = '찡그림';
+  else if (g('cheekPuff') > 0.4) name = '볼 부풀림';
+  return { name, metric: Math.round(jaw*100) + '%', chips: [Math.max(bl,br) > 0.5, jaw > 0.25, smile > 0.4, brow > 0.35, g('cheekPuff') > 0.35] };
+}
+const CHIP_LABELS = { hand:['엄지','검지','중지','약지','소지'], face:['깜빡임','입 벌림','미소','눈썹','볼'] };
+const chipEls = [...$('chips').children];
 let lastUI = 0;
-function renderReadout(p, src, t){
+function renderReadout(r, src, t){
   if (t - lastUI < 90) return; lastUI = t;
-  const r = analyze(p);
   $('gesture').firstChild.nodeValue = r.name;
   $('src').textContent = src;
-  $('pinch').textContent = r.pinch.toFixed(1) + 'cm';
-  r.ext.forEach((on, i) => fingerEls[i].classList.toggle('on', on));
+  $('metricVal').textContent = r.metric;
+  r.chips.forEach((on, i) => chipEls[i].classList.toggle('on', !!on));
 }
 
-/* ---------- Layout: keep the hand centered above the dock ---------- */
+/* ---------- Layout: keep the subject centered above the sheet ---------- */
 let upp = 0.01, areaW = 1, areaH = 1, camDist = 7;
 function resize(){
   const W = innerWidth, H = innerHeight;
-  const dockH = Math.max(0, H - $('dock').getBoundingClientRect().top) + 10;
+  const dockH = Math.max(0, H - $('sheet').getBoundingClientRect().top) + 10;
   const Hf = H + dockH;
   renderer.setSize(W, H, false);
   camera.aspect = W / Hf;
   camera.setViewOffset(W, Hf, 0, dockH, W, H);
   camera.updateProjectionMatrix();
   areaW = W; areaH = Math.max(120, H - dockH);
-  // 남은 화면 높이에 손(약 3.6 units)이 다 들어오도록 카메라 거리 조정
   const tanH = 2*Math.tan(THREE.MathUtils.degToRad(camera.fov/2));
-  const minVisible = 3.6;
-  camDist = THREE.MathUtils.clamp(minVisible * Hf / (areaH * tanH), 7, 22);
+  camDist = THREE.MathUtils.clamp(3.8 * Hf / (areaH * tanH), 7, 22);
   camera.position.sub(controls.target).setLength(camDist).add(controls.target);
   controls.maxDistance = Math.max(14, camDist + 6);
   upp = tanH * camDist / Hf;
-  ground.position.y = -(areaH/2)*upp - 0.4;
+  ground.position.y = -(areaH/2)*upp - 0.5;
 }
-addEventListener('resize', () => { snapSheet(sheetOpen); resize(); });
-let lastSheetTop = -1;
 
-/* ---------- Tracking ---------- */
+/* ---------- State ---------- */
+let mode = 'hand', face = null;
+const hands = [];
 const video = $('video'), ov = $('ov'), octx = ov.getContext('2d');
-let landmarker = null, stream = null, tracking = false, facing = 'user', mirror = true;
-let lastVideoTime = -1, detCount = 0, detFps = 0, fpsT = performance.now();
+const det = { hand:null, face:null };
+let fileset = null, stream = null, tracking = false, facing = 'user', mirror = true;
+let lastVideoTime = -1, detCount = 0, detFps = 0, fpsT = performance.now(), loadingDet = false;
 const tmp = Array.from({length:21}, () => new THREE.Vector3());
 
-function setPill(text, mode){ $('pillText').textContent = text; $('pill').className = 'pill ' + (mode||''); }
-function showErr(msg){ $('err').textContent = msg; $('err').hidden = !msg; if (msg) snapSheet(true); else if (sheetOpen) snapSheet(true); }
+function setPill(text, cls){ $('pillText').textContent = text; $('pill').className = 'pill ' + (cls||''); }
+function showErr(msg){ $('err').textContent = msg; $('err').hidden = !msg; if (msg) snapSheet(true); }
+function idlePill(){ setPill(mode === 'hand' ? '데모 재생 중 · 손' : '데모 재생 중 · 얼굴'); }
 
-async function loadModel(){
-  if (landmarker) return landmarker;
-  const { FilesetResolver, HandLandmarker } = await import(`${MP_URL}/vision_bundle.mjs`);
-  const fileset = await FilesetResolver.forVisionTasks(`${MP_URL}/wasm`);
-  const make = (delegate) => HandLandmarker.createFromOptions(fileset, {
-    baseOptions:{ modelAssetPath: MODEL_URL, delegate }, runningMode:'VIDEO', numHands:2,
-    minHandDetectionConfidence:0.6, minHandPresenceConfidence:0.6, minTrackingConfidence:0.5 });
-  try { landmarker = await make('GPU'); } catch { landmarker = await make('CPU'); }
-  return landmarker;
+async function getDetector(which){
+  if (det[which]) return det[which];
+  const vision = await import(`${MP_URL}/vision_bundle.mjs`);
+  if (!fileset) fileset = await vision.FilesetResolver.forVisionTasks(`${MP_URL}/wasm`);
+  const make = (delegate) => which === 'hand'
+    ? vision.HandLandmarker.createFromOptions(fileset, { baseOptions:{ modelAssetPath:HAND_TASK, delegate },
+        runningMode:'VIDEO', numHands:2, minHandDetectionConfidence:0.6, minHandPresenceConfidence:0.6, minTrackingConfidence:0.5 })
+    : vision.FaceLandmarker.createFromOptions(fileset, { baseOptions:{ modelAssetPath:FACE_TASK, delegate },
+        runningMode:'VIDEO', numFaces:1, outputFaceBlendshapes:true, outputFacialTransformationMatrixes:true,
+        minFaceDetectionConfidence:0.5, minFacePresenceConfidence:0.5, minTrackingConfidence:0.5 });
+  try { det[which] = await make('GPU'); } catch { det[which] = await make('CPU'); }
+  return det[which];
+}
+async function ensureDetector(){
+  if (det[mode] || loadingDet) return;
+  loadingDet = true;
+  setPill(mode === 'hand' ? '손 인식 모델 불러오는 중…' : '얼굴 인식 모델 불러오는 중…', 'busy');
+  try { await getDetector(mode); } catch (e) { showErr('인식 모델을 불러오지 못했습니다. 인터넷 연결을 확인하세요.'); }
+  loadingDet = false; lastVideoTime = -1;
+}
+async function ensureFace(){
+  if (face) return face;
+  setPill('얼굴 모델 불러오는 중…', 'busy');
+  face = new RealFace(await loadGLB(FACE_GLB));
+  face.visible = false;
+  return face;
 }
 
 async function openCamera(){
@@ -427,124 +590,196 @@ async function openCamera(){
   ov.width = video.videoWidth; ov.height = video.videoHeight;
   $('pipPh').hidden = true;
 }
-
-async function start(){
+async function startCam(){
   showErr('');
-  if (!navigator.mediaDevices?.getUserMedia){ showErr('이 브라우저는 카메라를 지원하지 않습니다. https 주소(GitHub Pages 등)에서 열어 주세요.'); return; }
-  $('start').disabled = true;
+  if (!navigator.mediaDevices?.getUserMedia){ showErr('이 브라우저에서는 카메라를 쓸 수 없습니다. https 주소에서 열어 주세요.'); return; }
+  const btn = $('camBtn'); btn.disabled = true; btn.textContent = '연결 중…';
   try {
-    setPill('손 인식 모델 불러오는 중…', 'busy');
-    await loadModel();
+    await ensureDetector();
+    if (!det[mode]) throw new Error('model');
     setPill('카메라 연결 중…', 'busy');
     await openCamera();
     tracking = true; lastVideoTime = -1;
     hands.forEach(h => { h.visible = false; h.filters = null; });
-    $('start').textContent = '카메라 끄기'; $('start').classList.remove('primary');
+    if (face){ face.visible = false; face.pf = null; }
+    btn.textContent = '카메라 끄기'; btn.classList.add('on');
   } catch (e) {
     const denied = e && (e.name === 'NotAllowedError' || e.name === 'SecurityError');
-    showErr(denied ? '카메라 권한이 거부되었습니다. 주소창의 카메라 권한을 허용한 뒤 다시 눌러 주세요.'
+    if (e && e.message !== 'model') showErr(denied ? '카메라 권한이 거부되었습니다. 주소창 왼쪽 아이콘 → 권한에서 카메라를 허용한 뒤 다시 눌러 주세요.'
       : e && e.name === 'NotFoundError' ? '사용할 수 있는 카메라를 찾지 못했습니다.'
-      : '시작하지 못했습니다: ' + (e && e.message || e));
-    setPill('데모 재생 중');
-  } finally { $('start').disabled = false; }
+      : '카메라를 시작하지 못했습니다: ' + (e && e.message || e));
+    btn.textContent = '카메라 켜기'; idlePill();
+  } finally { btn.disabled = false; }
 }
-function stop(){
+function stopCam(){
   tracking = false;
   if (stream) stream.getTracks().forEach(t => t.stop()); stream = null;
   video.srcObject = null; octx.clearRect(0,0,ov.width,ov.height); $('pipPh').hidden = false;
-  hands[0].visible = true; hands[1].visible = false; $('hint').hidden = true;
-  $('start').textContent = '카메라 시작'; $('start').classList.add('primary');
-  setPill('데모 재생 중');
+  $('hint').hidden = true;
+  $('camBtn').textContent = '카메라 켜기'; $('camBtn').classList.remove('on');
+  applyModeVisibility(); idlePill();
 }
 
-function toScene(lm, wl, out){
-  // 손 위치: 정규화 좌표(중지 MCP) → 화면 영역, 깊이: 이미지 속 손 크기
+/* ---------- Hand tracking ---------- */
+function handToScene(lm, wl, out){
   const vw = video.videoWidth, vh = video.videoHeight;
   const sx = mirror ? (0.5 - lm[9].x) : (lm[9].x - 0.5);
   const tx = sx * areaW * upp * 0.95, ty = (0.5 - lm[9].y) * areaH * upp * 0.95;
   const span = Math.hypot((lm[0].x-lm[9].x)*vw, (lm[0].y-lm[9].y)*vh) / Math.min(vw, vh);
   const tz = THREE.MathUtils.clamp(Math.log(Math.max(span,1e-3)/0.22) * 3, -3, 2.5);
   const mx = mirror ? -1 : 1;
-  for (let i=0;i<21;i++){
+  for (let i=0;i<21;i++)
     out[i].set(mx*(wl[i].x - wl[9].x)*S + tx, -(wl[i].y - wl[9].y)*S + ty, -(wl[i].z - wl[9].z)*S + tz);
-  }
   return out;
 }
-
-function drawOverlay(list){
-  octx.clearRect(0,0,ov.width,ov.height);
+function drawHands(list){
   const w = ov.width, h = ov.height;
   octx.lineWidth = Math.max(2, w/160); octx.strokeStyle = '#8fd0e0'; octx.fillStyle = '#ffffff';
   for (const lm of list){
     octx.beginPath();
-    for (const [a,b] of BONES){ octx.moveTo(lm[a].x*w, lm[a].y*h); octx.lineTo(lm[b].x*w, lm[b].y*h); }
+    for (const [a,b] of BONES2D){ octx.moveTo(lm[a].x*w, lm[a].y*h); octx.lineTo(lm[b].x*w, lm[b].y*h); }
     octx.stroke();
     for (const p of lm){ octx.beginPath(); octx.arc(p.x*w, p.y*h, Math.max(2.5, w/110), 0, 7); octx.fill(); }
   }
 }
-
-function track(now){
-  if (video.readyState < 2 || video.currentTime === lastVideoTime) return;
-  lastVideoTime = video.currentTime;
-  const res = landmarker.detectForVideo(video, now);
-  detCount++;
+function trackHands(now, res){
+  if (!hands.length) return '손 모델 준비 중';
   const used = [false,false];
   (res.landmarks || []).forEach((lm, i) => {
     const label = res.handednesses?.[i]?.[0]?.categoryName;
-    let slot = label === 'Right' ? 0 : 1;
+    const realRight = label === 'Left';                  // 좌우반전 안 된 영상이 들어가므로 라벨이 뒤집혀 나옴
+    let slot = realRight ? 0 : 1;
     if (used[slot]) slot = 1 - slot;
     used[slot] = true;
     const h = hands[slot];
-    const pts = toScene(lm, res.worldLandmarks[i], tmp);
+    const pts = handToScene(lm, res.worldLandmarks[i], tmp);
     if (!h.filters || now - h.lastSeen > 350) h.filters = Array.from({length:63}, () => new OneEuro());
     const { minC, beta } = filterParams();
-    for (let j=0;j<21;j++){
-      pts[j].set(h.filters[j*3].f(pts[j].x, now, minC, beta),
-                 h.filters[j*3+1].f(pts[j].y, now, minC, beta),
-                 h.filters[j*3+2].f(pts[j].z, now, minC, beta));
-    }
-    h.update(pts); h.visible = true; h.lastSeen = now;
+    for (let j=0;j<21;j++)
+      pts[j].set(h.filters[j*3].f(pts[j].x, now, minC, beta), h.filters[j*3+1].f(pts[j].y, now, minC, beta), h.filters[j*3+2].f(pts[j].z, now, minC, beta));
+    h.pose(pts, mirror ? !realRight : realRight);
+    h.visible = true; h.lastSeen = now;
+    if (i === 0) renderReadout(analyzeHand(pts), 'live', now);
   });
   hands.forEach(h => { if (now - h.lastSeen > 250) h.visible = false; });
-  drawOverlay(res.landmarks || []);
-
+  drawHands(res.landmarks || []);
   const n = hands.filter(h => h.visible).length;
-  $('hint').hidden = n > 0 || now - Math.max(hands[0].lastSeen, hands[1].lastSeen) < 900;
-  const lead = hands.find(h => h.visible);
-  if (lead) renderReadout(lead.joints.map(j => j.position), 'live', now);
+  showHint(n === 0 && now - Math.max(hands[0].lastSeen, hands[1].lastSeen) > 900,
+    '손바닥을 카메라에 보여주세요', '30–60cm 거리, 밝은 곳이 가장 정확합니다');
+  return `손 ${n}/2`;
+}
+
+/* ---------- Face tracking ---------- */
+const _fm = new THREE.Matrix4(), _fp = new THREE.Vector3(), _fq = new THREE.Quaternion(), _fs = new THREE.Vector3();
+function trackFace(now, res){
+  const lm = res.faceLandmarks?.[0];
+  if (!lm || !face){
+    if (face && now - face.lastSeen > 300) face.visible = false;
+    showHint(!face || now - face.lastSeen > 900, '얼굴을 카메라 정면에 맞춰 주세요', '밝은 곳에서 얼굴 전체가 보이게 해 주세요');
+    return '얼굴 없음';
+  }
+  // 머리 회전: 변환 행렬(카메라 좌표) → 거울 모드면 x축 반사
+  _fm.fromArray(res.facialTransformationMatrixes[0].data).decompose(_fp, _fq, _fs);
+  if (mirror){ _fq.y = -_fq.y; _fq.z = -_fq.z; }
+  const sx = mirror ? (0.5 - lm[1].x) : (lm[1].x - 0.5);
+  const target = [sx * areaW * upp * 0.9, (0.5 - lm[1].y) * areaH * upp * 0.9, THREE.MathUtils.clamp((_fp.z + 45) * 0.06, -2.5, 2)];
+  if (!face.pf || now - face.lastSeen > 400){ face.pf = [0,1,2].map(() => new OneEuro()); face.q.copy(_fq); }
+  const { minC, beta } = filterParams();
+  face.group.position.set(...target.map((v, i) => face.pf[i].f(v, now, minC, beta)));
+  if (face.q.dot(_fq) < 0){ _fq.x*=-1; _fq.y*=-1; _fq.z*=-1; _fq.w*=-1; }
+  face.q.slerp(_fq, 0.25 + smooth*0.6);
+  face.group.quaternion.copy(face.q);
+  // 블렌드셰이프: 비반전 영상 기준 Left = 화면 왼쪽 눈 → 거울 모드는 그대로, 아니면 좌우 교체
+  const raw = {}, shapes = {}, a = 0.35 + smooth*0.6;
+  for (const c of res.faceBlendshapes[0].categories){
+    raw[c.categoryName] = c.score;
+    const n = mirror ? c.categoryName
+      : c.categoryName.endsWith('Left') ? c.categoryName.slice(0,-4) + 'Right'
+      : c.categoryName.endsWith('Right') ? c.categoryName.slice(0,-5) + 'Left' : c.categoryName;
+    const prev = face.shapes[n] ?? c.score;
+    shapes[n] = prev + (c.score - prev) * a;
+  }
+  face.shapes = shapes; face.apply(shapes);
+  face.visible = true; face.lastSeen = now;
+  renderReadout(analyzeFace(raw), 'live', now);
+  const w = ov.width, h = ov.height;
+  octx.fillStyle = 'rgba(143,208,224,.9)';
+  for (let i=0;i<lm.length;i+=2) octx.fillRect(lm[i].x*w-1, lm[i].y*h-1, 2, 2);
+  showHint(false);
+  return '얼굴 인식';
+}
+
+function showHint(on, title, sub){
+  const el = $('hint');
+  if (on) el.innerHTML = `${title}<small>${sub}</small>`;
+  el.hidden = !on;
+}
+
+function track(now){
+  const d = det[mode];
+  if (!d){ ensureDetector(); return; }
+  if (video.readyState < 2 || video.currentTime === lastVideoTime) return;
+  lastVideoTime = video.currentTime;
+  const res = d.detectForVideo(video, now);
+  detCount++;
+  octx.clearRect(0,0,ov.width,ov.height);
+  const label = mode === 'hand' ? trackHands(now, res) : trackFace(now, res);
   if (now - fpsT > 1000){ detFps = detCount * 1000 / (now - fpsT); detCount = 0; fpsT = now; }
-  setPill(`손 ${n}/2 · ${detFps.toFixed(0)} fps`, n ? 'live' : '');
+  const live = mode === 'hand' ? hands.some(h => h.visible) : !!face?.visible;
+  setPill(`${label} · ${detFps.toFixed(0)} fps`, live ? 'live' : '');
+}
+
+/* ---------- Mode ---------- */
+function applyModeVisibility(){
+  hands.forEach((h, i) => h.visible = mode === 'hand' && !tracking && i === 0);
+  if (face) face.visible = mode === 'face' && !tracking;
+}
+async function setMode(m){
+  if (m === mode) return;
+  mode = m;
+  [...$('modeRow').children].forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
+  CHIP_LABELS[m].forEach((t, i) => chipEls[i].textContent = t);
+  $('metricLab').textContent = m === 'hand' ? '핀치' : '입 벌림';
+  $('hint').hidden = true; lastUI = 0;
+  octx.clearRect(0,0,ov.width,ov.height);
+  applyModeVisibility();
+  try { if (m === 'face') await ensureFace(); } catch (e) { showErr('얼굴 모델(assets/facecap.glb)을 불러오지 못했습니다.'); }
+  if (mode !== m) return;
+  applyModeVisibility();
+  if (tracking) await ensureDetector();
+  else idlePill();
 }
 
 /* ---------- Loop ---------- */
+let lastSheetTop = -1;
 function loop(now){
   requestAnimationFrame(loop);
   if (document.hidden) return;
-  if (tracking && landmarker) track(now);
-  else {
-    const p = demoPose(now);
-    hands[0].update(p); hands[0].visible = true;
-    renderReadout(p, 'demo', now);
+  if (tracking) track(now);
+  else if (mode === 'hand' && hands[0]){
+    const p = demoHand(now);
+    hands[0].pose(p, false); hands[0].visible = true;
+    renderReadout(analyzeHand(p), 'demo', now);
+  } else if (mode === 'face' && face){
+    const d = demoFace(now);
+    face.group.position.set(0, 0, 0); face.group.quaternion.copy(d.q);
+    face.apply(d.shapes); face.visible = true;
+    renderReadout(analyzeFace(d.shapes), 'demo', now);
   }
-  const top = $('dock').getBoundingClientRect().top;
+  const top = $('sheet').getBoundingClientRect().top;
   if (Math.abs(top - lastSheetTop) > 0.5){ lastSheetTop = top; resize(); }
   controls.update();
   renderer.render(scene, camera);
 }
 
-/* ---------- Controls ---------- */
-$('start').onclick = () => tracking ? stop() : start();
-$('flip').onclick = async () => {
-  facing = facing === 'user' ? 'environment' : 'user';
-  mirror = facing === 'user'; syncMirror();
-  if (tracking){ try { await openCamera(); } catch (e) { showErr('카메라를 전환하지 못했습니다.'); } }
-};
-
 /* ---------- Bottom sheet ---------- */
-const sheet = $('dock'), grab = $('grab');
+const sheet = $('sheet'), grab = $('grab');
 let sheetOpen = false, sheetOff = 0, maxOff = 0;
 const safeB = () => $('safeProbe').offsetHeight;
-function measureSheet(){ maxOff = Math.max(0, sheet.offsetHeight - grab.offsetHeight - safeB()); }
+function measureSheet(){
+  const mr = $('modeRow');
+  maxOff = Math.max(0, sheet.offsetHeight - (mr.offsetTop + mr.offsetHeight + 12) - safeB());
+}
 function setOff(v){ sheetOff = THREE.MathUtils.clamp(v, 0, maxOff); sheet.style.transform = `translateY(${sheetOff}px)`; }
 function snapSheet(open){
   sheetOpen = open; measureSheet();
@@ -555,7 +790,7 @@ function snapSheet(open){
 let drag = null;
 grab.addEventListener('pointerdown', (e) => {
   measureSheet(); grab.setPointerCapture(e.pointerId);
-  drag = { y:e.clientY, off:sheetOff, t:performance.now(), moved:false, ly:e.clientY, lt:performance.now(), v:0 };
+  drag = { y:e.clientY, off:sheetOff, moved:false, ly:e.clientY, lt:performance.now(), v:0 };
   sheet.classList.add('dragging');
 });
 grab.addEventListener('pointermove', (e) => {
@@ -577,17 +812,28 @@ const endDrag = () => {
 grab.addEventListener('pointerup', endDrag);
 grab.addEventListener('pointercancel', endDrag);
 grab.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); snapSheet(!sheetOpen); } });
+
+/* ---------- Controls ---------- */
+$('camBtn').onclick = () => tracking ? stopCam() : startCam();
+$('modeRow').onclick = (e) => { const b = e.target.closest('button'); if (b) setMode(b.dataset.mode); };
+$('tFlip').onclick = async () => {
+  facing = facing === 'user' ? 'environment' : 'user';
+  mirror = facing === 'user'; syncMirror();
+  if (tracking){ try { await openCamera(); } catch { showErr('카메라를 전환하지 못했습니다.'); } }
+};
 $('mats').onclick = (e) => {
   const b = e.target.closest('button'); if (!b) return;
   matKey = b.dataset.m;
   [...$('mats').children].forEach(x => x.setAttribute('aria-pressed', String(x === b)));
   hands.forEach(h => h.setMaterial(MATS[matKey]));
+  if (face) face.setMaterial(matKey);
 };
 $('smooth').oninput = (e) => smooth = +e.target.value;
 function syncMirror(){
   $('tMirror').setAttribute('aria-pressed', String(mirror));
   $('pip').classList.toggle('mirror', mirror);
   hands.forEach(h => h.filters = null);
+  if (face) face.pf = null;
 }
 $('tMirror').onclick = () => { mirror = !mirror; syncMirror(); };
 $('tPip').onclick = () => {
@@ -596,11 +842,19 @@ $('tPip').onclick = () => {
   $('tPip').setAttribute('aria-pressed', String(on));
 };
 $('tReset').onclick = () => { controls.target.set(0,0,0); camera.position.copy(CAM_HOME).setLength(camDist); controls.update(); };
+addEventListener('resize', () => { snapSheet(sheetOpen); resize(); });
 
-sheet.classList.add('dragging'); snapSheet(false); sheet.classList.add('dragging');
+/* ---------- Boot ---------- */
+CHIP_LABELS.hand.forEach((t, i) => chipEls[i].textContent = t);
+sheet.classList.add('dragging'); measureSheet(); setOff(maxOff);
 requestAnimationFrame(() => sheet.classList.remove('dragging'));
 resize();
 requestAnimationFrame(loop);
+loadGLB(HAND_GLB).then(g => {
+  hands.push(new RealHand(g.scene), new RealHand(g.scene));
+  applyModeVisibility();
+  if (!tracking) idlePill();
+}).catch(() => showErr('손 모델(assets/hand-right.glb)을 불러오지 못했습니다.'));
 </script>
 </body>
 </html>

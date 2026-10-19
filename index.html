@@ -96,7 +96,7 @@ button{font:inherit;color:inherit;cursor:pointer}
 .grab span{width:46px;height:5px;border-radius:3px;background:var(--mute);opacity:.85}
 .grab:focus-visible{outline:none}
 .grab:focus-visible span{background:var(--accent)}
-.mode{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;border-radius:14px;background:rgba(0,0,0,.28);border:1px solid var(--line)}
+.mode{display:grid;grid-template-columns:1fr 1fr 1.25fr;gap:4px;padding:4px;border-radius:14px;background:rgba(0,0,0,.28);border:1px solid var(--line)}
 .mode button{min-height:44px;border:0;border-radius:10px;background:transparent;font-size:16px;font-weight:600;color:var(--mute)}
 .mode button[aria-pressed="true"]{background:var(--fg);color:var(--bg)}
 .mode button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
@@ -157,6 +157,7 @@ button{font:inherit;color:inherit;cursor:pointer}
   <div class="mode" id="modeRow" role="group" aria-label="따라 할 대상">
     <button data-mode="hand" aria-pressed="true">손</button>
     <button data-mode="face" aria-pressed="false">얼굴</button>
+    <button data-mode="both" aria-pressed="false">손 + 얼굴</button>
   </div>
   <div class="more" id="more">
     <div class="read">
@@ -428,6 +429,7 @@ class ProcHand {
 }
 
 /* ---------- Face (ARKit blendshapes + head pose) ---------- */
+const FACE_SCALE = 0.74, FACE_M_PER_UNIT = 0.097;   // 얼굴 모델 1단위 ≈ 9.7cm (두 눈 중심 간격 기준)
 class RealFace {
   constructor(gltf){
     this.group = new THREE.Group(); scene.add(this.group);
@@ -449,7 +451,7 @@ class RealFace {
       this.group.add(eye); this.eyes.push(eye);
     });
     [this.head, this.teeth].forEach(m => { if (m){ m.castShadow = true; m.frustumCulled = false; } });
-    this.group.scale.setScalar(0.74);              // 화면에 맞는 크기
+    this.group.scale.setScalar(FACE_SCALE);        // 화면에 맞는 크기
     this.lastSeen = -1e9; this.pf = null; this.q = new THREE.Quaternion();
     this.shapes = {};
     this.setMaterial(matKey);
@@ -595,7 +597,7 @@ function analyzeFace(s){
   else if (g('cheekPuff') > 0.4) name = '볼 부풀림';
   return { name, metric: Math.round(jaw*100) + '%', chips: [Math.max(bl,br) > 0.5, jaw > 0.25, smile > 0.4, lips > 0.4, brow > 0.35] };
 }
-const CHIP_LABELS = { hand:['엄지','검지','중지','약지','소지'], face:['깜빡임','입 벌림','미소','입술','눈썹'] };
+const CHIP_LABELS = { hand:['엄지','검지','중지','약지','소지'], both:['엄지','검지','중지','약지','소지'], face:['깜빡임','입 벌림','미소','입술','눈썹'] };
 const chipEls = [...$('chips').children];
 let lastUI = 0;
 function renderReadout(r, src, t){
@@ -632,11 +634,15 @@ const video = $('video'), ov = $('ov'), octx = ov.getContext('2d');
 const det = { hand:null, face:null };
 let fileset = null, stream = null, tracking = false, facing = 'user', mirror = true;
 let lastVideoTime = -1, detCount = 0, detFps = 0, fpsT = performance.now(), loadingDet = false;
-const tmp = Array.from({length:21}, () => new THREE.Vector3());
+const tmp = Array.from({length:21}, () => new THREE.Vector3()), tmp2 = Array.from({length:21}, () => new THREE.Vector3());
+let lastFaceName = '';
 
 function setPill(text, cls){ $('pillText').textContent = text; $('pill').className = 'pill ' + (cls||''); }
 function showErr(msg){ $('err').textContent = msg; $('err').hidden = !msg; if (msg) snapSheet(true); }
-function idlePill(){ setPill(mode === 'hand' ? '데모 재생 중 · 손' : '데모 재생 중 · 얼굴'); }
+const MODE_NAME = { hand:'손', face:'얼굴', both:'손 + 얼굴' };
+const needs = () => mode === 'both' ? ['hand','face'] : [mode];
+const usesHand = () => mode !== 'face', usesFace = () => mode !== 'hand';
+function idlePill(){ setPill('데모 재생 중 · ' + MODE_NAME[mode]); }
 
 async function getDetector(which){
   if (det[which]) return det[which];
@@ -651,11 +657,17 @@ async function getDetector(which){
   try { det[which] = await make('GPU'); } catch { det[which] = await make('CPU'); }
   return det[which];
 }
+const detReady = () => needs().every(k => det[k]);
 async function ensureDetector(){
-  if (det[mode] || loadingDet) return;
+  if (detReady() || loadingDet) return;
   loadingDet = true;
-  setPill(mode === 'hand' ? '손 인식 모델 불러오는 중…' : '얼굴 인식 모델 불러오는 중…', 'busy');
-  try { await getDetector(mode); } catch (e) { showErr('인식 모델을 불러오지 못했습니다. 인터넷 연결을 확인하세요.'); }
+  try {
+    for (const k of needs()){
+      if (det[k]) continue;
+      setPill(k === 'hand' ? '손 인식 모델 불러오는 중…' : '얼굴 인식 모델 불러오는 중…', 'busy');
+      await getDetector(k);
+    }
+  } catch (e) { showErr('인식 모델을 불러오지 못했습니다. 인터넷 연결을 확인하세요.'); }
   loadingDet = false; lastVideoTime = -1;
 }
 async function ensureFace(){
@@ -682,7 +694,7 @@ async function startCam(){
   const btn = $('camBtn'); btn.disabled = true; btn.textContent = '연결 중…';
   try {
     await ensureDetector();
-    if (!det[mode]) throw new Error('model');
+    if (!detReady()) throw new Error('model');
     setPill('카메라 연결 중…', 'busy');
     await openCamera();
     tracking = true; lastVideoTime = -1;
@@ -707,9 +719,33 @@ function stopCam(){
   applyModeVisibility(); idlePill();
 }
 
+/* ---------- 손 + 얼굴: 카메라 화면 구도를 그대로 옮기는 공통 좌표 ---------- */
+// 영상 픽셀 → 월드 단위를 가로세로 같은 비율로 (영상 전체가 남은 화면에 들어가게)
+let bothM2W = 4;                                   // 1m 가 월드에서 몇 단위인지 (얼굴/손 크기에서 추정)
+const camK = () => Math.min(areaW*upp / video.videoWidth, areaH*upp / video.videoHeight) * 0.95;
+function camToWorld(nx, ny, out){
+  const k = camK(), VW = video.videoWidth, VH = video.videoHeight;
+  return out.set((mirror ? -1 : 1) * (nx - 0.5) * VW * k, -(ny - 0.5) * VH * k, 0);
+}
+function updateScale(pxDist, meters, w){
+  if (!(pxDist > 2)) return;
+  const v = pxDist / meters * camK();
+  bothM2W += (v - bothM2W) * w;
+}
+const _cw = new THREE.Vector3();
+
 /* ---------- Hand tracking ---------- */
 function handToScene(lm, wl, out){
   const vw = video.videoWidth, vh = video.videoHeight;
+  if (mode === 'both'){
+    // 얼굴이 안 보일 때는 손 크기(손목~중지 뿌리)로 축척 추정
+    if (!face?.visible) updateScale(Math.hypot((lm[0].x-lm[9].x)*vw, (lm[0].y-lm[9].y)*vh), Math.hypot(wl[0].x-wl[9].x, wl[0].y-wl[9].y, wl[0].z-wl[9].z), 0.1);
+    camToWorld(lm[9].x, lm[9].y, _cw);
+    const R = bothM2W, mx = mirror ? -1 : 1;
+    for (let i=0;i<21;i++)
+      out[i].set(mx*(wl[i].x - wl[9].x)*R + _cw.x, -(wl[i].y - wl[9].y)*R + _cw.y, -(wl[i].z - wl[9].z)*R*Z_GAIN + 0.35);
+    return out;
+  }
   const sx = mirror ? (0.5 - lm[9].x) : (lm[9].x - 0.5);
   const tx = sx * areaW * upp * 0.95, ty = (0.5 - lm[9].y) * areaH * upp * 0.95;
   const span = Math.hypot((lm[0].x-lm[9].x)*vw, (lm[0].y-lm[9].y)*vh) / Math.min(vw, vh);
@@ -744,14 +780,21 @@ function trackHands(now, res){
     const { minC, beta } = filterParams();
     for (let j=0;j<21;j++)
       pts[j].set(h.filters[j*3].f(pts[j].x, now, minC, beta), h.filters[j*3+1].f(pts[j].y, now, minC, beta), h.filters[j*3+2].f(pts[j].z, now, minC, beta));
-    h.pose(pts, h.chirality(pts, mirror ? !realRight : realRight));
+    const g = mode === 'both' ? bothM2W / S : 1;     // 손 + 얼굴 모드: 손도 카메라 축척에 맞춰 크기 조절
+    h.group.scale.setScalar(g); h.group.position.set(0, 0, 0);
+    const local = g === 1 ? pts : pts.map((v, j) => tmp2[j].copy(v).divideScalar(g));
+    h.pose(local, h.chirality(local, mirror ? !realRight : realRight));
     h.visible = true; h.lastSeen = now;
-    if (i === 0) renderReadout(analyzeHand(pts), 'live', now);
+    if (i === 0){
+      const r = analyzeHand(pts);
+      if (mode === 'both' && face?.visible) r.name = `${r.name} · ${lastFaceName}`;
+      renderReadout(r, 'live', now);
+    }
   });
   hands.forEach(h => { if (now - h.lastSeen > 250) h.visible = false; });
   drawHands(res.landmarks || []);
   const n = hands.filter(h => h.visible).length;
-  showHint(n === 0 && now - Math.max(hands[0].lastSeen, hands[1].lastSeen) > 900,
+  if (mode !== 'both') showHint(n === 0 && now - Math.max(hands[0].lastSeen, hands[1].lastSeen) > 900,
     '손바닥을 카메라에 보여주세요', '30–60cm 거리, 밝은 곳이 가장 정확합니다');
   return `손 ${n}/2`;
 }
@@ -820,7 +863,7 @@ function trackFace(now, res){
   const lm = res.faceLandmarks?.[0];
   if (!lm || !face){
     if (face && now - face.lastSeen > 300) face.visible = false;
-    showHint(!face || now - face.lastSeen > 900, '얼굴을 카메라 정면에 맞춰 주세요', '밝은 곳에서 얼굴 전체가 보이게 해 주세요');
+    if (mode !== 'both') showHint(!face || now - face.lastSeen > 900, '얼굴을 카메라 정면에 맞춰 주세요', '밝은 곳에서 얼굴 전체가 보이게 해 주세요');
     return '얼굴 없음';
   }
   // 머리 회전: 랜드마크 기반 → 거울 모드면 좌우 반사
@@ -828,7 +871,18 @@ function trackFace(now, res){
   if (mirror){ _fq.y = -_fq.y; _fq.z = -_fq.z; }
   const sx = mirror ? (0.5 - lm[1].x) : (lm[1].x - 0.5);
   const span = dist2(lmP(lm, 33), lmP(lm, 263)) / Math.min(video.videoWidth, video.videoHeight);
-  const target = [sx * areaW * upp * 0.9, (0.5 - lm[1].y) * areaH * upp * 0.9, THREE.MathUtils.clamp(Math.log(Math.max(span, 1e-3)/0.2) * 1.4, -2, 1.2)];
+  let target;
+  if (mode === 'both'){
+    // 두 눈동자 중심 거리(평균 63mm)로 카메라 축척을 잡고, 얼굴 크기도 그 축척에 맞춤
+    const eR = lmP(lm, 33), eR2 = lmP(lm, 133), eL = lmP(lm, 263), eL2 = lmP(lm, 362);
+    updateScale(Math.hypot((eR.x+eR2.x-eL.x-eL2.x)/2, (eR.y+eR2.y-eL.y-eL2.y)/2), 0.063, face.visible ? 0.15 : 1);
+    camToWorld(lm[1].x, lm[1].y, _cw);
+    target = [_cw.x, _cw.y, -0.3];
+    face.group.scale.setScalar(bothM2W * FACE_M_PER_UNIT);
+  } else {
+    target = [sx * areaW * upp * 0.9, (0.5 - lm[1].y) * areaH * upp * 0.9, THREE.MathUtils.clamp(Math.log(Math.max(span, 1e-3)/0.2) * 1.4, -2, 1.2)];
+    face.group.scale.setScalar(FACE_SCALE);
+  }
   if (!face.pf || now - face.lastSeen > 400){ face.pf = [0,1,2].map(() => new OneEuro()); face.q.copy(_fq); }
   const { minC, beta } = filterParams();
   face.group.position.set(...target.map((v, i) => face.pf[i].f(v, now, minC, beta)));
@@ -862,11 +916,12 @@ function trackFace(now, res){
   }
   face.shapes = shapes; face.apply(shapes);
   face.visible = true; face.lastSeen = now;
-  renderReadout(analyzeFace(raw), 'live', now);
+  const fr = analyzeFace(raw); lastFaceName = fr.name;
+  if (mode !== 'both') renderReadout(fr, 'live', now);
   const w = ov.width, h = ov.height;
   octx.fillStyle = 'rgba(143,208,224,.9)';
   for (let i=0;i<lm.length;i+=2) octx.fillRect(lm[i].x*w-1, lm[i].y*h-1, 2, 2);
-  showHint(false);
+  if (mode !== 'both') showHint(false);
   return '얼굴 인식';
 }
 
@@ -877,34 +932,41 @@ function showHint(on, title, sub){
 }
 
 function track(now){
-  const d = det[mode];
-  if (!d){ ensureDetector(); return; }
+  if (!detReady() || (usesFace() && !face)){ ensureDetector(); if (usesFace()) ensureFace().catch(() => {}); return; }
   if (video.readyState < 2 || video.currentTime === lastVideoTime) return;
   lastVideoTime = video.currentTime;
-  const res = d.detectForVideo(video, now);
-  detCount++;
   octx.clearRect(0,0,ov.width,ov.height);
-  const label = mode === 'hand' ? trackHands(now, res) : trackFace(now, res);
+  const labels = [];
+  if (usesFace()) labels.push(trackFace(now, det.face.detectForVideo(video, now)));
+  if (usesHand()) labels.push(trackHands(now, det.hand.detectForVideo(video, now)));
+  detCount++;
   if (now - fpsT > 1000){ detFps = detCount * 1000 / (now - fpsT); detCount = 0; fpsT = now; }
-  const live = mode === 'hand' ? hands.some(h => h.visible) : !!face?.visible;
+  const hv = hands.some(h => h.visible), fv = !!face?.visible;
+  if (mode === 'both'){
+    showHint(!hv && !fv && now - Math.max(face?.lastSeen ?? 0, hands[0].lastSeen, hands[1].lastSeen) > 900,
+      '얼굴과 손을 함께 카메라에 보여주세요', '팔을 조금 뻗어 얼굴과 손이 모두 화면에 들어오게 해 주세요');
+    if (!fv && hv) lastFaceName = '';
+  }
+  const label = labels.join(' · ');
+  const live = mode === 'hand' ? hv : mode === 'face' ? fv : (hv || fv);
   setPill(`${label} · ${detFps.toFixed(0)} fps`, live ? 'live' : '');
 }
 
 /* ---------- Mode ---------- */
 function applyModeVisibility(){
-  hands.forEach((h, i) => h.visible = mode === 'hand' && !tracking && i === 0);
-  if (face) face.visible = mode === 'face' && !tracking;
+  hands.forEach((h, i) => h.visible = usesHand() && !tracking && i === 0);
+  if (face) face.visible = usesFace() && !tracking;
 }
 async function setMode(m){
   if (m === mode) return;
   mode = m;
   [...$('modeRow').children].forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
   CHIP_LABELS[m].forEach((t, i) => chipEls[i].textContent = t);
-  $('metricLab').textContent = m === 'hand' ? '핀치' : '입 벌림';
+  $('metricLab').textContent = m === 'face' ? '입 벌림' : '핀치';
   $('hint').hidden = true; lastUI = 0;
   octx.clearRect(0,0,ov.width,ov.height);
   applyModeVisibility();
-  try { if (m === 'face') await ensureFace(); } catch (e) { showErr('얼굴 모델(assets/facecap.glb)을 불러오지 못했습니다.'); }
+  try { if (m !== 'hand') await ensureFace(); } catch (e) { showErr('얼굴 모델(assets/facecap.glb)을 불러오지 못했습니다.'); }
   if (mode !== m) return;
   applyModeVisibility();
   if (tracking) await ensureDetector();
@@ -917,15 +979,24 @@ function loop(now){
   requestAnimationFrame(loop);
   if (document.hidden) return;
   if (tracking) track(now);
-  else if (mode === 'hand' && hands[0]){
-    const p = demoHand(now);
-    hands[0].pose(p, false); hands[0].visible = true;
-    renderReadout(analyzeHand(p), 'demo', now);
-  } else if (mode === 'face' && face){
-    const d = demoFace(now);
-    face.group.position.set(0, 0, 0); face.group.quaternion.copy(d.q);
-    face.apply(d.shapes); face.visible = true;
-    renderReadout(analyzeFace(d.shapes), 'demo', now);
+  else {
+    const both = mode === 'both';
+    if (usesHand() && hands[0]){
+      const p = demoHand(now);
+      hands[0].group.scale.setScalar(both ? 0.5 : 1);
+      hands[0].group.position.set(both ? 0.95 : 0, both ? -0.35 : 0, both ? 0.35 : 0);
+      hands[0].pose(p, false); hands[0].visible = true;
+      if (!both) renderReadout(analyzeHand(p), 'demo', now);
+    }
+    if (usesFace() && face){
+      const d = demoFace(now);
+      face.group.scale.setScalar(both ? 0.5 : FACE_SCALE);
+      face.group.position.set(both ? -0.45 : 0, both ? 0.35 : 0, 0); face.group.quaternion.copy(d.q);
+      face.apply(d.shapes); face.visible = true;
+      const fr = analyzeFace(d.shapes);
+      if (!both) renderReadout(fr, 'demo', now);
+      else if (hands[0]){ const r = analyzeHand(demoPts); r.name = `${r.name} · ${fr.name}`; renderReadout(r, 'demo', now); }
+    }
   }
   const top = $('sheet').getBoundingClientRect().top;
   if (Math.abs(top - lastSheetTop) > 0.5){ lastSheetTop = top; resize(); }

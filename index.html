@@ -218,6 +218,7 @@ const FACE_GLB = 'assets/facecap.glb';      // ARKit 52 blendshape face
 
 const $ = id => document.getElementById(id);
 const S = 11;                                // 미터 → 씬 단위
+const Z_GAIN = 0.55;                         // MediaPipe 손 깊이값은 과장돼 펴진 손이 굽어 보임 → 압축
 const BONES2D = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],
   [9,13],[13,14],[14,15],[15,16],[13,17],[0,17],[17,18],[18,19],[19,20]];
 
@@ -469,7 +470,7 @@ class RealFace {
     const g = n => shapes[n] || 0;
     for (const n in shapes){
       let v = shapes[n];
-      if (n.startsWith('eyeLookDown')) v *= 0.5;           // 폰을 내려다볼 때 눈꺼풀이 과하게 덮이지 않게
+      if (n.startsWith('eyeLookDown')) v *= 0.3;           // 폰을 내려다볼 때 눈꺼풀이 과하게 덮이지 않게
       else if (n.startsWith('eyeLookUp')) v *= 0.5;
       this.setShape(n, v);
     }
@@ -709,10 +710,10 @@ function handToScene(lm, wl, out){
   const sx = mirror ? (0.5 - lm[9].x) : (lm[9].x - 0.5);
   const tx = sx * areaW * upp * 0.95, ty = (0.5 - lm[9].y) * areaH * upp * 0.95;
   const span = Math.hypot((lm[0].x-lm[9].x)*vw, (lm[0].y-lm[9].y)*vh) / Math.min(vw, vh);
-  const tz = THREE.MathUtils.clamp(Math.log(Math.max(span,1e-3)/0.22) * 3, -3, 2.5);
+  const tz = THREE.MathUtils.clamp(Math.log(Math.max(span,1e-3)/0.22) * 1.4, -2, 1.2);
   const mx = mirror ? -1 : 1;
   for (let i=0;i<21;i++)
-    out[i].set(mx*(wl[i].x - wl[9].x)*S + tx, -(wl[i].y - wl[9].y)*S + ty, -(wl[i].z - wl[9].z)*S + tz);
+    out[i].set(mx*(wl[i].x - wl[9].x)*S + tx, -(wl[i].y - wl[9].y)*S + ty, -(wl[i].z - wl[9].z)*S*Z_GAIN + tz);
   return out;
 }
 function drawHands(list){
@@ -758,11 +759,12 @@ const eyeBase = {}; let eyeT = 0;
 function calibrateEyes(raw, now){
   const dt = eyeT ? Math.min(0.2, (now - eyeT)/1000) : 0; eyeT = now;
   for (const sd of ['Left','Right']){
-    const k = 'eyeBlink' + sd, v = raw[k] || 0;
-    eyeBase[k] = Math.min((eyeBase[k] ?? v) + dt*0.02, v);
-    const b = Math.min(eyeBase[k], 0.5) * 0.5;              // 평소 눈 뜬 정도의 절반만 보정 → 실제 눈매 유지
-    raw[k] = THREE.MathUtils.clamp((v - b) / Math.max(0.3, 0.85 - b), 0, 1);
-    const sq = 'eyeSquint' + sd; raw[sq] = (raw[sq] || 0) * 0.7;
+    for (const [k, gain] of [['eyeBlink'+sd, 1], ['eyeSquint'+sd, 0.6]]){
+      const v = raw[k] || 0;
+      eyeBase[k] = Math.min((eyeBase[k] ?? v) + dt*0.015, v);     // 평소(뜬 눈) 점수를 계속 추적
+      const b = Math.min(eyeBase[k], 0.6);
+      raw[k] = THREE.MathUtils.clamp((v - b - 0.05) / Math.max(0.3, 0.9 - b), 0, 1) * gain;
+    }
   }
 }
 // 입술·혀 움직임은 점수가 작게 나오는 편이라 모델에 더 크게 반영

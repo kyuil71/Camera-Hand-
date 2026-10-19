@@ -429,7 +429,7 @@ class ProcHand {
 }
 
 /* ---------- Face (ARKit blendshapes + head pose) ---------- */
-const FACE_SCALE = 0.74, FACE_M_PER_UNIT = 0.097;   // 얼굴 모델 1단위 ≈ 9.7cm (두 눈 중심 간격 기준)
+const FACE_SCALE = 0.74, FACE_M_PER_UNIT = 0.0959;   // 얼굴 모델 1단위 ≈ 9.7cm (두 눈 중심 간격 기준)
 class RealFace {
   constructor(gltf){
     this.group = new THREE.Group(); scene.add(this.group);
@@ -451,6 +451,22 @@ class RealFace {
       this.group.add(eye); this.eyes.push(eye);
     });
     [this.head, this.teeth].forEach(m => { if (m){ m.castShadow = true; m.frustumCulled = false; } });
+    // 코끝(얼굴 로컬) — 손+얼굴 모드에서 영상의 코끝 위치에 정확히 맞추는 기준점
+    this.group.updateMatrixWorld(true);
+    const pa = this.head.geometry.attributes.position, v = new THREE.Vector3();
+    this.noseLocal = new THREE.Vector3(0, 0, -Infinity);
+    for (let i=0;i<pa.count;i++){ v.fromBufferAttribute(pa, i).applyMatrix4(this.head.matrixWorld); if (Math.abs(v.x) < 0.08 && v.z > this.noseLocal.z) this.noseLocal.copy(v); }
+    // 얼굴 앞면 깊이 지도 (충돌 방지용)
+    const box = new THREE.Box3().setFromObject(this.head), nx = 40, ny = 48;
+    const D = { x0: box.min.x, y0: box.min.y, dx: (box.max.x-box.min.x)/nx, dy: (box.max.y-box.min.y)/ny, nx, ny, z: new Float32Array(nx*ny).fill(-Infinity) };
+    const rc = new THREE.Raycaster(), o = new THREE.Vector3(), dir = new THREE.Vector3(0,0,-1);
+    for (let j=0;j<ny;j++) for (let i=0;i<nx;i++){
+      o.set(D.x0 + (i+0.5)*D.dx, D.y0 + (j+0.5)*D.dy, box.max.z + 1);
+      rc.set(o, dir);
+      const hit = rc.intersectObject(this.head, false)[0];
+      if (hit) D.z[j*nx+i] = hit.point.z;
+    }
+    this.depth = D;
     this.group.scale.setScalar(FACE_SCALE);        // 화면에 맞는 크기
     this.lastSeen = -1e9; this.pf = null; this.q = new THREE.Quaternion();
     this.shapes = {};
@@ -609,7 +625,8 @@ function renderReadout(r, src, t){
 }
 
 /* ---------- Layout: keep the subject centered above the sheet ---------- */
-let upp = 0.01, areaW = 1, areaH = 1, camDist = 7;
+let upp = 0.01, areaW = 1, areaH = 1, camDist = 7, viewHf = 1, viewTan = 1, viewW = 1, viewH = 1;
+const refCam = new THREE.PerspectiveCamera(40, 1, 0.1, 100);   // 재구성용 기준 시점 (사용자가 시점을 돌려도 고정)
 function resize(){
   const W = innerWidth, H = innerHeight;
   const dockH = Math.max(0, H - $('sheet').getBoundingClientRect().top) + 10;
@@ -624,6 +641,10 @@ function resize(){
   camera.position.sub(controls.target).setLength(camDist).add(controls.target);
   controls.maxDistance = Math.max(14, camDist + 6);
   upp = tanH * camDist / Hf;
+  viewHf = Hf; viewTan = tanH; viewW = W; viewH = H;
+  refCam.fov = camera.fov; refCam.aspect = W / Hf; refCam.setViewOffset(W, Hf, 0, dockH, W, H);
+  refCam.position.copy(CAM_HOME).setLength(camDist); refCam.lookAt(0, 0, 0);
+  refCam.updateProjectionMatrix(); refCam.updateMatrixWorld();
   ground.position.y = -(areaH/2)*upp - 0.5;
 }
 
@@ -719,31 +740,90 @@ function stopCam(){
   applyModeVisibility(); idlePill();
 }
 
-/* ---------- 손 + 얼굴: 카메라 화면 구도를 그대로 옮기는 공통 좌표 ---------- */
-// 영상 픽셀 → 월드 단위를 가로세로 같은 비율로 (영상 전체가 남은 화면에 들어가게)
-let bothM2W = 4;                                   // 1m 가 월드에서 몇 단위인지 (얼굴/손 크기에서 추정)
-const camK = () => Math.min(areaW*upp / video.videoWidth, areaH*upp / video.videoHeight) * 0.95;
-function camToWorld(nx, ny, out){
-  const k = camK(), VW = video.videoWidth, VH = video.videoHeight;
-  return out.set((mirror ? -1 : 1) * (nx - 0.5) * VW * k, -(ny - 0.5) * VH * k, 0);
+/* ---------- 손 + 얼굴: 카메라 사진을 원근까지 맞춰 3D로 재구성 ---------- */
+// 1) 영상 속 위치 → 화면 위치 → 기준 카메라에서 그 화면점을 지나는 광선 위의 한 점
+// 2) 크기: 얼굴은 두 눈동자 거리(63mm), 손은 각 마디 길이(MediaPipe 실측 m)와 영상 속 픽셀 길이 비율로
+// 3) 깊이: 영상에서 더 크게 보이는 쪽이 카메라에 더 가까움 → 얼굴 거리 × (얼굴 px/m ÷ 손 px/m)
+// 4) 손이 얼굴 표면 안으로 들어가면, 화면 위치가 변하지 않게 시선 방향으로 앞으로 당김
+const vidK = () => Math.min(areaW / video.videoWidth, areaH / video.videoHeight) * 0.95;   // 화면 px / 영상 px
+function vidToScreen(nx, ny){
+  const k = vidK(), VW = video.videoWidth, VH = video.videoHeight;
+  return { x: areaW/2 + (mirror ? 0.5 - nx : nx - 0.5) * VW * k, y: areaH/2 + (ny - 0.5) * VH * k };
 }
-function updateScale(pxDist, meters, w){
-  if (!(pxDist > 2)) return;
-  const v = pxDist / meters * camK();
-  bothM2W += (v - bothM2W) * w;
+const _rv = new THREE.Vector3(), _fwd = new THREE.Vector3();
+function rayPoint(sp, dist, out){
+  _rv.set(sp.x / viewW * 2 - 1, -(sp.y / viewH * 2 - 1), 0.5).unproject(refCam).sub(refCam.position).normalize();
+  refCam.getWorldDirection(_fwd);
+  return out.copy(refCam.position).addScaledVector(_rv, dist / _rv.dot(_fwd));
 }
+const worldPerPx = dist => viewTan * dist / viewHf;            // 그 거리에서 화면 1px = 월드 몇 단위
+let faceDist = 7, facePPM = 0, faceSeenAt = -1e9;               // 얼굴까지 거리, 얼굴의 화면 px/m
 const _cw = new THREE.Vector3();
+/* ---------- 손 ↔ 얼굴 충돌 방지 ---------- */
+// 얼굴 앞면 깊이 지도(얼굴 로컬 좌표, 정면에서 본 표면 z)를 한 번 만들어 두고,
+// 손 관절·마디 중간점이 그 표면 + 손가락 두께보다 뒤에 있으면 손 전체를 카메라 쪽으로 당김.
+// 당길 때는 카메라 중심 기준으로 위치와 크기를 같이 줄여서 화면에 보이는 모습(사진과 같은 구도)은 그대로 유지.
+const _inv = new THREE.Matrix4(), _lp = new THREE.Vector3(), _mid = new THREE.Vector3();
+function faceSurfaceZ(x, y){
+  const D = face.depth; if (!D) return -Infinity;
+  const fx = (x - D.x0) / D.dx, fy = (y - D.y0) / D.dy;
+  const i = Math.floor(fx), j = Math.floor(fy);
+  let z = -Infinity;
+  for (let a = i-1; a <= i+2; a++) for (let b = j-1; b <= j+2; b++){
+    if (a < 0 || b < 0 || a >= D.nx || b >= D.ny) continue;
+    z = Math.max(z, D.z[b*D.nx + a]);
+  }
+  return z;
+}
+function penetration(pts, g){
+  face.group.updateMatrixWorld(true);
+  _inv.copy(face.group.matrixWorld).invert();
+  const fs = face.group.scale.x;
+  let worst = 0;
+  const test = (v, r) => {
+    _lp.copy(v).applyMatrix4(_inv);
+    const zs = faceSurfaceZ(_lp.x, _lp.y);
+    if (zs === -Infinity) return;
+    const need = zs + (r * g) / fs + 0.04 - _lp.z;     // 얼굴 로컬 단위
+    if (need > worst) worst = need;
+  };
+  for (let i=0;i<21;i++) test(pts[i], RADII[i] || RADII[1]);
+  for (const [a,b] of BONES2D){ _mid.addVectors(pts[a], pts[b]).multiplyScalar(0.5); test(_mid, Math.max(RADII[a] || RADII[1], RADII[b])); }
+  return worst * fs;                                     // 대략적인 월드 거리
+}
+function keepOutOfFace(pts, g){
+  let f = 1;
+  const c = refCam.position;
+  for (let it = 0; it < 4; it++){
+    const pen = penetration(pts, g * f);
+    if (pen <= 0) break;
+    let d = 0; for (let i=0;i<21;i++) d += pts[i].distanceTo(c); d /= 21;
+    const k = Math.max(0.3, (d - pen * 1.15) / d);       // 카메라 쪽으로 pen 만큼 + 여유
+    for (let i=0;i<21;i++) pts[i].sub(c).multiplyScalar(k).add(c);
+    f *= k;
+  }
+  return f;
+}
 
 /* ---------- Hand tracking ---------- */
 function handToScene(lm, wl, out){
   const vw = video.videoWidth, vh = video.videoHeight;
   if (mode === 'both'){
-    // 얼굴이 안 보일 때는 손 크기(손목~중지 뿌리)로 축척 추정
-    if (!face?.visible) updateScale(Math.hypot((lm[0].x-lm[9].x)*vw, (lm[0].y-lm[9].y)*vh), Math.hypot(wl[0].x-wl[9].x, wl[0].y-wl[9].y, wl[0].z-wl[9].z), 0.1);
-    camToWorld(lm[9].x, lm[9].y, _cw);
-    const R = bothM2W, mx = mirror ? -1 : 1;
+    // 손의 화면 px/m: 손목·각 마디의 영상 속 길이 ÷ 실제(m) 화면 평면 길이
+    let pxSum = 0, mSum = 0;
+    for (const [a,b] of BONES2D){
+      pxSum += Math.hypot((lm[a].x-lm[b].x)*vw, (lm[a].y-lm[b].y)*vh);
+      mSum += Math.hypot(wl[a].x-wl[b].x, wl[a].y-wl[b].y);
+    }
+    const ppm = mSum > 1e-4 ? pxSum / mSum * vidK() : 1;
+    const faceOK = performance.now() - faceSeenAt < 1500 && facePPM > 0;
+    const dist = THREE.MathUtils.clamp(faceDist * (faceOK ? facePPM / ppm : 0.75), faceDist*0.35, faceDist*1.2);
+    const wpm = ppm * worldPerPx(dist);                       // 이 손에서 1m = 월드 몇 단위
+    rayPoint(vidToScreen(lm[9].x, lm[9].y), dist, _cw);
+    const mx = mirror ? -1 : 1;
     for (let i=0;i<21;i++)
-      out[i].set(mx*(wl[i].x - wl[9].x)*R + _cw.x, -(wl[i].y - wl[9].y)*R + _cw.y, -(wl[i].z - wl[9].z)*R*Z_GAIN + 0.35);
+      out[i].set(mx*(wl[i].x - wl[9].x)*wpm + _cw.x, -(wl[i].y - wl[9].y)*wpm + _cw.y, -(wl[i].z - wl[9].z)*wpm*Z_GAIN + _cw.z);
+    out.wpm = wpm;
     return out;
   }
   const sx = mirror ? (0.5 - lm[9].x) : (lm[9].x - 0.5);
@@ -776,11 +856,16 @@ function trackHands(now, res){
     used[slot] = true;
     const h = hands[slot];
     const pts = handToScene(lm, res.worldLandmarks[i], tmp);
-    if (!h.filters || now - h.lastSeen > 350){ h.filters = Array.from({length:63}, () => new OneEuro()); h.chir = null; }
+    if (!h.filters || now - h.lastSeen > 350){ h.filters = Array.from({length:63}, () => new OneEuro()); h.chir = null; h.g = 0; }
     const { minC, beta } = filterParams();
     for (let j=0;j<21;j++)
       pts[j].set(h.filters[j*3].f(pts[j].x, now, minC, beta), h.filters[j*3+1].f(pts[j].y, now, minC, beta), h.filters[j*3+2].f(pts[j].z, now, minC, beta));
-    const g = mode === 'both' ? bothM2W / S : 1;     // 손 + 얼굴 모드: 손도 카메라 축척에 맞춰 크기 조절
+    let g = 1;
+    if (mode === 'both'){
+      h.g = h.g ? h.g + (pts.wpm / S - h.g) * 0.3 : pts.wpm / S;
+      g = h.g;
+      if (face?.visible) g *= keepOutOfFace(pts, g);     // 얼굴 속으로 들어가지 않게
+    }
     h.group.scale.setScalar(g); h.group.position.set(0, 0, 0);
     const local = g === 1 ? pts : pts.map((v, j) => tmp2[j].copy(v).divideScalar(g));
     h.pose(local, h.chirality(local, mirror ? !realRight : realRight));
@@ -871,14 +956,17 @@ function trackFace(now, res){
   if (mirror){ _fq.y = -_fq.y; _fq.z = -_fq.z; }
   const sx = mirror ? (0.5 - lm[1].x) : (lm[1].x - 0.5);
   const span = dist2(lmP(lm, 33), lmP(lm, 263)) / Math.min(video.videoWidth, video.videoHeight);
-  let target;
-  if (mode === 'both'){
-    // 두 눈동자 중심 거리(평균 63mm)로 카메라 축척을 잡고, 얼굴 크기도 그 축척에 맞춤
+  let target, both = mode === 'both';
+  if (both){
+    // 두 눈동자 중심 거리(평균 63mm)로 얼굴의 화면 px/m → 얼굴 크기. 코끝을 영상의 코끝 위치에 고정
     const eR = lmP(lm, 33), eR2 = lmP(lm, 133), eL = lmP(lm, 263), eL2 = lmP(lm, 362);
-    updateScale(Math.hypot((eR.x+eR2.x-eL.x-eL2.x)/2, (eR.y+eR2.y-eL.y-eL2.y)/2), 0.063, face.visible ? 0.15 : 1);
-    camToWorld(lm[1].x, lm[1].y, _cw);
-    target = [_cw.x, _cw.y, -0.3];
-    face.group.scale.setScalar(bothM2W * FACE_M_PER_UNIT);
+    const ipd = Math.hypot((eR.x+eR2.x-eL.x-eL2.x)/2, (eR.y+eR2.y-eL.y-eL2.y)/2);
+    const ppm = ipd / 0.063 * vidK();
+    facePPM = facePPM ? facePPM + (ppm - facePPM) * 0.3 : ppm; faceSeenAt = performance.now();
+    faceDist = camDist;
+    rayPoint(vidToScreen(lm[1].x, lm[1].y), faceDist, _cw);
+    target = [_cw.x, _cw.y, _cw.z];
+    face.group.scale.setScalar(facePPM * worldPerPx(faceDist) * FACE_M_PER_UNIT);
   } else {
     target = [sx * areaW * upp * 0.9, (0.5 - lm[1].y) * areaH * upp * 0.9, THREE.MathUtils.clamp(Math.log(Math.max(span, 1e-3)/0.2) * 1.4, -2, 1.2)];
     face.group.scale.setScalar(FACE_SCALE);
@@ -889,6 +977,10 @@ function trackFace(now, res){
   if (face.q.dot(_fq) < 0){ _fq.x*=-1; _fq.y*=-1; _fq.z*=-1; _fq.w*=-1; }
   face.q.slerp(_fq, 0.25 + smooth*0.6);
   face.group.quaternion.copy(face.q);
+  if (both){   // 그룹 원점이 아니라 '코끝'이 목표 위치에 오도록
+    _cw.copy(face.noseLocal).multiplyScalar(face.group.scale.x).applyQuaternion(face.q);
+    face.group.position.sub(_cw);
+  }
 
   // 블렌드셰이프 → '피사체 기준' 이름으로 정리 (Left = 사용자 본인의 왼쪽)
   const swapLR = n => n.endsWith('Left') ? n.slice(0,-4) + 'Right' : n.endsWith('Right') ? n.slice(0,-5) + 'Left' : n;

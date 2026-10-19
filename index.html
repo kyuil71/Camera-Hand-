@@ -1,0 +1,553 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>핸드 미러 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans+KR:wght@400;600&display=swap">
+<style>
+/* Layout: full-bleed 3D studio, camera PiP top-right, compact bottom dock (max 430px) */
+:root{
+  --bg:#0f1114; --bg2:#1d2228; --panel:rgba(20,23,28,.86); --line:#2d343c;
+  --fg:#e8ebee; --mute:#8d96a0; --accent:#8fd0e0; --accent-ink:#0c2228; --warn:#f0b46a;
+  --sans:"IBM Plex Sans KR",system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  background:radial-gradient(120% 80% at 50% 30%,var(--bg2) 0%,var(--bg) 70%) var(--bg);
+  color:var(--fg);font:16px/1.45 var(--sans);overflow:hidden;
+  -webkit-tap-highlight-color:transparent;
+}
+#gl{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+
+.top{
+  position:fixed;left:0;top:0;right:0;pointer-events:none;
+  padding-top:calc(12px + env(safe-area-inset-top,0px));
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+  display:flex;justify-content:space-between;align-items:flex-start;gap:12px;
+}
+.brand{display:flex;flex-direction:column;gap:6px;min-width:0}
+.brand h1{margin:0;font-size:18px;font-weight:600;letter-spacing:.01em}
+.brand h1 span{color:var(--accent)}
+.pill{
+  align-self:flex-start;font:500 13px/1 var(--mono);letter-spacing:.04em;
+  padding:7px 10px;border-radius:99px;background:var(--panel);border:1px solid var(--line);color:var(--mute);
+  display:flex;gap:8px;align-items:center;font-variant-numeric:tabular-nums;
+}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--mute)}
+.pill.live .dot{background:var(--accent);box-shadow:0 0 0 3px rgba(143,208,224,.2)}
+.pill.busy .dot{background:var(--warn)}
+
+.pip{
+  position:relative;width:118px;flex:none;border-radius:12px;overflow:hidden;
+  border:1px solid var(--line);background:#000;aspect-ratio:3/4;pointer-events:auto;
+}
+.pip video,.pip canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:fill}
+.pip.mirror video,.pip.mirror canvas{transform:scaleX(-1)}
+.pip .ph{position:absolute;inset:0;display:grid;place-items:center;text-align:center;
+  font-size:13px;color:var(--mute);padding:8px;line-height:1.35}
+
+.hint{
+  position:fixed;left:50%;top:42%;transform:translate(-50%,-50%);
+  background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  padding:12px 16px;font-size:16px;text-align:center;max-width:min(320px,calc(100% - 32px));
+  pointer-events:none;
+}
+
+.dock{
+  position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;
+  padding-bottom:calc(12px + env(safe-area-inset-bottom,0px));
+  padding-left:max(12px,env(safe-area-inset-left,0px));
+  padding-right:max(12px,env(safe-area-inset-right,0px));
+  pointer-events:none;
+}
+.dock-in{
+  width:100%;max-width:430px;pointer-events:auto;
+  background:var(--panel);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  border:1px solid var(--line);border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:12px;
+}
+.read{display:flex;flex-direction:column;gap:8px}
+.read-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.gesture{font-size:20px;font-weight:600}
+.gesture small{font:500 12px var(--mono);color:var(--mute);margin-left:6px;letter-spacing:.06em;text-transform:uppercase}
+.metric{font:500 14px var(--mono);color:var(--mute);font-variant-numeric:tabular-nums;white-space:nowrap}
+.metric b{color:var(--fg);font-weight:500}
+.fingers{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.fg{
+  text-align:center;font-size:14px;padding:7px 0;border-radius:9px;
+  border:1px solid var(--line);color:var(--mute);transition:background .12s,color .12s;
+}
+.fg.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+
+.row{display:flex;gap:8px}
+button{font:inherit;color:inherit;cursor:pointer}
+.btn{
+  flex:1;min-height:48px;border-radius:12px;border:1px solid var(--line);
+  background:transparent;font-size:16px;font-weight:600;
+}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.icon{flex:none;width:56px;font-size:15px}
+.btn:focus-visible,.seg button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn[aria-expanded="true"]{background:var(--bg2)}
+
+.settings{display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--line);padding-top:12px}
+.lab{font:500 12px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--mute);margin-bottom:6px}
+.seg{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.seg button{min-height:42px;border-radius:10px;border:1px solid var(--line);background:transparent;font-size:15px}
+.seg button[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg);font-weight:600}
+.slide{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--mute)}
+.slide input{flex:1;accent-color:var(--accent);height:28px}
+.toggles{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+.toggles button{min-height:42px;border-radius:10px;border:1px solid var(--line);background:transparent;font-size:15px}
+.toggles button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
+.err{color:var(--warn);font-size:15px}
+@media (prefers-reduced-motion:reduce){.fg{transition:none}}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+
+<header class="top">
+  <div class="brand">
+    <h1>핸드 미러 <span>3D</span></h1>
+    <div class="pill" id="pill"><span class="dot"></span><span id="pillText">데모 재생 중</span></div>
+  </div>
+  <div class="pip mirror" id="pip">
+    <video id="video" playsinline muted></video>
+    <canvas id="ov"></canvas>
+    <div class="ph" id="pipPh">카메라<br>대기</div>
+  </div>
+</header>
+
+<div class="hint" id="hint" hidden>손바닥을 카메라에 보여주세요<br><span style="color:var(--mute);font-size:14px">30–60cm 거리, 밝은 곳이 가장 정확합니다</span></div>
+
+<div class="dock"><div class="dock-in" id="dock">
+  <div class="read">
+    <div class="read-h">
+      <div class="gesture" id="gesture">펼친 손<small id="src">demo</small></div>
+      <div class="metric">핀치 <b id="pinch">—</b></div>
+    </div>
+    <div class="fingers" id="fingers">
+      <div class="fg">엄지</div><div class="fg">검지</div><div class="fg">중지</div><div class="fg">약지</div><div class="fg">소지</div>
+    </div>
+  </div>
+  <div class="err" id="err" hidden></div>
+  <div class="row">
+    <button class="btn primary" id="start">카메라 시작</button>
+    <button class="btn icon" id="flip" title="전면/후면 카메라 전환" aria-label="카메라 전환">전환</button>
+    <button class="btn icon" id="more" aria-expanded="false" aria-controls="settings">설정</button>
+  </div>
+  <div class="settings" id="settings" hidden>
+    <div>
+      <div class="lab">손 소재</div>
+      <div class="seg" id="mats">
+        <button data-m="clay" aria-pressed="true">클레이</button>
+        <button data-m="chrome" aria-pressed="false">크롬</button>
+        <button data-m="glass" aria-pressed="false">유리</button>
+        <button data-m="wire" aria-pressed="false">골격</button>
+      </div>
+    </div>
+    <div>
+      <div class="lab">떨림 보정</div>
+      <label class="slide">안정<input id="smooth" type="range" min="0" max="1" step="0.01" value="0.35">반응</label>
+    </div>
+    <div class="toggles">
+      <button id="tMirror" aria-pressed="true">거울 모드</button>
+      <button id="tPip" aria-pressed="true">미리보기</button>
+      <button id="tReset">시점 초기화</button>
+    </div>
+  </div>
+</div></div>
+
+<script type="importmap">
+{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const MP_VER = '0.10.14';
+const MP_URL = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VER}`;
+const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+
+const $ = id => document.getElementById(id);
+const S = 11;                       // 미터 → 씬 단위 (손 ~18cm ≈ 2 units)
+const BONES = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],
+  [9,13],[13,14],[14,15],[15,16],[13,17],[0,17],[17,18],[18,19],[19,20]];
+// 관절 반지름 (mm) — 손목, 엄지, 검지, 중지, 약지, 소지
+const RADII = [16, 13,11,9.5,8, 9.5,8.5,7.5,6.8, 10,9,8,7.2, 9.5,8.5,7.5,6.8, 8.5,7.5,6.6,6].map(v => v/1000*S);
+const PALM_RING = [0,1,5,9,13,17];
+
+/* ---------- Renderer / scene ---------- */
+const canvas = $('gl');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const scene = new THREE.Scene();
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
+
+const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
+const CAM_HOME = new THREE.Vector3(0, 0.4, 7);
+camera.position.copy(CAM_HOME);
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true; controls.enablePan = false;
+controls.minDistance = 3.5; controls.maxDistance = 14;
+
+scene.add(new THREE.HemisphereLight(0xdfe8f0, 0x1a1c20, 0.5));
+const key = new THREE.DirectionalLight(0xffffff, 1.6);
+key.position.set(3, 6, 5); key.castShadow = true;
+key.shadow.mapSize.set(1024, 1024);
+Object.assign(key.shadow.camera, { left:-5, right:5, top:5, bottom:-5, near:1, far:20 });
+key.shadow.bias = -0.0005;
+scene.add(key);
+const rim = new THREE.DirectionalLight(0x9fd8ff, 0.7); rim.position.set(-4, 2, -4); scene.add(rim);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), new THREE.ShadowMaterial({ opacity:0.32 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+/* ---------- Materials (CMF) ---------- */
+const MATS = {
+  clay:   new THREE.MeshStandardMaterial({ color:0xd8cdbf, roughness:0.82, metalness:0, side:THREE.DoubleSide }),
+  chrome: new THREE.MeshStandardMaterial({ color:0xeceef2, roughness:0.12, metalness:1, side:THREE.DoubleSide }),
+  glass:  new THREE.MeshPhysicalMaterial({ color:0xd6ecff, roughness:0.06, metalness:0, transmission:1, thickness:0.6, ior:1.45, side:THREE.DoubleSide }),
+  wire:   new THREE.MeshBasicMaterial({ color:0x8fd0e0, wireframe:true }),
+};
+let matKey = 'clay';
+
+/* ---------- Procedural hand ---------- */
+const UP = new THREE.Vector3(0,1,0);
+const unitSphere = new THREE.SphereGeometry(1, 22, 16);
+class Hand {
+  constructor(){
+    this.group = new THREE.Group(); scene.add(this.group);
+    this.meshes = [];
+    const add = (geo) => { const m = new THREE.Mesh(geo, MATS[matKey]); m.castShadow = true; this.group.add(m); this.meshes.push(m); return m; };
+    this.joints = RADII.map(r => { const m = add(unitSphere); m.scale.setScalar(r); return m; });
+    this.bones = BONES.map(([a,b]) => add(new THREE.CylinderGeometry(RADII[b], RADII[a], 1, 16, 1, true)));
+    this.arm = add(new THREE.CylinderGeometry(0.021*S, 0.026*S, 1, 22, 1, true));
+    const pg = new THREE.BufferGeometry();
+    this.palmPos = new Float32Array(14*3);
+    pg.setAttribute('position', new THREE.BufferAttribute(this.palmPos, 3));
+    const idx = [];
+    for (let i=0;i<6;i++){ const j=(i+1)%6;
+      idx.push(0,1+i,1+j, 7,8+j,8+i, 1+i,8+i,1+j, 1+j,8+i,8+j); }
+    pg.setIndex(idx);
+    this.palm = add(pg);
+    this.lastSeen = -1e9; this.filters = null;
+    this._v = new THREE.Vector3(); this._n = new THREE.Vector3(); this._c = new THREE.Vector3();
+  }
+  setMaterial(m){ this.meshes.forEach(x => x.material = m); }
+  set visible(v){ this.group.visible = v; }
+  get visible(){ return this.group.visible; }
+  update(p){
+    for (let i=0;i<21;i++) this.joints[i].position.copy(p[i]);
+    const d = this._v;
+    BONES.forEach(([a,b], k) => {
+      const m = this.bones[k];
+      d.subVectors(p[b], p[a]); const len = d.length() || 1e-4;
+      m.position.addVectors(p[a], p[b]).multiplyScalar(0.5);
+      m.quaternion.setFromUnitVectors(UP, d.divideScalar(len));
+      m.scale.set(1, len, 1);
+    });
+    // 전완부: 손목에서 중지 반대 방향
+    d.subVectors(p[0], p[9]).normalize();
+    const armLen = 0.075*S;
+    this.arm.position.copy(p[0]).addScaledVector(d, armLen/2);
+    this.arm.quaternion.setFromUnitVectors(UP, d.clone().negate());
+    this.arm.scale.set(1, armLen, 1);
+    // 손바닥 슬래브
+    const n = this._n.subVectors(p[5], p[0]).cross(this._c.subVectors(p[17], p[0])).normalize();
+    const c = this._c.set(0,0,0); PALM_RING.forEach(i => c.add(p[i])); c.divideScalar(6);
+    const t = 0.0105*S, a = this.palmPos;
+    const put = (k, v, s) => { a[k*3]=v.x+n.x*s; a[k*3+1]=v.y+n.y*s; a[k*3+2]=v.z+n.z*s; };
+    put(0, c, t); put(7, c, -t);
+    PALM_RING.forEach((pi, i) => { put(1+i, p[pi], t*0.85); put(8+i, p[pi], -t*0.85); });
+    this.palm.geometry.attributes.position.needsUpdate = true;
+    this.palm.geometry.computeVertexNormals();
+    this.palm.geometry.computeBoundingSphere();
+  }
+}
+const hands = [new Hand(), new Hand()];
+hands[1].visible = false;
+
+/* ---------- One Euro filter ---------- */
+const alpha = (dt, fc) => 1 / (1 + (1/(2*Math.PI*fc))/dt);
+class OneEuro {
+  constructor(){ this.x=null; this.dx=0; this.t=0; }
+  f(x, t, minC, beta){
+    if (this.x === null){ this.x = x; this.t = t; return x; }
+    const dt = Math.max(1e-3, (t - this.t)/1000); this.t = t;
+    const dx = (x - this.x)/dt; this.dx += alpha(dt, 1) * (dx - this.dx);
+    this.x += alpha(dt, minC + beta*Math.abs(this.dx)) * (x - this.x);
+    return this.x;
+  }
+}
+let smooth = 0.35;
+const filterParams = () => ({ minC: 0.4 + smooth*5, beta: 0.04 + smooth*0.6 });
+
+/* ---------- Demo pose (camera off) ---------- */
+const CANON = [[0,0],[-25,20],[-45,40],[-60,60],[-72,80],[-25,85],[-28,120],[-30,143],[-31,162],
+  [-2,90],[-2,130],[-2,155],[-2,175],[20,85],[23,120],[25,143],[26,160],[38,75],[45,100],[50,117],[53,132]]
+  .map(([x,y]) => new THREE.Vector3(x/1000, (y-85)/1000, 0));
+const CHAINS = [[1,2,3,4],[5,6,7,8],[9,10,11,12],[13,14,15,16],[17,18,19,20]];
+const THUMB_AXIS = new THREE.Vector3(0.8,0.6,0).normalize(), X_AXIS = new THREE.Vector3(1,0,0);
+const POSES = [[0,0,0,0,0],[1,1,1,1,1],[1,0,0,1,1],[1,0,1,1,1],[0,1,1,1,1],[0.6,0.55,0,0,0],[0,0,0,0,0]];
+const demoPts = Array.from({length:21}, () => new THREE.Vector3());
+function demoPose(time){
+  const T = 1700, k = Math.floor(time/T) % (POSES.length-1), f = (time % T)/T;
+  const e = f < 0.55 ? 0 : (f-0.55)/0.45, s = e*e*(3-2*e);
+  const curl = POSES[k].map((v,i) => v + (POSES[k+1][i]-v)*s);
+  const q = new THREE.Quaternion(), dir = new THREE.Vector3();
+  demoPts[0].copy(CANON[0]);
+  CHAINS.forEach((ch, fi) => {
+    const c = curl[fi], thumb = fi === 0;
+    const angles = thumb ? [c*0.6, c*0.6, c*0.6] : [c*1.22, c*1.66, c*1.13];
+    demoPts[ch[0]].copy(CANON[ch[0]]);
+    let acc = 0;
+    for (let j=1;j<4;j++){
+      acc += angles[j-1];
+      dir.subVectors(CANON[ch[j]], CANON[ch[j-1]]);
+      q.setFromAxisAngle(thumb ? THUMB_AXIS : X_AXIS, acc);
+      demoPts[ch[j]].copy(demoPts[ch[j-1]]).add(dir.applyQuaternion(q));
+    }
+  });
+  const sway = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.sin(time/2300)*0.15, Math.sin(time/1900)*0.45, 0));
+  demoPts.forEach(p => p.multiplyScalar(S).applyQuaternion(sway));
+  return demoPts;
+}
+
+/* ---------- Finger state readout ---------- */
+const ang = (a,b,c,d) => { const u = new THREE.Vector3().subVectors(b,a).normalize(), v = new THREE.Vector3().subVectors(d,c).normalize(); return Math.acos(THREE.MathUtils.clamp(u.dot(v),-1,1)); };
+function analyze(p){
+  const ext = CHAINS.map((ch, i) => {
+    const bend = ang(p[ch[0]],p[ch[1]],p[ch[1]],p[ch[2]]) + ang(p[ch[1]],p[ch[2]],p[ch[2]],p[ch[3]]);
+    if (i === 0) return bend < THREE.MathUtils.degToRad(50) && p[4].distanceTo(p[9]) > p[3].distanceTo(p[9]);
+    return bend < THREE.MathUtils.degToRad(60);
+  });
+  const pinch = p[4].distanceTo(p[8]) / S * 100;
+  const code = ext.map(b => b?1:0).join('');
+  const NAMES = { '11111':'펼친 손','00000':'주먹','01100':'브이','11100':'브이','01000':'가리키기','10000':'엄지 척',
+    '11000':'L 사인','01001':'락','11001':'사랑해','10001':'샤카','01111':'손가락 넷','00111':'OK' };
+  let name = NAMES[code] || '움직이는 중';
+  if (pinch < 2.2 && !ext[1]) name = '핀치';
+  else if (pinch < 2.2 && ext[2]) name = 'OK';
+  return { ext, pinch, name };
+}
+const fingerEls = [...$('fingers').children];
+let lastUI = 0;
+function renderReadout(p, src, t){
+  if (t - lastUI < 90) return; lastUI = t;
+  const r = analyze(p);
+  $('gesture').firstChild.nodeValue = r.name;
+  $('src').textContent = src;
+  $('pinch').textContent = r.pinch.toFixed(1) + 'cm';
+  r.ext.forEach((on, i) => fingerEls[i].classList.toggle('on', on));
+}
+
+/* ---------- Layout: keep the hand centered above the dock ---------- */
+let upp = 0.01, areaW = 1, areaH = 1, camDist = 7;
+function resize(){
+  const W = innerWidth, H = innerHeight;
+  const dockH = $('dock').getBoundingClientRect().height + 16;
+  const Hf = H + dockH;
+  renderer.setSize(W, H, false);
+  camera.aspect = W / Hf;
+  camera.setViewOffset(W, Hf, 0, dockH, W, H);
+  camera.updateProjectionMatrix();
+  areaW = W; areaH = Math.max(120, H - dockH);
+  // 남은 화면 높이에 손(약 3.6 units)이 다 들어오도록 카메라 거리 조정
+  const tanH = 2*Math.tan(THREE.MathUtils.degToRad(camera.fov/2));
+  const minVisible = 3.6;
+  camDist = THREE.MathUtils.clamp(minVisible * Hf / (areaH * tanH), 7, 22);
+  camera.position.sub(controls.target).setLength(camDist).add(controls.target);
+  controls.maxDistance = Math.max(14, camDist + 6);
+  upp = tanH * camDist / Hf;
+  ground.position.y = -(areaH/2)*upp - 0.4;
+}
+addEventListener('resize', resize);
+new ResizeObserver(resize).observe($('dock'));
+
+/* ---------- Tracking ---------- */
+const video = $('video'), ov = $('ov'), octx = ov.getContext('2d');
+let landmarker = null, stream = null, tracking = false, facing = 'user', mirror = true;
+let lastVideoTime = -1, detCount = 0, detFps = 0, fpsT = performance.now();
+const tmp = Array.from({length:21}, () => new THREE.Vector3());
+
+function setPill(text, mode){ $('pillText').textContent = text; $('pill').className = 'pill ' + (mode||''); }
+function showErr(msg){ $('err').textContent = msg; $('err').hidden = !msg; }
+
+async function loadModel(){
+  if (landmarker) return landmarker;
+  const { FilesetResolver, HandLandmarker } = await import(`${MP_URL}/vision_bundle.mjs`);
+  const fileset = await FilesetResolver.forVisionTasks(`${MP_URL}/wasm`);
+  const make = (delegate) => HandLandmarker.createFromOptions(fileset, {
+    baseOptions:{ modelAssetPath: MODEL_URL, delegate }, runningMode:'VIDEO', numHands:2,
+    minHandDetectionConfidence:0.6, minHandPresenceConfidence:0.6, minTrackingConfidence:0.5 });
+  try { landmarker = await make('GPU'); } catch { landmarker = await make('CPU'); }
+  return landmarker;
+}
+
+async function openCamera(){
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  stream = await navigator.mediaDevices.getUserMedia({ audio:false,
+    video:{ facingMode: facing, width:{ ideal:640 }, height:{ ideal:480 } } });
+  video.srcObject = stream;
+  await video.play();
+  $('pip').style.aspectRatio = `${video.videoWidth} / ${video.videoHeight}`;
+  ov.width = video.videoWidth; ov.height = video.videoHeight;
+  $('pipPh').hidden = true;
+}
+
+async function start(){
+  showErr('');
+  if (!navigator.mediaDevices?.getUserMedia){ showErr('이 브라우저는 카메라를 지원하지 않습니다. https 주소(GitHub Pages 등)에서 열어 주세요.'); return; }
+  $('start').disabled = true;
+  try {
+    setPill('손 인식 모델 불러오는 중…', 'busy');
+    await loadModel();
+    setPill('카메라 연결 중…', 'busy');
+    await openCamera();
+    tracking = true; lastVideoTime = -1;
+    hands.forEach(h => { h.visible = false; h.filters = null; });
+    $('start').textContent = '카메라 끄기'; $('start').classList.remove('primary');
+  } catch (e) {
+    const denied = e && (e.name === 'NotAllowedError' || e.name === 'SecurityError');
+    showErr(denied ? '카메라 권한이 거부되었습니다. 주소창의 카메라 권한을 허용한 뒤 다시 눌러 주세요.'
+      : e && e.name === 'NotFoundError' ? '사용할 수 있는 카메라를 찾지 못했습니다.'
+      : '시작하지 못했습니다: ' + (e && e.message || e));
+    setPill('데모 재생 중');
+  } finally { $('start').disabled = false; }
+}
+function stop(){
+  tracking = false;
+  if (stream) stream.getTracks().forEach(t => t.stop()); stream = null;
+  video.srcObject = null; octx.clearRect(0,0,ov.width,ov.height); $('pipPh').hidden = false;
+  hands[0].visible = true; hands[1].visible = false; $('hint').hidden = true;
+  $('start').textContent = '카메라 시작'; $('start').classList.add('primary');
+  setPill('데모 재생 중');
+}
+
+function toScene(lm, wl, out){
+  // 손 위치: 정규화 좌표(중지 MCP) → 화면 영역, 깊이: 이미지 속 손 크기
+  const vw = video.videoWidth, vh = video.videoHeight;
+  const sx = mirror ? (0.5 - lm[9].x) : (lm[9].x - 0.5);
+  const tx = sx * areaW * upp * 0.95, ty = (0.5 - lm[9].y) * areaH * upp * 0.95;
+  const span = Math.hypot((lm[0].x-lm[9].x)*vw, (lm[0].y-lm[9].y)*vh) / Math.min(vw, vh);
+  const tz = THREE.MathUtils.clamp(Math.log(Math.max(span,1e-3)/0.22) * 3, -3, 2.5);
+  const mx = mirror ? -1 : 1;
+  for (let i=0;i<21;i++){
+    out[i].set(mx*(wl[i].x - wl[9].x)*S + tx, -(wl[i].y - wl[9].y)*S + ty, -(wl[i].z - wl[9].z)*S + tz);
+  }
+  return out;
+}
+
+function drawOverlay(list){
+  octx.clearRect(0,0,ov.width,ov.height);
+  const w = ov.width, h = ov.height;
+  octx.lineWidth = Math.max(2, w/160); octx.strokeStyle = '#8fd0e0'; octx.fillStyle = '#ffffff';
+  for (const lm of list){
+    octx.beginPath();
+    for (const [a,b] of BONES){ octx.moveTo(lm[a].x*w, lm[a].y*h); octx.lineTo(lm[b].x*w, lm[b].y*h); }
+    octx.stroke();
+    for (const p of lm){ octx.beginPath(); octx.arc(p.x*w, p.y*h, Math.max(2.5, w/110), 0, 7); octx.fill(); }
+  }
+}
+
+function track(now){
+  if (video.readyState < 2 || video.currentTime === lastVideoTime) return;
+  lastVideoTime = video.currentTime;
+  const res = landmarker.detectForVideo(video, now);
+  detCount++;
+  const used = [false,false];
+  (res.landmarks || []).forEach((lm, i) => {
+    const label = res.handednesses?.[i]?.[0]?.categoryName;
+    let slot = label === 'Right' ? 0 : 1;
+    if (used[slot]) slot = 1 - slot;
+    used[slot] = true;
+    const h = hands[slot];
+    const pts = toScene(lm, res.worldLandmarks[i], tmp);
+    if (!h.filters || now - h.lastSeen > 350) h.filters = Array.from({length:63}, () => new OneEuro());
+    const { minC, beta } = filterParams();
+    for (let j=0;j<21;j++){
+      pts[j].set(h.filters[j*3].f(pts[j].x, now, minC, beta),
+                 h.filters[j*3+1].f(pts[j].y, now, minC, beta),
+                 h.filters[j*3+2].f(pts[j].z, now, minC, beta));
+    }
+    h.update(pts); h.visible = true; h.lastSeen = now;
+  });
+  hands.forEach(h => { if (now - h.lastSeen > 250) h.visible = false; });
+  drawOverlay(res.landmarks || []);
+
+  const n = hands.filter(h => h.visible).length;
+  $('hint').hidden = n > 0 || now - Math.max(hands[0].lastSeen, hands[1].lastSeen) < 900;
+  const lead = hands.find(h => h.visible);
+  if (lead) renderReadout(lead.joints.map(j => j.position), 'live', now);
+  if (now - fpsT > 1000){ detFps = detCount * 1000 / (now - fpsT); detCount = 0; fpsT = now; }
+  setPill(`손 ${n}/2 · ${detFps.toFixed(0)} fps`, n ? 'live' : '');
+}
+
+/* ---------- Loop ---------- */
+function loop(now){
+  requestAnimationFrame(loop);
+  if (document.hidden) return;
+  if (tracking && landmarker) track(now);
+  else {
+    const p = demoPose(now);
+    hands[0].update(p); hands[0].visible = true;
+    renderReadout(p, 'demo', now);
+  }
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+/* ---------- Controls ---------- */
+$('start').onclick = () => tracking ? stop() : start();
+$('flip').onclick = async () => {
+  facing = facing === 'user' ? 'environment' : 'user';
+  mirror = facing === 'user'; syncMirror();
+  if (tracking){ try { await openCamera(); } catch (e) { showErr('카메라를 전환하지 못했습니다.'); } }
+};
+$('more').onclick = () => {
+  const open = $('settings').hidden; $('settings').hidden = !open;
+  $('more').setAttribute('aria-expanded', String(open));
+};
+$('mats').onclick = (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  matKey = b.dataset.m;
+  [...$('mats').children].forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  hands.forEach(h => h.setMaterial(MATS[matKey]));
+};
+$('smooth').oninput = (e) => smooth = +e.target.value;
+function syncMirror(){
+  $('tMirror').setAttribute('aria-pressed', String(mirror));
+  $('pip').classList.toggle('mirror', mirror);
+  hands.forEach(h => h.filters = null);
+}
+$('tMirror').onclick = () => { mirror = !mirror; syncMirror(); };
+$('tPip').onclick = () => {
+  const on = $('pip').style.visibility === 'hidden';
+  $('pip').style.visibility = on ? 'visible' : 'hidden';
+  $('tPip').setAttribute('aria-pressed', String(on));
+};
+$('tReset').onclick = () => { controls.target.set(0,0,0); camera.position.copy(CAM_HOME).setLength(camDist); controls.update(); };
+
+resize();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

@@ -292,8 +292,8 @@ const loadGLB = (url) => new Promise((res, rej) => loader.load(url, res, undefin
 const RADII = [17, 15,12,10.5,9, 10.5,9.6,8.4,7.6, 11,10,8.8,7.9, 10.2,9.3,8.2,7.4, 9,8,7.1,6.5].map(v => v/1000*S);
 const FINGER_BONES = [[1,2],[2,3],[3,4],[5,6],[6,7],[7,8],[9,10],[10,11],[11,12],[13,14],[14,15],[15,16],[17,18],[18,19],[19,20]];
 const TIPS = [4,8,12,16,20], DIPS = [3,7,11,15,19];
-const RING_T = [13,14,10,9.5,10,9.5,8.5,12].map(v => v/1000*S);        // 손바닥 테두리 반두께
-const RING_BUMP = [4,7,4,2,1,2,5,6].map(v => v/1000*S);              // 엄지두덩·새끼두덩 볼륨
+const RING_T = [13,16,13,9.5,10,9.5,8.5,12].map(v => v/1000*S);        // 손바닥 테두리 반두께
+const RING_BUMP = [5,10,8,2,1,2,5,6].map(v => v/1000*S);              // 엄지두덩·새끼두덩 볼륨
 const UP = new THREE.Vector3(0,1,0);
 const unitSphere = new THREE.SphereGeometry(1, 28, 20);
 const _m = new THREE.Matrix4();
@@ -305,6 +305,8 @@ class ProcHand {
     const add = (geo, kind='skin') => { const m = new THREE.Mesh(geo); m.castShadow = true; m.userData.kind = kind; this.group.add(m); this.parts.push(m); return m; };
     this.joints = RADII.map((r, i) => { if (i === 0) return null; const m = add(unitSphere); m.scale.setScalar(r); return m; });
     this.bones = FINGER_BONES.map(([a,b]) => add(new THREE.CylinderGeometry(RADII[b], RADII[a], 1, 28, 1, true)));
+    // 엄지 손허리뼈(1→2)는 실제로 엄지두덩 살 속에 묻혀 있으므로 따로 그리지 않음
+    this.bones[0].visible = false; this.joints[1].visible = false;
     this.wrist = add(unitSphere);
     this.arm = add(new THREE.CylinderGeometry(1, 1.12, 1, 32, 1, true));
     this.nails = TIPS.map(() => add(unitSphere, 'nail'));

@@ -41,6 +41,14 @@ body.menu .dock{transform:translate(-50%,0)}
 .btn.main.on{background:#d8262c;color:#fff}
 .btn:active,.chip:active{transform:scale(.97)}
 #install{display:none}
+.speed{display:flex;align-items:center;gap:12px;margin:0 2px 12px;touch-action:none}
+.speed span{font-size:16px;color:var(--mute);flex:0 0 auto}
+.speed b{font-size:16px;font-weight:600;min-width:64px;text-align:right;font-variant-numeric:tabular-nums}
+#speed{flex:1;-webkit-appearance:none;appearance:none;height:28px;background:transparent;touch-action:none}
+#speed::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:linear-gradient(90deg,#00c8ff,#ffd000,#ff5a00)}
+#speed::-webkit-slider-thumb{-webkit-appearance:none;width:26px;height:26px;margin-top:-11px;border-radius:50%;background:#fff;box-shadow:0 1px 6px rgba(0,0,0,.4)}
+#speed::-moz-range-track{height:4px;border-radius:2px;background:linear-gradient(90deg,#00c8ff,#ffd000,#ff5a00)}
+#speed::-moz-range-thumb{width:26px;height:26px;border:0;border-radius:50%;background:#fff}
 .hint{font-size:16px;color:var(--mute);text-align:center;margin-top:10px;line-height:1.5}
 .hint b{color:var(--ink);font-weight:600}
 </style>
@@ -56,6 +64,7 @@ body.menu .dock{transform:translate(-50%,0)}
 <div class="dock" id="sheet">
   <div class="panel">
     <div class="head" id="sheetHead"><span class="bar"></span><div id="status">손 인식 꺼짐 · 화면을 문질러 보세요</div></div>
+    <div class="speed"><span>흐름 속도</span><input type="range" id="speed" min="0" max="100" step="1"><b id="speedVal"></b></div>
     <div class="row chips" id="palettes"></div>
     <div class="row">
       <button class="btn main" id="camBtn">손 인식 시작</button>
@@ -108,6 +117,8 @@ float vn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(hash(
 float bristle(vec2 uv,vec2 dims,float sd){vec2 q=uv*dims;return .55*vn(q/2.2+sd)+.3*vn(q/5.+sd*1.7)+.15*vn(q/11.-sd);}
 `;
 const FS = {
+splatVelSet: H+`uniform sampler2D uT;uniform float aspect,radius,strength;uniform vec2 point;uniform vec3 color;
+void main(){vec2 p=vUv-point;p.x*=aspect;float w=clamp(exp(-dot(p,p)/radius)*strength,0.,1.);vec2 b=texture(uT,vUv).xy;o=vec4(mix(b,color.xy,w),0.,1.);}`,
 splatVel: H+`uniform sampler2D uT;uniform float aspect,radius;uniform vec2 point;uniform vec3 color;
 void main(){vec2 p=vUv-point;p.x*=aspect;o=vec4(texture(uT,vUv).xyz+exp(-dot(p,p)/radius)*color,1.);}`,
 splatDye: H+`uniform sampler2D uT;uniform float aspect,radius,strength;uniform vec2 point;uniform vec4 color;
@@ -229,6 +240,9 @@ function seed(){const u=use('init',[dye.w.tx,dye.w.ty]);
   detSeed=Math.random()*50;detailPass(2);
   for(let i=0;i<14;i++)splatVel(Math.random(),Math.random(),(Math.random()-.5)*900,(Math.random()-.5)*900,.012);}
 
+function splatVelSet(x,y,vx,vy,r,k){const u=use('splatVelSet',[vel.r.tx,vel.r.ty]);
+  gl.uniform1i(u.uT,vel.r.bind(0));gl.uniform1f(u.aspect,aspect);gl.uniform2f(u.point,x,y);
+  gl.uniform3f(u.color,vx,vy,0);gl.uniform1f(u.radius,r*(aspect>1?aspect:1));gl.uniform1f(u.strength,k);blit(vel.w);vel.swap();}
 function splatVel(x,y,dx,dy,r){const u=use('splatVel',[vel.r.tx,vel.r.ty]);
   gl.uniform1i(u.uT,vel.r.bind(0));gl.uniform1f(u.aspect,aspect);gl.uniform2f(u.point,x,y);
   gl.uniform3f(u.color,dx,dy,0);gl.uniform1f(u.radius,(r||.003)*(aspect>1?aspect:1));blit(vel.w);vel.swap();}
@@ -240,6 +254,20 @@ function splatDye(x,y,c,r,strength,thick){const u=use('splatDye',[dye.r.tx,dye.r
 function detailPass(rate){const u=use('detail',[det.r.tx,det.r.ty]);gl.uniform1i(u.uT,det.r.bind(0));
   gl.uniform2f(u.dims,det.r.w,det.r.h);gl.uniform1f(u.rate,rate);gl.uniform1f(u.sd,detSeed);blit(det.w);det.swap();}
 let flow=1, flowTarget=1, simTime=0;
+// base flow speed: slider 0..100 → 0.04..2.0 (log); 1.0 = previous speed
+const sliderToSpeed=v=>.04*Math.pow(50,v/100);
+let speedVal=25; try{const v=parseFloat(localStorage.getItem('hf-speed'));if(!isNaN(v))speedVal=v;}catch(e){}
+let speed=sliderToSpeed(speedVal);
+// finger → fluid: uv/sec → sim texels/sec, plus a little extra when the base is set faster
+// global time scale = slider base + boost from how fast the fingers are moving right now
+let handAct=0, timeScale=speed;
+function feelFinger(v){ if(v>handAct)handAct=v; }      // v = fingertip speed in screen-heights/sec
+function updateTimeScale(dt){
+  handAct*=Math.exp(-dt*2.2);                            // fingers slow/stop → boost fades
+  const boost=Math.min(handAct*1.25,4);
+  const target=Math.min(speed+boost*(.35+.5*Math.min(speed,2)),4);
+  timeScale+=(target-timeScale)*Math.min(1,dt*(target>timeScale?5:1.1));   // quick to speed up, gentle to calm down
+}
 function step(dt){
   const tx=[vel.r.tx,vel.r.ty];
   let u=use('ambient',tx);gl.uniform1i(u.uVel,vel.r.bind(0));gl.uniform1f(u.t,simTime);gl.uniform1f(u.amp,34);gl.uniform1f(u.dt,dt);blit(vel.w);vel.swap();
@@ -251,7 +279,7 @@ function step(dt){
   for(let i=0;i<22;i++){gl.uniform1i(u.uP,pres.r.bind(0));blit(pres.w);pres.swap();}
   u=use('gradient',tx);gl.uniform1i(u.uP,pres.r.bind(0));gl.uniform1i(u.uVel,vel.r.bind(1));blit(vel.w);vel.swap();
   u=use('advect',tx);gl.uniform2f(u.simTexel,vel.r.tx,vel.r.ty);gl.uniform1f(u.dt,dt);
-  gl.uniform1i(u.uVel,vel.r.bind(0));gl.uniform1i(u.uSrc,vel.r.bind(0));gl.uniform4f(u.diss,.14,.14,0,0);blit(vel.w);vel.swap();
+  gl.uniform1i(u.uVel,vel.r.bind(0));gl.uniform1i(u.uSrc,vel.r.bind(0));gl.uniform4f(u.diss,.2,.2,0,0);blit(vel.w);vel.swap();
   u=use('maccormack',[dye.r.tx,dye.r.ty]);gl.uniform2f(u.simTexel,vel.r.tx,vel.r.ty);gl.uniform2f(u.srcTexel,dye.r.tx,dye.r.ty);gl.uniform1f(u.dt,dt);
   gl.uniform1i(u.uVel,vel.r.bind(0));gl.uniform1i(u.uSrc,dye.r.bind(1));gl.uniform4f(u.diss,.003,.003,.003,.03);blit(dye.w);dye.swap();
   gl.uniform2f(u.srcTexel,det.r.tx,det.r.ty);gl.uniform1i(u.uSrc,det.r.bind(1));gl.uniform4f(u.diss,0,0,0,0);blit(det.w);det.swap();
@@ -266,9 +294,10 @@ const pickColor=(i)=>{const p=pal();const c=p[(i+colorTick)%p.length];const k=.9
 
 // touch fallback
 const pointers=new Map();
-canvas.addEventListener('pointerdown',e=>{if(document.body.classList.contains('menu')){openMenu(false);return;}pointers.set(e.pointerId,{x:e.clientX/innerWidth,y:1-e.clientY/innerHeight,c:pickColor(pointers.size+(Math.random()*6|0))});wake();});
+canvas.addEventListener('pointerdown',e=>{if(document.body.classList.contains('menu')){openMenu(false);return;}pointers.set(e.pointerId,{x:e.clientX/innerWidth,y:1-e.clientY/innerHeight,t:e.timeStamp,c:pickColor(pointers.size+(Math.random()*6|0))});wake();});
 canvas.addEventListener('pointermove',e=>{const p=pointers.get(e.pointerId);if(!p)return;
-  const x=e.clientX/innerWidth,y=1-e.clientY/innerHeight;queue.push({x,y,dx:(x-p.x)*5200,dy:(y-p.y)*5200,c:p.c,r:.0032,s:.9});p.x=x;p.y=y;});
+  const x=e.clientX/innerWidth,y=1-e.clientY/innerHeight;const dtR=Math.min(Math.max((e.timeStamp-p.t)/1000,.008),.1);feelFinger(Math.hypot((x-p.x)*aspect,y-p.y)/dtR);
+  queue.push({x,y,vx:(x-p.x)/dtR,vy:(y-p.y)/dtR,set:.85,c:p.c,r:.0032,s:.9});p.x=x;p.y=y;p.t=e.timeStamp;});
 ['pointerup','pointercancel','pointerleave'].forEach(t=>canvas.addEventListener(t,e=>pointers.delete(e.pointerId)));
 
 // hand state
@@ -301,13 +330,15 @@ function onHands(res){
     TIPS.forEach((ti,j)=>{
       const raw={x:lm[ti].x, y:1-lm[ti].y};       // selfieMode=true already mirrors
       const key=h+'-'+ti; const prev=tracks[key];
-      const sm=prev?{x:prev.x+(raw.x-prev.x)*.6,y:prev.y+(raw.y-prev.y)*.6}:raw;
+      const sm=prev?{x:prev.x+(raw.x-prev.x)*.6,y:prev.y+(raw.y-prev.y)*.6,t:now}:{...raw,t:now};
       tracks[key]=sm; pts.push(sm);
       if(!prev||fist||(pointing&&ti!==8))return;
       let dx=sm.x-prev.x, dy=sm.y-prev.y; const sp=Math.hypot(dx,dy);
       if(sp>.25)return;                               // tracking jump
       const isIndex=ti===8, strong=isIndex?1:.55;
-      queue.push({x:sm.x,y:sm.y,dx:dx*5600*strong,dy:dy*5600*strong,c:pickColor(j+h*2),r:isIndex?.0034:.0019,s:Math.min(1,.12+sp*40)*strong,t:isIndex?.7:.4});
+      const dtR=Math.min(Math.max((now-prev.t)/1000,.016),.12);
+      feelFinger(Math.hypot(dx*aspect,dy)/dtR*(isIndex?1:.8));
+      queue.push({x:sm.x,y:sm.y,vx:dx/dtR,vy:dy/dtR,set:isIndex?.85:.45,c:pickColor(j+h*2),r:isIndex?.0034:.0019,s:Math.min(1,.12+sp*40)*strong,t:isIndex?.7:.4});
     });
     // pinch → vortex around pinch point
     const pk='p'+h, mid={x:(lm[4].x+lm[8].x)/2,y:1-(lm[4].y+lm[8].y)/2};
@@ -318,7 +349,7 @@ function onHands(res){
       }
       const dir=(h===0?1:-1);
       for(let i=0;i<8;i++){const a=i/8*Math.PI*2+now*.002;const R=.07;
-        queue.push({x:mid.x+Math.cos(a)*R,y:mid.y+Math.sin(a)*R*aspect,dx:-Math.sin(a)*700*dir,dy:Math.cos(a)*700*dir,r:.0045,vOnly:true});}
+        queue.push({x:mid.x+Math.cos(a)*R,y:mid.y+Math.sin(a)*R*aspect,dx:-Math.sin(a)*(250+500*Math.min(speed,2))*dir,dy:Math.cos(a)*(250+500*Math.min(speed,2))*dir,r:.0045,vOnly:true});}
     }
     pinchState[pk]=pinch;
     handInfo.push({pts,fist,pinch,mid,point});
@@ -389,7 +420,8 @@ function frame(now){
   flow+=(flowTarget-flow)*Math.min(1,dt*(flowTarget>flow?2.5:6));
   freezeEl.style.opacity=flow<.5?1:0;
   // ambient life: drifting color drops keep the canvas evolving
-  ambientClock+=dt*flow;
+  updateTimeScale(dt);
+  ambientClock+=dt*flow*Math.max(timeScale,.15);
   if(ambientClock>.6){ambientClock=0;const x=Math.random(),y=Math.random(),a=Math.random()*6.28;
     const big=Math.random()<.3, r=big?.012+Math.random()*.022:.0014+Math.random()*.0035;
     splatDye(x,y,pickColor(Math.random()*6|0),r,big?.85:.75,big?1.1:.8);
@@ -397,15 +429,17 @@ function frame(now){
   if(Math.random()<dt*.15)colorTick++;
   // pointing jets: paint streams out of the fingertip in the pointed direction
   for(const h of handInfo){const p=h.point;if(!p)continue;
-    if(flow>.3){splatVel(p.x,p.y,p.dx*1500,p.dy*1500,.0032);
-      for(let k=1;k<=3;k++)splatVel(p.x+p.dx/aspect*.04*k,p.y+p.dy*.04*k,p.dx*(1250-k*180),p.dy*(1250-k*180),.0042);}
+    const js=1/Math.max(timeScale,.35);
+    if(flow>.3){splatVel(p.x,p.y,p.dx*1500*js*dt*60*.5,p.dy*1500*js*dt*60*.5,.0032);
+      for(let k=1;k<=3;k++)splatVel(p.x+p.dx/aspect*.04*k,p.y+p.dy*.04*k,p.dx*(1250-k*180)*js*dt*30,p.dy*(1250-k*180)*js*dt*30,.0042);}
     splatDye(p.x,p.y,pickColor(p.c),.0024,.45,.55);}
   // apply queued splats
   for(const s of queue.splice(0)){
-    if(flow>.3)splatVel(s.x,s.y,s.dx*flow,s.dy*flow,s.r*1.2);
+    if(flow>.3){ if(s.set) {const g=1.1/Math.max(timeScale,.35);splatVelSet(s.x,s.y,s.vx*vel.r.w*g,s.vy*vel.r.h*g,s.r*1.25,s.set);}
+                 else splatVel(s.x,s.y,s.dx*flow,s.dy*flow,s.r*1.2); }
     if(!s.vOnly)splatDye(s.x,s.y,s.c,s.r,s.s,s.t);
   }
-  if(flow>.02){simTime+=dt*flow;step(dt*flow);}
+  if(flow>.02){simTime+=dt*flow*timeScale;step(dt*flow*timeScale);}
   // display
   const u=use('display',[0,0]);gl.uniform3fv(u.pal,palFlat);gl.uniform1i(u.uDye,dye.r.bind(0));gl.uniform1i(u.uDet,det.r.bind(1));gl.uniform2f(u.dyeTexel,dye.r.tx,dye.r.ty);
   gl.uniform1f(u.dotSize,2.0*dpr);gl.uniform1f(u.relief,11.+7.*(1.-flow));gl.uniform1f(u.time,now*.001);blit(null);
@@ -422,6 +456,10 @@ function renderPalettes(){palWrap.innerHTML='';for(const name in PALETTES){const
   b.onclick=()=>{paletteName=name;palFlat=new Float32Array(pal().flat());renderPalettes();for(let i=0;i<10;i++)queue.push({x:Math.random(),y:Math.random(),dx:0,dy:0,c:pickColor(i),r:.006,s:.9,t:.6});};
   palWrap.appendChild(b);}}
 renderPalettes();
+const speedEl=document.getElementById('speed'),speedTxt=document.getElementById('speedVal');
+const speedLabel=v=>v<30?'아주 느림':v<45?'느림':v<60?'보통':v<80?'빠름':'아주 빠름';
+function applySpeed(v){speedVal=+v;speed=sliderToSpeed(speedVal);if(handAct<.05)timeScale=speed;speedTxt.textContent=speedLabel(speedVal);try{localStorage.setItem('hf-speed',speedVal);}catch(e){}}
+speedEl.value=speedVal;applySpeed(speedVal);speedEl.addEventListener('input',e=>applySpeed(e.target.value));
 document.getElementById('seedBtn').onclick=()=>seed();
 document.getElementById('snapBtn').onclick=()=>{snapReq=true;};
 document.getElementById('fsBtn').onclick=()=>{const d=document.documentElement;

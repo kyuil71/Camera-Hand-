@@ -24,7 +24,6 @@ body.menu #grab{opacity:0;pointer-events:none}
 #status{font-size:16px;color:var(--ink);display:flex;align-items:center;gap:8px;text-align:center}
 #status:before{content:"";width:8px;height:8px;border-radius:50%;background:rgba(190,196,206,.6);flex:0 0 auto}
 body.detect #status:before{background:#fff;box-shadow:0 0 8px #fff}
-#freeze{position:fixed;left:50%;top:40%;transform:translate(-50%,-50%);font-size:18px;letter-spacing:.3em;padding:10px 18px;border-radius:999px;background:var(--glass);border:1px solid var(--line);opacity:0;transition:opacity .35s;pointer-events:none;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
 .dock{position:fixed;left:50%;bottom:0;z-index:6;transform:translate(-50%,calc(100% + 24px));width:100%;max-width:430px;padding:0 16px calc(env(safe-area-inset-bottom) + 14px);transition:transform .38s cubic-bezier(.2,.8,.2,1)}
 body.menu .dock{transform:translate(-50%,0)}
 .panel{background:var(--glass);border:1px solid var(--line);border-radius:22px;padding:12px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
@@ -59,7 +58,6 @@ body.menu .dock{transform:translate(-50%,0)}
 <video id="video" playsinline muted style="display:none"></video>
 
 <div id="grab" aria-label="메뉴 열기"><span class="bar"></span></div>
-<div id="freeze">굳힘 · FREEZE</div>
 
 <div class="dock" id="sheet">
   <div class="panel">
@@ -413,12 +411,10 @@ function drawFx(){
 
 /* ================= Main loop ================= */
 let last=performance.now(), snapReq=false;
-const freezeEl=document.getElementById('freeze');
 function frame(now){
   const dt=Math.min((now-last)/1000,1/30);last=now;
   resize();
   flow+=(flowTarget-flow)*Math.min(1,dt*(flowTarget>flow?2.5:6));
-  freezeEl.style.opacity=flow<.5?1:0;
   // ambient life: drifting color drops keep the canvas evolving
   updateTimeScale(dt);
   ambientClock+=dt*flow*Math.max(timeScale,.15);

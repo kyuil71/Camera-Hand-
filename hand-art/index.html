@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <title>Hand Flow Art</title>
-<meta name="theme-color" content="#0a1222">
+<meta name="theme-color" content="#000000">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -391,7 +391,7 @@ async function detectLoop(){
   if(!busy&&video.readyState>=2){busy=true;try{await hands.send({image:video});}catch(e){console.warn(e);}busy=false;}
   requestAnimationFrame(detectLoop);
 }
-camBtn.onclick=()=>camOn?stopCam():startCam();
+camBtn.onclick=()=>{wake();camOn?stopCam():startCam();};
 document.addEventListener('visibilitychange',async()=>{if(!document.hidden&&camOn){try{wakeLock=await navigator.wakeLock?.request('screen');}catch(e){}}});
 
 /* fingertip glow overlay */
@@ -457,17 +457,20 @@ function applySpeed(v){speedVal=+v;speed=sliderToSpeed(speedVal);if(handAct<.05)
 speedEl.value=speedVal;applySpeed(speedVal);speedEl.addEventListener('input',e=>applySpeed(e.target.value));
 document.getElementById('seedBtn').onclick=()=>seed();
 document.getElementById('snapBtn').onclick=()=>{snapReq=true;};
-document.getElementById('fsBtn').onclick=()=>{const d=document.documentElement;
-  if(document.fullscreenElement)document.exitFullscreen();else (d.requestFullscreen||d.webkitRequestFullscreen)?.call(d);};
+// true fullscreen (also draws under the camera cut-out / status bar area)
+const goFull=()=>{const d=document.documentElement;if(document.fullscreenElement)return;
+  const r=(d.requestFullscreen||d.webkitRequestFullscreen);try{const p=r?.call(d,{navigationUI:'hide'});p&&p.catch&&p.catch(()=>{});}catch(e){}};
+const isApp=()=>matchMedia('(display-mode: fullscreen)').matches||matchMedia('(display-mode: standalone)').matches;
+document.getElementById('fsBtn').onclick=()=>{if(document.fullscreenElement)document.exitFullscreen();else goFull();};
 let hideTimer=0;
-function wake(){}
+function wake(){ if(isApp())goFull(); }   // installed app: first touch goes edge-to-edge
 const openMenu=v=>document.body.classList.toggle('menu',v);
 function swipe(el,dir,fn){let y0=null;
   el.addEventListener('pointerdown',e=>{y0=e.clientY;el.setPointerCapture?.(e.pointerId);});
   el.addEventListener('pointermove',e=>{if(y0==null)return;if((y0-e.clientY)*dir>28){y0=null;fn();}});
   el.addEventListener('pointerup',e=>{if(y0!=null&&Math.abs(y0-e.clientY)<8)fn();y0=null;});
   el.addEventListener('pointercancel',()=>y0=null);}
-swipe(document.getElementById('grab'),1,()=>openMenu(true));          // swipe up (or tap) on the bar
+swipe(document.getElementById('grab'),1,()=>{wake();openMenu(true);});          // swipe up (or tap) on the bar
 swipe(document.getElementById('sheetHead'),-1,()=>openMenu(false));   // swipe down (or tap) on the sheet handle
 
 // PWA install

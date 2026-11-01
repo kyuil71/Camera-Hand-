@@ -1,0 +1,15 @@
+{
+  "name": "Hand Flow Art",
+  "short_name": "Hand Flow",
+  "description": "손가락 움직임으로 흐르는 디지털 유체 아트 (온디바이스 AI)",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#0a1222",
+  "theme_color": "#0a1222",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

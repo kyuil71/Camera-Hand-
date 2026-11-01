@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>Hand Flow Art</title>
+<meta name="theme-color" content="#0a1222">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<style>
+:root{--bg:#0a1222;--glass:rgba(12,20,38,.62);--line:rgba(255,255,255,.14);--ink:#f4efe4;--mute:rgba(244,239,228,.66);--accent:#f7c844}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:var(--bg);color:var(--ink);font:16px/1.4 -apple-system,"Pretendard","Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
+canvas#art,canvas#fx{position:fixed;inset:0;width:100%;height:100%;display:block}
+canvas#fx{pointer-events:none}
+.top{background:linear-gradient(rgba(6,10,20,.55),rgba(6,10,20,0));padding-bottom:28px !important;position:fixed;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top) + 12px) 16px 0;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none;transition:opacity .5s}
+.brand{pointer-events:auto}
+.brand b{display:block;font-size:16px;letter-spacing:.18em;font-weight:700}
+#status{display:block;font-size:16px;color:var(--mute);margin-top:2px;text-shadow:0 1px 6px rgba(0,0,0,.6)}
+#preview{pointer-events:auto;width:112px;height:84px;border-radius:12px;border:1px solid var(--line);background:#000;display:none;object-fit:cover}
+#freeze{position:fixed;left:50%;top:40%;transform:translate(-50%,-50%);font-size:18px;letter-spacing:.3em;padding:10px 18px;border-radius:999px;background:var(--glass);border:1px solid var(--line);opacity:0;transition:opacity .35s;pointer-events:none;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.dock{position:fixed;left:50%;bottom:0;transform:translateX(-50%);width:100%;max-width:430px;padding:0 16px calc(env(safe-area-inset-bottom) + 14px);transition:opacity .5s,transform .5s}
+.panel{background:var(--glass);border:1px solid var(--line);border-radius:22px;padding:12px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+.row{display:flex;gap:8px}
+.row+.row{margin-top:10px}
+.chips{overflow-x:auto;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:0 0 auto;display:flex;align-items:center;gap:8px;border:1px solid var(--line);background:rgba(255,255,255,.04);color:var(--ink);border-radius:999px;padding:8px 12px 8px 8px;font:inherit;font-size:16px}
+.chip i{display:flex;width:44px;height:18px;border-radius:9px;overflow:hidden}
+.chip i span{flex:1}
+.chip[aria-pressed=true]{border-color:var(--accent);background:rgba(247,200,68,.14)}
+.btn{flex:1;min-height:48px;border:1px solid var(--line);background:rgba(255,255,255,.06);color:var(--ink);border-radius:14px;font:inherit;font-size:16px;font-weight:600}
+.btn.main{flex:1.6;background:var(--ink);color:#101826;border-color:transparent}
+.btn.main.on{background:#d8262c;color:#fff}
+.btn:active,.chip:active{transform:scale(.97)}
+#install{display:none}
+.hint{font-size:16px;color:var(--mute);text-align:center;margin-top:10px;line-height:1.5}
+.hint b{color:var(--ink);font-weight:600}
+body.immersive .dock{opacity:0;transform:translate(-50%,20px);pointer-events:none}
+body.immersive .top .brand{opacity:0}
+</style>
+</head>
+<body>
+<canvas id="art"></canvas>
+<canvas id="fx"></canvas>
+<video id="video" playsinline muted style="display:none"></video>
+
+<div class="top">
+  <div class="brand"><b>HAND FLOW</b><span id="status">화면을 문질러 보거나 카메라를 켜세요</span></div>
+  <canvas id="preview" width="224" height="168"></canvas>
+</div>
+<div id="freeze">굳힘 · FREEZE</div>
+
+<div class="dock">
+  <div class="panel">
+    <div class="row chips" id="palettes"></div>
+    <div class="row">
+      <button class="btn main" id="camBtn">손 인식 시작</button>
+      <button class="btn" id="seedBtn">새 캔버스</button>
+      <button class="btn" id="snapBtn">저장</button>
+    </div>
+    <div class="row">
+      <button class="btn" id="fsBtn">전체화면</button>
+      <button class="btn" id="hideBtn">몰입 모드</button>
+      <button class="btn" id="install">앱 설치</button>
+    </div>
+    <p class="hint"><b>손가락</b> 흐름 그리기 · <b>엄지+검지 집기</b> 소용돌이<br><b>주먹</b> 굳히기 · 손 펴면 다시 흐름</p>
+  </div>
+</div>
+
+<script src="mediapipe/hands.js"></script>
+<script>
+'use strict';
+/* ================= Palettes ================= */
+const PALETTES = {
+  '아나돌':  ['#3fa9f5','#9fd8f0','#f26a1b','#f7c844','#d8262c','#f2e6c8'],
+  '심해':    ['#0b3d6b','#1f78b4','#53c3e8','#bff0f5','#f2f7f2','#2d5d8a'],
+  '용암':    ['#3a0d0d','#a3150f','#ee4b13','#ffa62b','#ffe08a','#5c1a1a'],
+  '오로라':  ['#0f2b3d','#1fbf8f','#7ef0c3','#9b5de5','#f15bb5','#e8f6ff'],
+  '모노':    ['#111418','#3b4048','#8a919c','#d6d9de','#f4f2ec','#5e6570']
+};
+let paletteName = '아나돌';
+const hex2rgb = h => [1,3,5].map(i => parseInt(h.substr(i,2),16)/255);
+const pal = () => PALETTES[paletteName].map(hex2rgb);
+
+/* ================= WebGL2 setup ================= */
+const canvas = document.getElementById('art');
+const gl = canvas.getContext('webgl2',{alpha:false,antialias:false,depth:false,stencil:false,preserveDrawingBuffer:false});
+if(!gl){ document.getElementById('status').textContent='이 기기는 WebGL2를 지원하지 않습니다'; throw new Error('no webgl2'); }
+const canRenderFloat = gl.getExtension('EXT_color_buffer_float') || gl.getExtension('EXT_color_buffer_half_float');
+gl.getExtension('OES_texture_float_linear');
+const IFMT = canRenderFloat ? gl.RGBA16F : gl.RGBA8;
+const TYPE = canRenderFloat ? gl.HALF_FLOAT : gl.UNSIGNED_BYTE;
+
+const VS = `#version 300 es
+precision highp float;
+in vec2 aPos; uniform vec2 texel;
+out vec2 vUv,vL,vR,vT,vB;
+void main(){vUv=aPos*.5+.5;vL=vUv-vec2(texel.x,0.);vR=vUv+vec2(texel.x,0.);vT=vUv+vec2(0.,texel.y);vB=vUv-vec2(0.,texel.y);gl_Position=vec4(aPos,0.,1.);}`;
+const H = `#version 300 es
+precision highp float;precision highp sampler2D;
+in vec2 vUv,vL,vR,vT,vB;out vec4 o;
+float hash(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}
+`;
+const FS = {
+splatVel: H+`uniform sampler2D uT;uniform float aspect,radius;uniform vec2 point;uniform vec3 color;
+void main(){vec2 p=vUv-point;p.x*=aspect;o=vec4(texture(uT,vUv).xyz+exp(-dot(p,p)/radius)*color,1.);}`,
+splatDye: H+`uniform sampler2D uT;uniform float aspect,radius,strength;uniform vec2 point;uniform vec4 color;
+void main(){vec2 p=vUv-point;p.x*=aspect;float w=clamp(exp(-dot(p,p)/radius)*strength,0.,1.);vec4 b=texture(uT,vUv);
+o=vec4(mix(b.rgb,color.rgb,w),min(b.a+w*color.a,3.));}`,
+advect: H+`uniform sampler2D uVel,uSrc;uniform vec2 simTexel;uniform float dt;uniform vec4 diss;
+void main(){vec2 c=vUv-dt*texture(uVel,vUv).xy*simTexel;o=texture(uSrc,c)/(1.+diss*dt);}`,
+divergence: H+`uniform sampler2D uVel;
+void main(){float L=texture(uVel,vL).x,R=texture(uVel,vR).x,T=texture(uVel,vT).y,B=texture(uVel,vB).y;vec2 C=texture(uVel,vUv).xy;
+if(vL.x<0.)L=-C.x;if(vR.x>1.)R=-C.x;if(vT.y>1.)T=-C.y;if(vB.y<0.)B=-C.y;o=vec4(.5*(R-L+T-B),0.,0.,1.);}`,
+curl: H+`uniform sampler2D uVel;
+void main(){float L=texture(uVel,vL).y,R=texture(uVel,vR).y,T=texture(uVel,vT).x,B=texture(uVel,vB).x;o=vec4(.5*(R-L-T+B),0.,0.,1.);}`,
+vorticity: H+`uniform sampler2D uVel,uCurl;uniform float curl,dt;
+void main(){float L=texture(uCurl,vL).x,R=texture(uCurl,vR).x,T=texture(uCurl,vT).x,B=texture(uCurl,vB).x,C=texture(uCurl,vUv).x;
+vec2 f=.5*vec2(abs(T)-abs(B),abs(R)-abs(L));f/=length(f)+1e-4;f*=curl*C;f.y*=-1.;
+vec2 v=texture(uVel,vUv).xy+f*dt;o=vec4(clamp(v,-1000.,1000.),0.,1.);}`,
+pressure: H+`uniform sampler2D uP,uDiv;
+void main(){float L=texture(uP,vL).x,R=texture(uP,vR).x,T=texture(uP,vT).x,B=texture(uP,vB).x;o=vec4((L+R+T+B-texture(uDiv,vUv).x)*.25,0.,0.,1.);}`,
+gradient: H+`uniform sampler2D uP,uVel;
+void main(){float L=texture(uP,vL).x,R=texture(uP,vR).x,T=texture(uP,vT).x,B=texture(uP,vB).x;vec2 v=texture(uVel,vUv).xy-vec2(R-L,T-B);o=vec4(v,0.,1.);}`,
+scale: H+`uniform sampler2D uT;uniform float value;void main(){o=value*texture(uT,vUv);}`,
+ambient: H+`uniform sampler2D uVel;uniform float t,amp,dt;
+void main(){vec2 u=vUv;vec2 f=vec2(sin(u.y*6.3+t*.55)+.6*sin(u.y*15.+u.x*4.-t*1.2),cos(u.x*5.7-t*.47)+.6*cos(u.x*13.-u.y*5.+t*.9));
+o=vec4(texture(uVel,vUv).xy+f*amp*dt,0.,1.);}`,
+init: H+`uniform vec3 pal[6];uniform float seed,aspect;
+float vn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+1.),f.x),f.y);}
+float fbm(vec2 p){float s=0.,a=.5;for(int i=0;i<5;i++){s+=a*vn(p);p=p*2.03+17.1;a*=.5;}return s;}
+void main(){vec2 p=vUv*vec2(aspect,1.)*2.6+seed;float n=fbm(p);float m=fbm(p*1.7+n*3.+seed*.3);
+float k=fract(n*3.2+m*2.4)*6.;int i=int(k);vec3 c=mix(pal[i],pal[(i+1)%6],smoothstep(.55,1.,fract(k)));
+o=vec4(c,.4+1.6*m*m+.4*sin(k*3.14));}`,
+display: H+`uniform sampler2D uDye;uniform vec2 dyeTexel;uniform float dotSize,relief,time;
+float Hh(vec2 uv){vec4 d=texture(uDye,uv);return d.a*.7+dot(d.rgb,vec3(.3,.5,.2))*.4;}
+vec3 nrm(vec2 uv,vec2 e,float k){float l=Hh(uv-vec2(e.x,0.)),r=Hh(uv+vec2(e.x,0.)),b=Hh(uv-vec2(0.,e.y)),t=Hh(uv+vec2(0.,e.y));
+return vec3((l-r)*k,(b-t)*k,1.);}
+void main(){vec4 d=texture(uDye,vUv);
+vec3 n1=nrm(vUv,dyeTexel*1.5,relief*.45),n2=nrm(vUv,dyeTexel*5.,relief*.55),n3=nrm(vUv,dyeTexel*12.,relief*.4);
+vec3 n=normalize(vec3(n1.xy+n2.xy+n3.xy,1.));
+vec3 L=normalize(vec3(-.45,.6,.65));
+float diff=max(dot(n,L),0.);float spec=pow(max(dot(reflect(-L,n),vec3(0.,0.,1.)),0.),22.);
+float sheen=pow(1.-n.z,1.5);
+float hC=Hh(vUv),hW=(Hh(vUv+vec2(dyeTexel.x*8.,0.))+Hh(vUv-vec2(dyeTexel.x*8.,0.))+Hh(vUv+vec2(0.,dyeTexel.y*8.))+Hh(vUv-vec2(0.,dyeTexel.y*8.)))*.25;
+float ao=clamp(1.-(hW-hC)*1.6,.45,1.15);
+vec3 c=d.rgb*(.35+.85*diff)*ao+spec*.55*vec3(1.,.96,.88)+sheen*d.rgb*.25;
+c=mix(vec3(dot(c,vec3(.3,.55,.15))),c,1.22);
+vec2 g=gl_FragCoord.xy/dotSize;vec2 id=floor(g);vec2 f=fract(g)-.5;float h1=hash(id);
+f+=(vec2(h1,hash(id+7.31))-.5)*.45;
+float br=clamp(dot(c,vec3(.33)),0.,1.);float r=.34+.18*br+.06*h1;
+float dm=1.-smoothstep(r-.16,r,length(f));
+c=mix(c*.7,c*(1.04+.14*h1),dm);
+float tw=step(.985,hash(id+floor(time*3.)))*spec;c+=tw*.6;
+c+=(hash(gl_FragCoord.xy+fract(time)*91.)-.5)*.03;
+c=1.-exp(-c*1.7);o=vec4(c,1.);}`
+};
+
+function compile(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);
+  if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(s));return s;}
+const vs = compile(gl.VERTEX_SHADER,VS);
+const P = {};
+for(const k in FS){const p=gl.createProgram();gl.attachShader(p,vs);gl.attachShader(p,compile(gl.FRAGMENT_SHADER,FS[k]));
+  gl.bindAttribLocation(p,0,'aPos');gl.linkProgram(p);
+  if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(p));
+  const u={};const n=gl.getProgramParameter(p,gl.ACTIVE_UNIFORMS);
+  for(let i=0;i<n;i++){const nm=gl.getActiveUniform(p,i).name.replace('[0]','');u[nm]=gl.getUniformLocation(p,nm);}
+  P[k]={p,u};}
+
+const vao=gl.createVertexArray();gl.bindVertexArray(vao);
+const vb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,vb);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,-1,1,1,1,1,-1]),gl.STATIC_DRAW);
+const ib=gl.createBuffer();gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,ib);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array([0,1,2,0,2,3]),gl.STATIC_DRAW);
+gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);gl.enableVertexAttribArray(0);
+
+function fbo(w,h){const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  gl.texImage2D(gl.TEXTURE_2D,0,IFMT,w,h,0,gl.RGBA,TYPE,null);
+  const f=gl.createFramebuffer();gl.bindFramebuffer(gl.FRAMEBUFFER,f);gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,t,0);
+  gl.viewport(0,0,w,h);gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT);
+  return {t,f,w,h,tx:1/w,ty:1/h,bind(u){gl.activeTexture(gl.TEXTURE0+u);gl.bindTexture(gl.TEXTURE_2D,t);return u;}};}
+function dfbo(w,h){return {r:fbo(w,h),w:fbo(w,h),swap(){const x=this.r;this.r=this.w;this.w=x;}};}
+function blit(target){if(target){gl.bindFramebuffer(gl.FRAMEBUFFER,target.f);gl.viewport(0,0,target.w,target.h);}
+  else{gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,canvas.width,canvas.height);}
+  gl.drawElements(gl.TRIANGLES,6,gl.UNSIGNED_SHORT,0);}
+function use(k,texel){const s=P[k];gl.useProgram(s.p);gl.uniform2f(s.u.texel,texel[0],texel[1]);return s.u;}
+
+/* ================= Simulation state ================= */
+const SIM_RES=128, DYE_RES=640;
+let vel,dye,div,curlF,pres,aspect=1,dpr=1;
+function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
+  return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
+function resize(){dpr=Math.min(window.devicePixelRatio||1,2);
+  const w=Math.round(innerWidth*dpr),h=Math.round(innerHeight*dpr);
+  if(canvas.width===w&&canvas.height===h&&vel)return;
+  canvas.width=w;canvas.height=h;fx.width=w;fx.height=h;aspect=w/h;
+  const [sw,sh]=res(SIM_RES),[dw,dh]=res(DYE_RES);
+  vel=dfbo(sw,sh);dye=dfbo(dw,dh);div=fbo(sw,sh);curlF=fbo(sw,sh);pres=dfbo(sw,sh);
+  seed();}
+function seed(){const u=use('init',[dye.w.tx,dye.w.ty]);
+  gl.uniform3fv(u.pal,new Float32Array(pal().flat()));gl.uniform1f(u.seed,Math.random()*100);gl.uniform1f(u.aspect,aspect);
+  blit(dye.w);dye.swap();
+  for(let i=0;i<14;i++)splatVel(Math.random(),Math.random(),(Math.random()-.5)*900,(Math.random()-.5)*900,.012);}
+
+function splatVel(x,y,dx,dy,r){const u=use('splatVel',[vel.r.tx,vel.r.ty]);
+  gl.uniform1i(u.uT,vel.r.bind(0));gl.uniform1f(u.aspect,aspect);gl.uniform2f(u.point,x,y);
+  gl.uniform3f(u.color,dx,dy,0);gl.uniform1f(u.radius,(r||.003)*(aspect>1?aspect:1));blit(vel.w);vel.swap();}
+function splatDye(x,y,c,r,strength,thick){const u=use('splatDye',[dye.r.tx,dye.r.ty]);
+  gl.uniform1i(u.uT,dye.r.bind(0));gl.uniform1f(u.aspect,aspect);gl.uniform2f(u.point,x,y);
+  gl.uniform4f(u.color,c[0],c[1],c[2],thick==null?.6:thick);gl.uniform1f(u.radius,(r||.002)*(aspect>1?aspect:1));gl.uniform1f(u.strength,strength==null?1:strength);
+  blit(dye.w);dye.swap();}
+
+let flow=1, flowTarget=1, simTime=0;
+function step(dt){
+  const tx=[vel.r.tx,vel.r.ty];
+  let u=use('ambient',tx);gl.uniform1i(u.uVel,vel.r.bind(0));gl.uniform1f(u.t,simTime);gl.uniform1f(u.amp,38);gl.uniform1f(u.dt,dt);blit(vel.w);vel.swap();
+  u=use('curl',tx);gl.uniform1i(u.uVel,vel.r.bind(0));blit(curlF);
+  u=use('vorticity',tx);gl.uniform1i(u.uVel,vel.r.bind(0));gl.uniform1i(u.uCurl,curlF.bind(1));gl.uniform1f(u.curl,32);gl.uniform1f(u.dt,dt);blit(vel.w);vel.swap();
+  u=use('divergence',tx);gl.uniform1i(u.uVel,vel.r.bind(0));blit(div);
+  u=use('scale',tx);gl.uniform1i(u.uT,pres.r.bind(0));gl.uniform1f(u.value,.8);blit(pres.w);pres.swap();
+  u=use('pressure',tx);gl.uniform1i(u.uDiv,div.bind(1));
+  for(let i=0;i<22;i++){gl.uniform1i(u.uP,pres.r.bind(0));blit(pres.w);pres.swap();}
+  u=use('gradient',tx);gl.uniform1i(u.uP,pres.r.bind(0));gl.uniform1i(u.uVel,vel.r.bind(1));blit(vel.w);vel.swap();
+  u=use('advect',tx);gl.uniform2f(u.simTexel,vel.r.tx,vel.r.ty);gl.uniform1f(u.dt,dt);
+  gl.uniform1i(u.uVel,vel.r.bind(0));gl.uniform1i(u.uSrc,vel.r.bind(0));gl.uniform4f(u.diss,.25,.25,0,0);blit(vel.w);vel.swap();
+  u=use('advect',[dye.r.tx,dye.r.ty]);gl.uniform2f(u.simTexel,vel.r.tx,vel.r.ty);gl.uniform1f(u.dt,dt);
+  gl.uniform1i(u.uVel,vel.r.bind(0));gl.uniform1i(u.uSrc,dye.r.bind(1));gl.uniform4f(u.diss,.004,.004,.004,.035);blit(dye.w);dye.swap();
+}
+
+/* ================= Interaction (touch + hands) ================= */
+const fx=document.getElementById('fx');const fxc=fx.getContext('2d');
+const queue=[];           // deferred GPU splats
+let ambientClock=0, colorTick=0;
+const pickColor=(i)=>{const p=pal();const c=p[(i+colorTick)%p.length];const k=.9+Math.random()*.25;return c.map(v=>Math.min(1,v*k));};
+
+// touch fallback
+const pointers=new Map();
+canvas.addEventListener('pointerdown',e=>{pointers.set(e.pointerId,{x:e.clientX/innerWidth,y:1-e.clientY/innerHeight,c:pickColor(pointers.size+(Math.random()*6|0))});wake();});
+canvas.addEventListener('pointermove',e=>{const p=pointers.get(e.pointerId);if(!p)return;
+  const x=e.clientX/innerWidth,y=1-e.clientY/innerHeight;queue.push({x,y,dx:(x-p.x)*5200,dy:(y-p.y)*5200,c:p.c,r:.0032,s:.9});p.x=x;p.y=y;});
+['pointerup','pointercancel','pointerleave'].forEach(t=>canvas.addEventListener(t,e=>pointers.delete(e.pointerId)));
+
+// hand state
+const TIPS=[4,8,12,16,20];
+const tracks={};            // key `${hand}-${tip}` -> {x,y}
+let hands=null, handsReady=false, camOn=false, busy=false, lastSeen=0, fistSince=0, handInfo=[];
+const pinchState={};
+const d2=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+
+function onHands(res){
+  const now=performance.now();
+  const list=res.multiHandLandmarks||[];
+  drawPreview(res,list);
+  if(!list.length){ if(now-lastSeen>250){for(const k in tracks)delete tracks[k];} handInfo=[]; status(camOn?'손을 카메라에 보여주세요':''); fistSince=0; return; }
+  lastSeen=now; handInfo=[];
+  let anyFist=false;
+  list.forEach((lm,h)=>{
+    const size=d2(lm[0],lm[9])||.1;
+    const fist=[8,12,16,20].every(i=>d2(lm[i],lm[0])<size*1.15);
+    const pinch=!fist && d2(lm[4],lm[8])<size*.38;
+    anyFist=anyFist||fist;
+    const pts=[];
+    TIPS.forEach((ti,j)=>{
+      const raw={x:lm[ti].x, y:1-lm[ti].y};       // selfieMode=true already mirrors
+      const key=h+'-'+ti; const prev=tracks[key];
+      const sm=prev?{x:prev.x+(raw.x-prev.x)*.6,y:prev.y+(raw.y-prev.y)*.6}:raw;
+      tracks[key]=sm; pts.push(sm);
+      if(!prev||fist)return;
+      let dx=sm.x-prev.x, dy=sm.y-prev.y; const sp=Math.hypot(dx,dy);
+      if(sp>.25)return;                               // tracking jump
+      const isIndex=ti===8, strong=isIndex?1:.55;
+      queue.push({x:sm.x,y:sm.y,dx:dx*5600*strong,dy:dy*5600*strong,c:pickColor(j+h*2),r:isIndex?.0034:.0019,s:Math.min(1,.12+sp*40)*strong,t:isIndex?.7:.4});
+    });
+    // pinch → vortex around pinch point
+    const pk='p'+h, mid={x:(lm[4].x+lm[8].x)/2,y:1-(lm[4].y+lm[8].y)/2};
+    if(pinch){
+      if(!pinchState[pk]){ // burst on pinch start
+        colorTick++;
+        for(let i=0;i<8;i++){const a=i/8*Math.PI*2;queue.push({x:mid.x+Math.cos(a)*.02,y:mid.y+Math.sin(a)*.02,dx:Math.cos(a)*900,dy:Math.sin(a)*900,c:pickColor(i),r:.0024,s:1,t:.9});}
+      }
+      const dir=(h===0?1:-1);
+      for(let i=0;i<8;i++){const a=i/8*Math.PI*2+now*.002;const R=.07;
+        queue.push({x:mid.x+Math.cos(a)*R,y:mid.y+Math.sin(a)*R*aspect,dx:-Math.sin(a)*700*dir,dy:Math.cos(a)*700*dir,r:.0045,vOnly:true});}
+    }
+    pinchState[pk]=pinch;
+    handInfo.push({pts,fist,pinch,mid});
+  });
+  if(anyFist){ if(!fistSince)fistSince=now; } else fistSince=0;
+  flowTarget = (fistSince && now-fistSince>160) ? 0 : 1;
+  status(`손 ${list.length}개 인식 ${flowTarget? '':'· 굳힘'}`);
+}
+
+/* ================= Camera + embedded AI ================= */
+const video=document.getElementById('video');const prev=document.getElementById('preview');const pc=prev.getContext('2d');
+const statusEl=document.getElementById('status');const status=t=>{if(t)statusEl.textContent=t;};
+const camBtn=document.getElementById('camBtn');
+let stream=null, wakeLock=null;
+
+async function startCam(){
+  try{
+    status('AI 모델 불러오는 중…');camBtn.disabled=true;
+    if(!hands){
+      hands=new Hands({locateFile:f=>'mediapipe/'+f});
+      hands.setOptions({maxNumHands:2,modelComplexity:0,minDetectionConfidence:.6,minTrackingConfidence:.5,selfieMode:true});
+      hands.onResults(onHands);
+      await hands.initialize();
+    }
+    status('카메라 여는 중…');
+    stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:640},height:{ideal:480},frameRate:{ideal:30}}});
+    video.srcObject=stream;await video.play();
+    camOn=true;prev.style.display='block';camBtn.textContent='손 인식 끄기';camBtn.classList.add('on');
+    status('손을 카메라에 보여주세요');
+    try{wakeLock=await navigator.wakeLock?.request('screen');}catch(e){}
+    detectLoop();
+  }catch(err){console.error(err);status(err.name==='NotAllowedError'?'카메라 권한이 거부되었어요':'시작 실패: '+(err.message||err));}
+  finally{camBtn.disabled=false;}
+}
+function stopCam(){camOn=false;stream&&stream.getTracks().forEach(t=>t.stop());stream=null;prev.style.display='none';
+  camBtn.textContent='손 인식 시작';camBtn.classList.remove('on');handInfo=[];flowTarget=1;fistSince=0;for(const k in tracks)delete tracks[k];
+  try{wakeLock&&wakeLock.release();}catch(e){} status('화면을 문질러 보거나 카메라를 켜세요');}
+async function detectLoop(){
+  if(!camOn)return;
+  if(!busy&&video.readyState>=2){busy=true;try{await hands.send({image:video});}catch(e){console.warn(e);}busy=false;}
+  requestAnimationFrame(detectLoop);
+}
+camBtn.onclick=()=>camOn?stopCam():startCam();
+document.addEventListener('visibilitychange',async()=>{if(!document.hidden&&camOn){try{wakeLock=await navigator.wakeLock?.request('screen');}catch(e){}}});
+
+function drawPreview(res,list){
+  pc.drawImage(res.image,0,0,prev.width,prev.height);
+  pc.fillStyle='#f7c844';
+  for(const lm of list)for(const p of lm){pc.beginPath();pc.arc(p.x*prev.width,p.y*prev.height,2.5,0,7);pc.fill();}
+}
+
+/* fingertip glow overlay */
+function drawFx(){
+  fxc.clearRect(0,0,fx.width,fx.height);
+  if(!handInfo.length)return;
+  fxc.lineWidth=1.5*dpr;
+  for(const h of handInfo){
+    h.pts.forEach((p,i)=>{const x=p.x*fx.width,y=(1-p.y)*fx.height;const r=(i===1?11:7)*dpr*(h.fist?.7:1);
+      fxc.strokeStyle=h.fist?'rgba(255,255,255,.35)':'rgba(255,248,230,.75)';fxc.beginPath();fxc.arc(x,y,r,0,7);fxc.stroke();});
+    if(h.pinch){fxc.strokeStyle='rgba(247,200,68,.8)';fxc.beginPath();fxc.arc(h.mid.x*fx.width,(1-h.mid.y)*fx.height,26*dpr,0,7);fxc.stroke();}
+  }
+}
+
+/* ================= Main loop ================= */
+let last=performance.now(), snapReq=false;
+const freezeEl=document.getElementById('freeze');
+function frame(now){
+  const dt=Math.min((now-last)/1000,1/30);last=now;
+  resize();
+  flow+=(flowTarget-flow)*Math.min(1,dt*(flowTarget>flow?2.5:6));
+  freezeEl.style.opacity=flow<.5?1:0;
+  // ambient life: drifting color drops keep the canvas evolving
+  ambientClock+=dt*flow;
+  if(ambientClock>.55){ambientClock=0;const x=Math.random(),y=Math.random(),a=Math.random()*6.28;
+    splatDye(x,y,pickColor(Math.random()*6|0),.0016+Math.random()*.003,.75,.8);splatVel(x,y,Math.cos(a)*420,Math.sin(a)*420,.004);}
+  if(Math.random()<dt*.15)colorTick++;
+  // apply queued splats
+  for(const s of queue.splice(0)){
+    if(flow>.3)splatVel(s.x,s.y,s.dx*flow,s.dy*flow,s.r*1.2);
+    if(!s.vOnly)splatDye(s.x,s.y,s.c,s.r,s.s,s.t);
+  }
+  if(flow>.02){simTime+=dt*flow;step(dt*flow);}
+  // display
+  const u=use('display',[0,0]);gl.uniform1i(u.uDye,dye.r.bind(0));gl.uniform2f(u.dyeTexel,dye.r.tx,dye.r.ty);
+  gl.uniform1f(u.dotSize,2.2*dpr);gl.uniform1f(u.relief,9.+6.*(1.-flow));gl.uniform1f(u.time,now*.001);blit(null);
+  if(snapReq){snapReq=false;canvas.toBlob(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);
+    a.download='hand-flow-'+new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')+'.png';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000);},'image/png');}
+  drawFx();
+  requestAnimationFrame(frame);
+}
+
+/* ================= UI ================= */
+const palWrap=document.getElementById('palettes');
+function renderPalettes(){palWrap.innerHTML='';for(const name in PALETTES){const b=document.createElement('button');b.className='chip';
+  b.setAttribute('aria-pressed',name===paletteName);b.innerHTML='<i>'+PALETTES[name].map(c=>`<span style="background:${c}"></span>`).join('')+'</i>'+name;
+  b.onclick=()=>{paletteName=name;renderPalettes();for(let i=0;i<10;i++)queue.push({x:Math.random(),y:Math.random(),dx:0,dy:0,c:pickColor(i),r:.006,s:.9,t:.6});};
+  palWrap.appendChild(b);}}
+renderPalettes();
+document.getElementById('seedBtn').onclick=()=>seed();
+document.getElementById('snapBtn').onclick=()=>{snapReq=true;};
+document.getElementById('fsBtn').onclick=()=>{const d=document.documentElement;
+  if(document.fullscreenElement)document.exitFullscreen();else (d.requestFullscreen||d.webkitRequestFullscreen)?.call(d);};
+let hideTimer=0;
+function wake(){if(document.body.classList.contains('immersive')){clearTimeout(hideTimer);}}
+document.getElementById('hideBtn').onclick=()=>{document.body.classList.add('immersive');status('');};
+// leave immersive mode: tap the top-left corner
+document.querySelector('.brand').addEventListener('click',()=>document.body.classList.remove('immersive'));
+canvas.addEventListener('dblclick',()=>document.body.classList.toggle('immersive'));
+
+// PWA install
+let deferred=null;const inst=document.getElementById('install');
+addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferred=e;inst.style.display='block';});
+inst.onclick=async()=>{if(!deferred)return;deferred.prompt();await deferred.userChoice;deferred=null;inst.style.display='none';};
+if('serviceWorker' in navigator && location.protocol!=='file:'){
+  addEventListener('load',()=>navigator.serviceWorker.register('sw.js').then(r=>{
+    navigator.serviceWorker.ready.then(()=>{ if(!camOn&&statusEl.textContent.startsWith('화면'))status('오프라인 저장 완료 · 화면을 문지르거나 카메라를 켜세요'); });
+  }).catch(e=>console.warn('SW',e)));
+}
+
+resize();requestAnimationFrame(frame);
+</script>
+</body>
+</html>

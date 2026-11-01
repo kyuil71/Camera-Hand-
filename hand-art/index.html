@@ -48,6 +48,10 @@ body.menu .dock{transform:translate(-50%,0)}
 #speed::-webkit-slider-thumb{-webkit-appearance:none;width:26px;height:26px;margin-top:-11px;border-radius:50%;background:#fff;box-shadow:0 1px 6px rgba(0,0,0,.4)}
 #speed::-moz-range-track{height:4px;border-radius:2px;background:linear-gradient(90deg,#00c8ff,#ffd000,#ff5a00)}
 #speed::-moz-range-thumb{width:26px;height:26px;border:0;border-radius:50%;background:#fff}
+.seg{gap:0;margin:0 0 12px;border:1px solid var(--line);border-radius:14px;padding:3px;background:rgba(255,255,255,.04)}
+.seg button{flex:1;min-height:42px;border:0;border-radius:11px;background:transparent;color:var(--mute);font:inherit;font-size:16px;font-weight:600}
+.seg button[aria-pressed=true]{background:var(--ink);color:#101826}
+body.water #palettes{display:none}
 .hint{font-size:16px;color:var(--mute);text-align:center;margin-top:10px;line-height:1.5}
 .hint b{color:var(--ink);font-weight:600}
 </style>
@@ -62,6 +66,7 @@ body.menu .dock{transform:translate(-50%,0)}
 <div class="dock" id="sheet">
   <div class="panel">
     <div class="head" id="sheetHead"><span class="bar"></span><div id="status">손 인식 꺼짐 · 화면을 문질러 보세요</div></div>
+    <div class="row seg" id="modeSeg"><button data-m="paint">물감</button><button data-m="water">물</button></div>
     <div class="speed"><span>흐름 속도</span><input type="range" id="speed" min="0" max="100" step="1"><b id="speedVal"></b></div>
     <div class="row chips" id="palettes"></div>
     <div class="row">
@@ -73,8 +78,8 @@ body.menu .dock{transform:translate(-50%,0)}
       <button class="btn" id="fsBtn">전체화면</button>
       <button class="btn" id="install">앱 설치</button>
     </div>
-    <p class="hint"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 10</p>
+    <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
+    <p class="hint" id="ver">버전 12</p>
   </div>
 </div>
 
@@ -189,7 +194,133 @@ float dm=1.-smoothstep(r-.17,r,length(f));
 c=mix(c*.8,c*(1.03+.1*h1),dm);
 c+=step(.988,hash(id+floor(time*4.)))*spec*.7;
 c+=(hash(gl_FragCoord.xy+fract(time)*91.)-.5)*.025;
-c=1.-exp(-c*1.6);c=clamp(mix(vec3(dot(c,vec3(.3,.55,.15))),c,1.18),0.,1.);o=vec4(c,1.);}`
+c=1.-exp(-c*1.6);c=clamp(mix(vec3(dot(c,vec3(.3,.55,.15))),c,1.18),0.,1.);o=vec4(c,1.);}`,
+wallVel: H+`uniform sampler2D uVel;uniform float aspect,dt;uniform vec2 simTexel;
+void main(){vec2 v=texture(uVel,vUv).xy;
+vec4 d=vec4(vUv.x*aspect,(1.-vUv.x)*aspect,vUv.y,1.-vUv.y);
+vec2 wp[4];wp[0]=vec2(simTexel.x*1.5,vUv.y);wp[1]=vec2(1.-simTexel.x*1.5,vUv.y);wp[2]=vec2(vUv.x,simTexel.y*1.5);wp[3]=vec2(vUv.x,1.-simTexel.y*1.5);
+vec2 n[4];n[0]=vec2(-1.,0.);n[1]=vec2(1.,0.);n[2]=vec2(0.,-1.);n[3]=vec2(0.,1.);
+for(int i=0;i<4;i++){float k=smoothstep(.0,.012,d[i])*smoothstep(.08,.02,d[i]);if(k<=0.)continue;
+ vec2 vw=texture(uVel,wp[i]).xy;float hit=max(dot(vw,n[i]),0.);
+ vec2 tg=vec2(-n[i].y,n[i].x);float st=dot(vw,tg);
+ v-=n[i]*hit*k*dt*9.;                          // rebound off the wall (출렁)
+ v+=tg*sign(st+1e-4)*hit*k*dt*2.5;}            // and run along it
+o=vec4(v,0.,1.);}`,
+wallPile: H+`uniform sampler2D uDye,uVel;uniform float aspect,dt;
+void main(){vec4 c=texture(uDye,vUv);vec2 v=texture(uVel,vUv).xy;
+vec4 d=vec4(vUv.x*aspect,(1.-vUv.x)*aspect,vUv.y,1.-vUv.y);
+float imp=max(-v.x,0.)*smoothstep(.02,0.,d.x)+max(v.x,0.)*smoothstep(.02,0.,d.y)+max(-v.y,0.)*smoothstep(.02,0.,d.z)+max(v.y,0.)*smoothstep(.02,0.,d.w);
+float band=smoothstep(.03,0.,min(min(d.x,d.y),min(d.z,d.w)));
+c.a=min(c.a+max(imp-60.,0.)*dt*.006,2.6);
+c.a-=max(c.a-1.,0.)*dt*.9*band;                 // the surge slides back down the wall
+o=c;}`,
+waterClear: H+`void main(){o=vec4(0.,0.,0.,1.);}`,
+waterStep: H+`uniform sampler2D uT;uniform float c2,damp,w2,hs;
+void main(){vec4 s=texture(uT,vUv);float hC=s.x,v=s.y;
+float lap=texture(uT,vL).x+texture(uT,vR).x+texture(uT,vT).x+texture(uT,vB).x-4.*hC;
+v+=(c2*lap-w2*hC)*hs;
+v*=damp;hC+=v*hs;
+o=vec4(hC,v,0.,1.);}`,
+waterPoke: H+`uniform sampler2D uT;uniform float aspect,radius,amp;uniform vec2 point;
+void main(){vec4 s=texture(uT,vUv);vec2 p=vUv-point;p.x*=aspect;float g=exp(-dot(p,p)/radius);o=vec4(s.x,s.y-amp*g,0.,1.);}`,
+waterGrad: H+`uniform sampler2D uT;void main(){float l=texture(uT,vL).x,r=texture(uT,vR).x,b=texture(uT,vB).x,t=texture(uT,vT).x,c=texture(uT,vUv).x;
+o=vec4((r-l)*.5,(t-b)*.5,l+r+b+t-4.*c,c);}`,
+waterRender: H+`uniform sampler2D uH;uniform vec2 simTexel;uniform float aspect,time,nk;uniform vec3 sunDir;
+#define TAU 6.28318530718
+vec2 h2(vec2 p){return vec2(hash(p),hash(p+19.19));}
+float fbm4(vec2 p){float s=0.,a=.5;for(int i=0;i<4;i++){s+=a*vn(p);p=p*2.07+13.7;a*=.5;}return s;}
+float swellH(vec2 p,float t){
+ return .0060*sin(dot(p,vec2(.80,.60))*7.0-t*.85)
+       +.0042*sin(dot(p,vec2(-.45,.89))*11.0-t*1.10+1.3)
+       +.0030*sin(dot(p,vec2(.97,-.24))*17.0-t*1.35+2.1)
+       +.0018*sin(dot(p,vec2(.20,.98))*27.0-t*1.70+.4);}
+float gustK(vec2 p,float t){return smoothstep(.38,.78,fbm4(p*1.3+vec2(t*.05,t*.03)));}
+float ripH(vec2 p,float t,float gk){p+=.025*vec2(vn(p*5.),vn(p*5.+9.));float s=0.;
+ s+=sin(dot(p,vec2(.93,.37))*61.-t*2.6);
+ s+=sin(dot(p,vec2(-.41,.91))*73.-t*2.9+1.7);
+ s+=.8*sin(dot(p,vec2(.12,-.99))*89.-t*3.2+4.1);
+ s+=.7*sin(dot(p,vec2(-.85,-.53))*103.-t*3.5+2.6);
+ s+=.5*sin(dot(p,vec2(.62,.78))*127.-t*3.9+.9);
+ return s*(.00005+.00026*gk);}
+float caus(vec2 q,float t){
+ vec2 p=mod(q*TAU,TAU)-250.;vec2 i=p;float c=1.,inten=.005;
+ for(int n=0;n<5;n++){float tn=t*(1.-(3.5/float(n+1)));i=p+vec2(cos(tn-i.x)+sin(tn+i.y),sin(tn-i.y)+cos(tn+i.x));
+  c+=1./length(vec2(p.x/(sin(i.x+tn)/inten),p.y/(cos(i.y+tn)/inten)));}
+ c/=5.;c=1.17-pow(c,1.4);return pow(abs(c),8.);}
+vec3 stoneCol(float a,float b){vec3 c=mix(vec3(.50,.45,.38),vec3(.80,.74,.63),a);
+ c=mix(c,vec3(.62,.46,.31),step(.55,b));c=mix(c,vec3(.30,.29,.28),step(.76,b));c=mix(c,vec3(.68,.42,.30),step(.88,b));c=mix(c,vec3(.86,.84,.78),step(.95,b));return c;}
+float pebbles(vec2 q,float sc,float fill,out vec2 dir,out vec2 id){
+ vec2 s=q*sc;vec2 ip=floor(s),fp=fract(s);float best=9.,bh=-1.;dir=vec2(0.);id=ip;
+ for(int y=-1;y<=1;y++)for(int x=-1;x<=1;x++){vec2 o2=vec2(x,y);vec2 cid=ip+o2;
+  if(hash(cid+41.)>fill)continue;
+  vec2 c=o2+h2(cid)*.6+.2;float rad=.30+.20*hash(cid+5.3);float an=hash(cid+9.1)*6.2832;
+  vec2 d=fp-c;vec2 lc=vec2(cos(an)*d.x+sin(an)*d.y,-sin(an)*d.x+cos(an)*d.y);lc.x/=1.+.55*hash(cid+2.7);
+  float dn=length(lc)/rad;float hgt=(1.-dn*dn)*rad;if(dn<1.&&hgt>bh){bh=hgt;best=dn;dir=d/rad;id=cid;}
+  else if(bh<0.&&dn<best){best=dn;dir=d/rad;id=cid;}}
+ return best;}
+vec3 bed(vec2 q,out float sh){
+ vec3 L=normalize(vec3(-.3,.5,.8));
+ vec3 sand=vec3(.70,.62,.48)*(.82+.30*vn(q*240.))*(.88+.24*vn(q*19.));
+ sand*=.94+.08*sin(dot(q,vec2(.6,.8))*90.+vn(q*8.)*6.);
+ vec3 col=sand;sh=1.;
+ vec2 dir,id;float d1=pebbles(q,9.,.78,dir,id);
+ vec2 dir2,id2;float d2=pebbles(q+3.7,22.,.55,dir2,id2);
+ float cshd=smoothstep(1.45,1.0,min(d1,d2*1.1));sh*=1.-.38*cshd;
+ if(d2<1.){float dome=sqrt(max(0.,1.-d2*d2));vec3 n=normalize(vec3(-dir2*1.1,dome+.15));
+  vec3 c=stoneCol(hash(id2),hash(id2+1.7))*(.85+.3*vn(q*300.+id2));
+  col=mix(col,c*(.45+.75*max(dot(n,L),0.)),smoothstep(1.,.88,d2));}
+ if(d1<1.){float dome=sqrt(max(0.,1.-d1*d1));vec3 n=normalize(vec3(-dir*1.2,dome+.12));
+  vec3 c=stoneCol(hash(id),hash(id+1.7))*(.82+.36*vn(q*170.+id*3.))*(.9+.2*vn(q*40.+id));
+  float diff=max(dot(n,L),0.);float spec=pow(max(dot(reflect(-L,n),vec3(0.,0.,1.)),0.),18.)*.12;
+  col=mix(col,c*(.40+.80*diff)+spec,smoothstep(1.,.9,d1));sh=mix(sh,1.,smoothstep(1.,.9,d1));}
+ return col;}
+vec3 sky(vec3 R,float t){
+ float h=clamp(R.z,0.,1.);
+ vec3 c=mix(vec3(.76,.85,.92),vec3(.16,.37,.70),pow(h,.6));
+ vec2 cp=R.xy/(R.z+.25)+vec2(t*.012,t*.004);
+ float cl=smoothstep(.5,.85,fbm4(cp*.8));
+ c=mix(c,vec3(.96,.97,.99),cl*.8);
+ float sd=max(dot(R,sunDir),0.);
+ c+=vec3(1.,.94,.82)*(pow(sd,900.)*40.+pow(sd,60.)*.3)*(1.-cl*.8);
+ return c;}
+void main(){
+ vec2 uv=vUv;vec2 p=vec2(uv.x*aspect,uv.y);float t=time;
+ vec2 gs=texture(uH,uv).xy/simTexel.y*nk;
+ float gk=gustK(p,t),e=.0015;
+ float s0=swellH(p,t)+ripH(p,t,gk);
+ vec2 ga=vec2(swellH(p+vec2(e,0.),t)+ripH(p+vec2(e,0.),t,gk)-s0,swellH(p+vec2(0.,e),t)+ripH(p+vec2(0.,e),t,gk)-s0)/e;
+ vec2 g=gs+ga;
+ float dW=min(min(uv.x,1.-uv.x)*aspect,min(uv.y,1.-uv.y));
+ float nearW=exp(-dW/.022);
+ float hh=texture(uH,uv).w*nk;
+ g*=1.+2.2*nearW;
+ vec3 N=normalize(vec3(-g,1.));
+ vec3 P=vec3(p,0.);vec3 cam=vec3(.5*aspect,-.6,.85);vec3 V=normalize(cam-P);
+ float cosT=clamp(dot(N,V),0.,1.);float F=.02+.98*pow(1.-cosT,5.);
+ vec3 rd=refract(-V,N,1./1.333);
+ float depth=.045+.30*pow(smoothstep(-.1,1.15,uv.y),1.4)+.03*(fbm4(p*2.2)-.5);
+ float tt=depth/max(-rd.z,.08);vec2 hit=p+rd.xy*tt;
+ float sh;vec3 bc=bed(hit,sh);
+ vec2 lq=hit-sunDir.xy/sunDir.z*depth*.6+g*depth*1.2;
+ float cs=.65*caus(lq*4.2,t*.5)+.45*caus(lq*6.7+vec2(3.1,1.7),t*.62);
+ vec2 huv=vec2(hit.x/aspect,hit.y);
+ float lap2=texture(uH,huv).z;
+ cs*=1.+clamp(-lap2*nk*900.,-.85,3.);
+ vec3 lit=bc*sh*(.52+2.6*cs);
+ vec3 absorb=vec3(1.05,.26,.19);float path=tt+depth*1.1;
+ vec3 under=lit*exp(-absorb*path)+vec3(.03,.15,.16)*(1.-exp(-1.4*path));
+ vec3 R=reflect(-V,N);R.z=abs(R.z);
+ vec3 col=mix(under,sky(R,t),F);
+ float run=abs(hh)*nearW;
+ float fn=vn(p*140.+vec2(t*2.,-t*1.3))*.6+vn(p*320.-t*3.)*.4;
+ float foam=smoothstep(.0018,.006,run*(.6+.8*fn))+smoothstep(.0022,.006,abs(hh))*exp(-dW/.004)*(.4+.6*fn);
+ col=mix(col,vec3(.93,.96,.97),clamp(foam,0.,1.)*.85);
+ float wallSh=1.-.35*exp(-min(1.-uv.y,uv.x*aspect)/.03);
+ col*=wallSh;
+ col+=vec3(.7,.8,.85)*exp(-dW/.0012)*.18;
+ col*=1.-.18*pow(length(uv-.5)*1.25,2.);
+ col*=1.08;col=(col*(2.51*col+.03))/(col*(2.43*col+.59)+.14);
+ o=vec4(clamp(col,0.,1.),1.);}`
 };
 
 function compile(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);
@@ -223,7 +354,8 @@ function use(k,texel){const s=P[k];gl.useProgram(s.p);gl.uniform2f(s.u.texel,tex
 
 /* ================= Simulation state ================= */
 const SIM_RES=128, DYE_RES=640;
-let vel,dye,det,detSeed=0,div,curlF,pres,aspect=1,dpr=1;
+let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
+const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
 function resize(){dpr=Math.min(window.devicePixelRatio||1,2);
@@ -232,6 +364,7 @@ function resize(){dpr=Math.min(window.devicePixelRatio||1,2);
   canvas.width=w;canvas.height=h;fx.width=w;fx.height=h;aspect=w/h;
   const [sw,sh]=res(SIM_RES),[dw,dh]=res(DYE_RES);
   vel=dfbo(sw,sh);dye=dfbo(dw,dh);det=dfbo(dw,dh);div=fbo(sw,sh);curlF=fbo(sw,sh);pres=dfbo(sw,sh);
+  const [ww,wh]=res(WATER_RES);wat=dfbo(ww,wh);wgrad=fbo(ww,wh);waterClear();
   seed();}
 function seed(){const u=use('init',[dye.w.tx,dye.w.ty]);
   gl.uniform3fv(u.pal,palFlat);gl.uniform1f(u.seed,Math.random()*100);gl.uniform1f(u.aspect,aspect);
@@ -277,13 +410,52 @@ function step(dt){
   u=use('pressure',tx);gl.uniform1i(u.uDiv,div.bind(1));
   for(let i=0;i<22;i++){gl.uniform1i(u.uP,pres.r.bind(0));blit(pres.w);pres.swap();}
   u=use('gradient',tx);gl.uniform1i(u.uP,pres.r.bind(0));gl.uniform1i(u.uVel,vel.r.bind(1));blit(vel.w);vel.swap();
+  u=use('wallVel',tx);gl.uniform1i(u.uVel,vel.r.bind(0));gl.uniform1f(u.aspect,aspect);gl.uniform1f(u.dt,dt);gl.uniform2f(u.simTexel,vel.r.tx,vel.r.ty);blit(vel.w);vel.swap();
   u=use('advect',tx);gl.uniform2f(u.simTexel,vel.r.tx,vel.r.ty);gl.uniform1f(u.dt,dt);
   gl.uniform1i(u.uVel,vel.r.bind(0));gl.uniform1i(u.uSrc,vel.r.bind(0));gl.uniform4f(u.diss,.2,.2,0,0);blit(vel.w);vel.swap();
   u=use('maccormack',[dye.r.tx,dye.r.ty]);gl.uniform2f(u.simTexel,vel.r.tx,vel.r.ty);gl.uniform2f(u.srcTexel,dye.r.tx,dye.r.ty);gl.uniform1f(u.dt,dt);
   gl.uniform1i(u.uVel,vel.r.bind(0));gl.uniform1i(u.uSrc,dye.r.bind(1));gl.uniform4f(u.diss,.003,.003,.003,.03);blit(dye.w);dye.swap();
   gl.uniform2f(u.srcTexel,det.r.tx,det.r.ty);gl.uniform1i(u.uSrc,det.r.bind(1));gl.uniform4f(u.diss,0,0,0,0);blit(det.w);det.swap();
   detailPass(.006);
+  u=use('wallPile',[dye.r.tx,dye.r.ty]);gl.uniform1i(u.uDye,dye.r.bind(0));gl.uniform1i(u.uVel,vel.r.bind(1));gl.uniform1f(u.aspect,aspect);gl.uniform1f(u.dt,dt);blit(dye.w);dye.swap();
 }
+
+/* ================= Water mode (lake) ================= */
+let mode='paint'; try{if(localStorage.getItem('hf-mode')==='water')mode='water';}catch(e){}
+let waterTime=0, wAcc=0, dropClock=0, glideClock=0; const gliders=[];
+const W_C=250, W_H=1/540, W_NK=.2, SUN=(()=>{const v=[.12,.82,.56],l=Math.hypot(...v);return v.map(x=>x/l);})();
+function waterClear(){const u=use('waterClear',[0,0]);blit(wat.w);wat.swap();blit(wat.w);wat.swap();}
+function waterPoke(x,y,amp,r){const u=use('waterPoke',[wat.r.tx,wat.r.ty]);gl.uniform1i(u.uT,wat.r.bind(0));
+  gl.uniform1f(u.aspect,aspect);gl.uniform2f(u.point,x,y);gl.uniform1f(u.amp,amp);gl.uniform1f(u.radius,r*(aspect>1?aspect:1));blit(wat.w);wat.swap();}
+function waterStep(){const u=use('waterStep',[wat.r.tx,wat.r.ty]);gl.uniform1i(u.uT,wat.r.bind(0));
+  gl.uniform1f(u.c2,W_C*W_C);gl.uniform1f(u.damp,Math.exp(-.55*W_H));gl.uniform1f(u.w2,4.);gl.uniform1f(u.hs,W_H);blit(wat.w);wat.swap();}
+function waterFrame(dt){
+  const wts=Math.min(.45+.55*timeScale,2.6);            // slider + finger speed → water time
+  const sdt=dt*flow*wts; waterTime+=sdt;
+  const live=flow>.3;
+  // fingers / touch / pinch rings → pressure on the surface (stronger when moving faster)
+  for(const s of queue.splice(0)){ if(!live)continue;
+    const sp=s.vx!=null?Math.hypot(s.vx*aspect,s.vy):Math.hypot(s.dx||0,s.dy||0)/2600;
+    const main=s.set?s.set>.6:true;
+    waterPoke(s.x,s.y,Math.min(.15+sp,3.2)*(main?WATER_AMP:WATER_AMP*.55)*(s.vOnly?.5:1),main?.00055:.0003);}
+  // pointing → wake travelling the way the finger points
+  glideClock+=dt;
+  for(const h of handInfo){const p=h.point;if(!p||!live)continue;
+    if(glideClock>.06){gliders.push({x:p.x,y:p.y,dx:p.dx,dy:p.dy,life:1.8});}}
+  if(glideClock>.06)glideClock=0;
+  for(let i=gliders.length-1;i>=0;i--){const g=gliders[i];g.life-=sdt;
+    g.x+=g.dx/aspect*.30*sdt;g.y+=g.dy*.30*sdt;
+    if(g.life<=0||g.x<-.05||g.x>1.05||g.y<-.05||g.y>1.05){gliders.splice(i,1);continue;}
+    if(live)waterPoke(g.x,g.y,WATER_AMP*.9*Math.min(1,g.life),.0004);}
+  // a calm lake: now and then a tiny drop / fish rise
+  dropClock-=sdt; if(dropClock<0){dropClock=1.8+Math.random()*3.5;waterPoke(Math.random(),Math.random(),WATER_AMP*(.4+Math.random()*.5),.00012);}
+  // wave equation sub-steps
+  wAcc+=sdt; let n=0; while(wAcc>=W_H&&n<30){waterStep();wAcc-=W_H;n++;} if(n>=30)wAcc=0;
+  let u=use('waterGrad',[wat.r.tx,wat.r.ty]);gl.uniform1i(u.uT,wat.r.bind(0));blit(wgrad);
+  u=use('waterRender',[wat.r.tx,wat.r.ty]);gl.uniform1i(u.uH,wgrad.bind(0));gl.uniform2f(u.simTexel,wat.r.tx,wat.r.ty);
+  gl.uniform1f(u.aspect,aspect);gl.uniform1f(u.time,waterTime);gl.uniform1f(u.nk,W_NK);gl.uniform3f(u.sunDir,SUN[0],SUN[1],SUN[2]);blit(null);
+}
+let WATER_AMP=1;
 
 /* ================= Interaction (touch + hands) ================= */
 const fx=document.getElementById('fx');const fxc=fx.getContext('2d');
@@ -416,8 +588,9 @@ function frame(now){
   const dt=Math.min((now-last)/1000,1/30);last=now;
   resize();
   flow+=(flowTarget-flow)*Math.min(1,dt*(flowTarget>flow?2.5:6));
-  // ambient life: drifting color drops keep the canvas evolving
   updateTimeScale(dt);
+  if(mode==='water'){ waterFrame(dt); } else {
+  // ambient life: drifting color drops keep the canvas evolving
   ambientClock+=dt*flow*Math.max(timeScale,.15);
   if(ambientClock>.6){ambientClock=0;const x=Math.random(),y=Math.random(),a=Math.random()*6.28;
     const big=Math.random()<.3, r=big?.012+Math.random()*.022:.0014+Math.random()*.0035;
@@ -440,6 +613,7 @@ function frame(now){
   // display
   const u=use('display',[0,0]);gl.uniform3fv(u.pal,palFlat);gl.uniform1i(u.uDye,dye.r.bind(0));gl.uniform1i(u.uDet,det.r.bind(1));gl.uniform2f(u.dyeTexel,dye.r.tx,dye.r.ty);
   gl.uniform1f(u.dotSize,2.0*dpr);gl.uniform1f(u.relief,11.+7.*(1.-flow));gl.uniform1f(u.time,now*.001);blit(null);
+  }
   if(snapReq){snapReq=false;canvas.toBlob(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);
     a.download='hand-flow-'+new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')+'.png';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000);},'image/png');}
   requestAnimationFrame(frame);
@@ -456,7 +630,16 @@ const speedEl=document.getElementById('speed'),speedTxt=document.getElementById(
 const speedLabel=v=>v<30?'아주 느림':v<45?'느림':v<60?'보통':v<80?'빠름':'아주 빠름';
 function applySpeed(v){speedVal=+v;speed=sliderToSpeed(speedVal);if(handAct<.05)timeScale=speed;speedTxt.textContent=speedLabel(speedVal);try{localStorage.setItem('hf-speed',speedVal);}catch(e){}}
 speedEl.value=speedVal;applySpeed(speedVal);speedEl.addEventListener('input',e=>applySpeed(e.target.value));
-document.getElementById('seedBtn').onclick=()=>seed();
+const seedBtn=document.getElementById('seedBtn'),hintTxt=document.getElementById('hintTxt');
+const HINTS={paint:hintTxt.innerHTML,
+  water:'<b>손가락</b> 물결 만들기 · <b>검지만 펴기</b> 가리킨 방향으로 물결<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 물 멈춤'};
+function setMode(m){mode=m;document.body.classList.toggle('water',m==='water');
+  document.querySelectorAll('#modeSeg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.m===m));
+  seedBtn.textContent=m==='water'?'잔잔하게':'새 캔버스';hintTxt.innerHTML=HINTS[m];
+  gliders.length=0;queue.length=0;try{localStorage.setItem('hf-mode',m);}catch(e){}}
+document.querySelectorAll('#modeSeg button').forEach(b=>b.onclick=()=>setMode(b.dataset.m));
+setMode(mode);
+seedBtn.onclick=()=>{if(mode==='water'){waterClear();gliders.length=0;}else seed();};
 document.getElementById('snapBtn').onclick=()=>{snapReq=true;};
 // true fullscreen (also draws under the camera cut-out / status bar area)
 const goFull=()=>{const d=document.documentElement;if(document.fullscreenElement)return;

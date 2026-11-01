@@ -52,6 +52,8 @@ body.menu .dock{transform:translate(-50%,0)}
 .seg button{flex:1;min-height:42px;border:0;border-radius:11px;background:transparent;color:var(--mute);font:inherit;font-size:16px;font-weight:600}
 .seg button[aria-pressed=true]{background:var(--ink);color:#101826}
 body.water #palettes{display:none}
+body:not(.water) #floors{display:none}
+.chip i.sw{width:24px;height:18px;border-radius:9px;border:1px solid rgba(255,255,255,.25)}
 .hint{font-size:16px;color:var(--mute);text-align:center;margin-top:10px;line-height:1.5}
 .hint b{color:var(--ink);font-weight:600}
 </style>
@@ -69,17 +71,19 @@ body.water #palettes{display:none}
     <div class="row seg" id="modeSeg"><button data-m="paint">물감</button><button data-m="water">물</button></div>
     <div class="speed"><span>흐름 속도</span><input type="range" id="speed" min="0" max="100" step="1"><b id="speedVal"></b></div>
     <div class="row chips" id="palettes"></div>
+    <div class="row chips" id="floors"><button class="chip" data-f="0"><i class="sw" style="background:linear-gradient(135deg,#8c8270,#c9bda4 45%,#6e675c)"></i>자갈</button><button class="chip" data-f="1"><i class="sw" style="background:linear-gradient(135deg,#1c2328,#3a464e 50%,#11171b)"></i>다크 유리</button><button class="chip" data-f="2"><i class="sw" style="background:linear-gradient(135deg,#000,#1b1d20 50%,#000)"></i>검은 유리</button></div>
     <div class="row">
       <button class="btn main" id="camBtn">손 인식 시작</button>
       <button class="btn" id="seedBtn">새 캔버스</button>
       <button class="btn" id="snapBtn">저장</button>
     </div>
     <div class="row">
+      <button class="btn" id="musicBtn">음악 끄기</button>
       <button class="btn" id="fsBtn">전체화면</button>
       <button class="btn" id="install">앱 설치</button>
     </div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 12</p>
+    <p class="hint" id="ver">버전 13</p>
   </div>
 </div>
 
@@ -203,15 +207,15 @@ vec2 n[4];n[0]=vec2(-1.,0.);n[1]=vec2(1.,0.);n[2]=vec2(0.,-1.);n[3]=vec2(0.,1.);
 for(int i=0;i<4;i++){float k=smoothstep(.0,.012,d[i])*smoothstep(.08,.02,d[i]);if(k<=0.)continue;
  vec2 vw=texture(uVel,wp[i]).xy;float hit=max(dot(vw,n[i]),0.);
  vec2 tg=vec2(-n[i].y,n[i].x);float st=dot(vw,tg);
- v-=n[i]*hit*k*dt*9.;                          // rebound off the wall (출렁)
- v+=tg*sign(st+1e-4)*hit*k*dt*2.5;}            // and run along it
+ v-=n[i]*hit*k*dt*22.;                         // rebound off the wall (출렁) — exaggerated
+ v+=tg*sign(st+1e-4)*hit*k*dt*5.;}              // and run along it
 o=vec4(v,0.,1.);}`,
 wallPile: H+`uniform sampler2D uDye,uVel;uniform float aspect,dt;
 void main(){vec4 c=texture(uDye,vUv);vec2 v=texture(uVel,vUv).xy;
 vec4 d=vec4(vUv.x*aspect,(1.-vUv.x)*aspect,vUv.y,1.-vUv.y);
 float imp=max(-v.x,0.)*smoothstep(.02,0.,d.x)+max(v.x,0.)*smoothstep(.02,0.,d.y)+max(-v.y,0.)*smoothstep(.02,0.,d.z)+max(v.y,0.)*smoothstep(.02,0.,d.w);
 float band=smoothstep(.03,0.,min(min(d.x,d.y),min(d.z,d.w)));
-c.a=min(c.a+max(imp-60.,0.)*dt*.006,2.6);
+c.a=min(c.a+max(imp-50.,0.)*dt*.016,3.2);
 c.a-=max(c.a-1.,0.)*dt*.9*band;                 // the surge slides back down the wall
 o=c;}`,
 waterClear: H+`void main(){o=vec4(0.,0.,0.,1.);}`,
@@ -225,7 +229,7 @@ waterPoke: H+`uniform sampler2D uT;uniform float aspect,radius,amp;uniform vec2 
 void main(){vec4 s=texture(uT,vUv);vec2 p=vUv-point;p.x*=aspect;float g=exp(-dot(p,p)/radius);o=vec4(s.x,s.y-amp*g,0.,1.);}`,
 waterGrad: H+`uniform sampler2D uT;void main(){float l=texture(uT,vL).x,r=texture(uT,vR).x,b=texture(uT,vB).x,t=texture(uT,vT).x,c=texture(uT,vUv).x;
 o=vec4((r-l)*.5,(t-b)*.5,l+r+b+t-4.*c,c);}`,
-waterRender: H+`uniform sampler2D uH;uniform vec2 simTexel;uniform float aspect,time,nk;uniform vec3 sunDir;
+waterRender: H+`uniform sampler2D uH,uS;uniform vec2 simTexel;uniform float aspect,time,nk,floorType;uniform vec3 sunDir;
 #define TAU 6.28318530718
 vec2 h2(vec2 p){return vec2(hash(p),hash(p+19.19));}
 float fbm4(vec2 p){float s=0.,a=.5;for(int i=0;i<4;i++){s+=a*vn(p);p=p*2.07+13.7;a*=.5;}return s;}
@@ -293,14 +297,18 @@ void main(){
  float dW=min(min(uv.x,1.-uv.x)*aspect,min(uv.y,1.-uv.y));
  float nearW=exp(-dW/.022);
  float hh=texture(uH,uv).w*nk;
- g*=1.+2.2*nearW;
+ nearW=exp(-dW/.03);
+ g*=1.+3.*nearW;
  vec3 N=normalize(vec3(-g,1.));
  vec3 P=vec3(p,0.);vec3 cam=vec3(.5*aspect,-.6,.85);vec3 V=normalize(cam-P);
  float cosT=clamp(dot(N,V),0.,1.);float F=.02+.98*pow(1.-cosT,5.);
  vec3 rd=refract(-V,N,1./1.333);
- float depth=.045+.30*pow(smoothstep(-.1,1.15,uv.y),1.4)+.03*(fbm4(p*2.2)-.5);
+ float depth=floorType<.5?.045+.30*pow(smoothstep(-.1,1.15,uv.y),1.4)+.03*(fbm4(p*2.2)-.5):.10+.10*smoothstep(-.1,1.1,uv.y);
  float tt=depth/max(-rd.z,.08);vec2 hit=p+rd.xy*tt;
- float sh;vec3 bc=bed(hit,sh);
+ float sh=1.;vec3 bc;
+ if(floorType<.5)bc=bed(hit,sh);
+ else if(floorType<1.5)bc=vec3(.075,.088,.098)*(.9+.2*vn(hit*2.5));     // dark smoked glass
+ else bc=vec3(.010,.011,.013);                                          // black glass
  vec2 lq=hit-sunDir.xy/sunDir.z*depth*.6+g*depth*1.2;
  float cs=.65*caus(lq*4.2,t*.5)+.45*caus(lq*6.7+vec2(3.1,1.7),t*.62);
  vec2 huv=vec2(hit.x/aspect,hit.y);
@@ -308,18 +316,27 @@ void main(){
  cs*=1.+clamp(-lap2*nk*900.,-.85,3.);
  vec3 lit=bc*sh*(.52+2.6*cs);
  vec3 absorb=vec3(1.05,.26,.19);float path=tt+depth*1.1;
- vec3 under=lit*exp(-absorb*path)+vec3(.03,.15,.16)*(1.-exp(-1.4*path));
+ if(floorType>.5){
+  lit+=vec3(.85,.95,1.)*cs*(floorType<1.5?.16:.05);                     // caustic light on glass
+  vec3 fr=vec3(rd.x,rd.y,-rd.z);                                         // glossy glass floor mirrors the sky
+  vec3 fsk=sky(normalize(fr),t);fsk=mix(vec3(dot(fsk,vec3(.3,.55,.15))),fsk,.35);
+  lit+=fsk*(floorType<1.5?.07:.045);}
+ vec3 under=lit*exp(-absorb*path)+vec3(.03,.15,.16)*(floorType<.5?1.:floorType<1.5?.3:.08)*(1.-exp(-1.4*path));
  vec3 R=reflect(-V,N);R.z=abs(R.z);
  vec3 col=mix(under,sky(R,t),F);
- float run=abs(hh)*nearW;
- float fn=vn(p*140.+vec2(t*2.,-t*1.3))*.6+vn(p*320.-t*3.)*.4;
- float foam=smoothstep(.0018,.006,run*(.6+.8*fn))+smoothstep(.0022,.006,abs(hh))*exp(-dW/.004)*(.4+.6*fn);
- col=mix(col,vec3(.93,.96,.97),clamp(foam,0.,1.)*.85);
- float wallSh=1.-.35*exp(-min(1.-uv.y,uv.x*aspect)/.03);
+ float wallSh=1.-.3*exp(-min(1.-uv.y,uv.x*aspect)/.03);
  col*=wallSh;
- col+=vec3(.7,.8,.85)*exp(-dW/.0012)*.18;
  col*=1.-.18*pow(length(uv-.5)*1.25,2.);
  col*=1.08;col=(col*(2.51*col+.03))/(col*(2.43*col+.59)+.14);
+ // breaking crest at the wall: white water with bubbles, bright and glossy (applied after tone-mapping → stays white)
+ float run=max(hh,0.)*exp(-dW/.045)+abs(hh)*exp(-dW/.012);
+ vec2 bq=p*180.+vec2(t*1.7,-t*2.3);vec2 bi=floor(bq),bf=fract(bq)-.5;float bub=smoothstep(.42,.18,length(bf+(h2(bi)-.5)*.5))*step(.35,hash(bi));
+ float fn=vn(p*90.+vec2(t*2.,-t*1.3))*.55+vn(p*260.-t*3.)*.45;
+ float rise=texture(uS,uv).y;                                   // water rushing up the wall right now
+ float foam=smoothstep(.0012,.0045,run*(.55+.9*fn))*smoothstep(.03,.22,rise);
+ vec3 white=vec3(.97,.99,1.)*(.9+.1*fn)-bub*.12;
+ white+=pow(max(dot(reflect(-V,N),sunDir),0.),24.)*.4;
+ col=mix(col,white,clamp(foam,0.,1.)*.95);
  o=vec4(clamp(col,0.,1.),1.);}`
 };
 
@@ -435,6 +452,10 @@ function waterFrame(dt){
   const live=flow>.3;
   // fingers / touch / pinch rings → pressure on the surface (stronger when moving faster)
   for(const s of queue.splice(0)){ if(!live)continue;
+    if(s.set){const d=wallDist(s.x,s.y),a=[-s.vx*aspect,s.vx*aspect,-s.vy,s.vy];
+      for(let w=0;w<4;w++)if(d[w]<.06&&a[w]>.7){const t=w<2?s.y:s.x,key='gw'+w+'_'+Math.round(t*40);
+        if((edgeCool[key]||0)>performance.now())continue;edgeCool[key]=performance.now()+90;
+        const k=Math.min(3,(a[w]-.7)/.6);for(let q=0;q<2+Math.floor(k*3);q++)spawnDrop(w,t+(Math.random()-.5)*.05,k,null,true);}}
     const sp=s.vx!=null?Math.hypot(s.vx*aspect,s.vy):Math.hypot(s.dx||0,s.dy||0)/2600;
     const main=s.set?s.set>.6:true;
     waterPoke(s.x,s.y,Math.min(.15+sp,3.2)*(main?WATER_AMP:WATER_AMP*.55)*(s.vOnly?.5:1),main?.00055:.0003);}
@@ -452,10 +473,125 @@ function waterFrame(dt){
   // wave equation sub-steps
   wAcc+=sdt; let n=0; while(wAcc>=W_H&&n<30){waterStep();wAcc-=W_H;n++;} if(n>=30)wAcc=0;
   let u=use('waterGrad',[wat.r.tx,wat.r.ty]);gl.uniform1i(u.uT,wat.r.bind(0));blit(wgrad);
-  u=use('waterRender',[wat.r.tx,wat.r.ty]);gl.uniform1i(u.uH,wgrad.bind(0));gl.uniform2f(u.simTexel,wat.r.tx,wat.r.ty);
-  gl.uniform1f(u.aspect,aspect);gl.uniform1f(u.time,waterTime);gl.uniform1f(u.nk,W_NK);gl.uniform3f(u.sunDir,SUN[0],SUN[1],SUN[2]);blit(null);
+  u=use('waterRender',[wat.r.tx,wat.r.ty]);gl.uniform1i(u.uH,wgrad.bind(0));gl.uniform1i(u.uS,wat.r.bind(1));gl.uniform2f(u.simTexel,wat.r.tx,wat.r.ty);
+  gl.uniform1f(u.aspect,aspect);gl.uniform1f(u.time,waterTime);gl.uniform1f(u.nk,W_NK);gl.uniform1f(u.floorType,floorType);gl.uniform3f(u.sunDir,SUN[0],SUN[1],SUN[2]);blit(null);
 }
 let WATER_AMP=1;
+let floorType=0; try{const v=parseInt(localStorage.getItem('hf-floor'));if(v>=0&&v<=2)floorType=v;}catch(e){}
+
+/* ================= Wall splashes: droplets that leap off the walls ================= */
+const drops=[]; const MAX_DROPS=320;
+let edgeTick=0, canRead=true; const edgeCool={};
+const rbuf={}; function rd(fb,x,y,w,h){const n=w*h*4;let b=rbuf[n];if(!b)b=rbuf[n]=new Float32Array(n);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,fb.f);gl.readPixels(x,y,w,h,gl.RGBA,gl.FLOAT,b);return b;}
+// walls: 0 left,1 right,2 bottom,3 top  (inward normal in uv)
+const WALLN=[[1,0],[-1,0],[0,1],[0,-1]];
+function spawnDrop(wall,t,strength,col,water){
+  if(drops.length>=MAX_DROPS)return;
+  const [nx,ny]=WALLN[wall];
+  const x=wall<2?(wall===0?.004:.996):t, y=wall<2?t:(wall===2?.004:.996);
+  const st=Math.min(strength,3),sp=(.06+Math.random()*.22)*(.7+.35*st), side=(Math.random()-.5)*.8*sp;
+  drops.push({x,y,z:.002,vx:(nx*sp+(wall<2?0:side))/aspect,vy:ny*sp+(wall<2?side:0),
+    vz:(.30+Math.random()*.55)*(.7+.3*st),r:(.0025+Math.pow(Math.random(),2)*.008)*(water?1:1.2),c:col,water,life:3});
+}
+function edgeSplash(dt){
+  if(!canRead||flow<.3)return;
+  if((++edgeTick)%3)return;
+  try{
+    if(mode==='water'){
+      const f=wat.r,W=f.w,Hh=f.h;
+      const strips=[rd(f,1,0,1,Hh),rd(f,W-2,0,1,Hh),rd(f,0,1,W,1),rd(f,0,Hh-2,W,1)];
+      strips.forEach((b,wall)=>{const n=b.length/4;
+        for(let i=2;i<n-2;i+=2){const v=b[i*4+1],h=b[i*4];const key='w'+wall+'_'+(i>>2);
+          if((edgeCool[key]||0)>performance.now())continue;
+          if(v>SPLASH_V&&h>0){edgeCool[key]=performance.now()+140;
+            const k=Math.min(3,(v-SPLASH_V)/SPLASH_V);const cnt=1+Math.floor(k*2.5+Math.random());
+            for(let q=0;q<cnt;q++)spawnDrop(wall,(i+Math.random()*2)/n,k,null,true);}}});
+    } else {
+      const f=vel.r,W=f.w,Hh=f.h,d=dye.r;
+      const strips=[rd(f,4,0,1,Hh),rd(f,W-5,0,1,Hh),rd(f,0,4,W,1),rd(f,0,Hh-5,W,1)];
+      const dstr=[rd(d,3,0,1,d.h).slice(),rd(d,d.w-4,0,1,d.h).slice(),rd(d,0,3,d.w,1).slice(),rd(d,0,d.h-4,d.w,1).slice()];
+      strips.forEach((b,wall)=>{const n=b.length/4;const [nx,ny]=WALLN[wall];
+        for(let i=1;i<n-1;i++){const imp=-(b[i*4]*nx+b[i*4+1]*ny);const key='p'+wall+'_'+i;
+          if((edgeCool[key]||0)>performance.now())continue;
+          if(imp>SPLASH_P){edgeCool[key]=performance.now()+120;
+            const k=Math.min(3,(imp-SPLASH_P)/SPLASH_P);const tt=(i+Math.random())/n;
+            const db=dstr[wall],dn=db.length/4,j=Math.min(dn-1,Math.floor(tt*dn))*4;const col=[db[j],db[j+1],db[j+2]];
+            const cnt=1+Math.floor(k*2+Math.random());for(let q=0;q<cnt;q++)spawnDrop(wall,tt,k,col,false);}}});
+    }
+  }catch(e){canRead=false;}
+  if(gl.getError()!==gl.NO_ERROR)canRead=false;
+}
+let SPLASH_V=.07, SPLASH_P=140;
+// paint: a finger flicking toward a wall, or a pointing jet aimed at one, bursts against it
+function wallDist(x,y){return [x*aspect,(1-x)*aspect,y,1-y];}
+function gestureSplash(x,y,vx,vy,col,force){
+  const d=wallDist(x,y),a=[-vx*aspect,vx*aspect,-vy,vy];               // approach speed toward each wall (height units/s)
+  for(let w=0;w<4;w++){ if(d[w]>.14||a[w]<.5)continue;
+    const t=w<2?y:x,key='g'+w+'_'+Math.round(t*40);if((edgeCool[key]||0)>performance.now())continue;edgeCool[key]=performance.now()+90;
+    const k=Math.min(3.2,(a[w]-.5)/.7+(1-d[w]/.14));const cnt=2+Math.floor(k*2.5);
+    for(let q=0;q<cnt;q++)spawnDrop(w,Math.min(.99,Math.max(.01,t+(Math.random()-.5)*.05)),k,col(),false);
+    if(mode==='paint'){const wx=w<2?(w===0?.01:.99):x,wy=w<2?y:(w===2?.01:.99);splatDye(wx,wy,col(),.0012*(1+k*.4),1,1.6+k*.3);}}
+}
+function jetSplash(p,col){
+  const ts=[];if(p.dx<0)ts.push([0,(p.x*aspect)/-p.dx]);if(p.dx>0)ts.push([1,((1-p.x)*aspect)/p.dx]);
+  if(p.dy<0)ts.push([2,p.y/-p.dy]);if(p.dy>0)ts.push([3,(1-p.y)/p.dy]);
+  let best=null;for(const q of ts)if(!best||q[1]<best[1])best=q;if(!best||best[1]>.38)return;
+  const [w,L]=best,hx=p.x+p.dx/aspect*L,hy=p.y+p.dy*L,t=w<2?hy:hx,key='j'+w;
+  if((edgeCool[key]||0)>performance.now())return;edgeCool[key]=performance.now()+70;
+  const k=.4+1.6*(1-L/.38);for(let q=0;q<1+Math.floor(k*1.5);q++)spawnDrop(w,Math.min(.99,Math.max(.01,t+(Math.random()-.5)*.04)),k,col,false);
+}
+function updateDrops(dt){
+  const g=3.2, k=dt*flow*Math.max(.8,Math.min(timeScale+.6,1.6));
+  for(let i=drops.length-1;i>=0;i--){const d=drops[i];
+    d.vz-=g*k;d.x+=d.vx*k;d.y+=d.vy*k;d.z+=d.vz*k;
+    if(d.x<.002||d.x>.998){d.vx*=-.5;d.x=Math.min(.998,Math.max(.002,d.x));}
+    if(d.y<.002||d.y>.998){d.vy*=-.5;d.y=Math.min(.998,Math.max(.002,d.y));}
+    if(d.z<=0){                                   // lands: ripple / paint splat
+      if(d.water){ if(mode==='water')waterPoke(d.x,d.y,WATER_AMP*(.6+d.r*60),.00004+d.r*d.r*.6); }
+      else if(mode==='paint'){ splatDye(d.x,d.y,d.c,.00025+d.r*d.r*1.2,1,1.4); splatVel(d.x,d.y,d.vx*900,d.vy*900,.0012); }
+      drops.splice(i,1);}
+  }
+}
+function drawDrops(){
+  fxc.clearRect(0,0,fx.width,fx.height);
+  if(!drops.length)return;
+  const W=fx.width,H=fx.height;
+  for(const d of drops){const sx=d.x*W,sy=(1-d.y)*H,lift=d.z*H*.6,r=Math.max(1.2,d.r*H*(1+Math.min(d.z*5,.8)));
+    // shadow on the surface
+    fxc.fillStyle=d.water?'rgba(0,25,35,.16)':'rgba(0,0,0,.22)';fxc.beginPath();fxc.ellipse(sx+lift*.25,sy+lift*.15,r*.9,r*.6,0,0,7);fxc.fill();
+    const y=sy-lift;
+    if(d.water){
+      const gr=fxc.createRadialGradient(sx-r*.3,y-r*.35,r*.1,sx,y,r);
+      gr.addColorStop(0,'rgba(255,255,255,1)');gr.addColorStop(.3,'rgba(240,250,255,.85)');gr.addColorStop(.75,'rgba(200,230,240,.55)');gr.addColorStop(1,'rgba(200,230,240,0)');
+      fxc.fillStyle=gr;fxc.beginPath();fxc.arc(sx,y,r,0,7);fxc.fill();
+    } else {
+      const c=d.c.map(v=>Math.round(Math.min(1,Math.max(0,v))*255));
+      const gr=fxc.createRadialGradient(sx-r*.35,y-r*.35,r*.1,sx,y,r);
+      gr.addColorStop(0,`rgb(${Math.min(255,c[0]+90)},${Math.min(255,c[1]+90)},${Math.min(255,c[2]+90)})`);
+      gr.addColorStop(.45,`rgb(${c[0]},${c[1]},${c[2]})`);gr.addColorStop(1,`rgb(${c[0]*.45|0},${c[1]*.45|0},${c[2]*.45|0})`);
+      fxc.fillStyle=gr;fxc.beginPath();fxc.ellipse(sx,y,r,r*(1+Math.min(.6,Math.abs(d.vz)*.15)),0,0,7);fxc.fill();
+      fxc.fillStyle='rgba(255,255,255,.85)';fxc.beginPath();fxc.arc(sx-r*.35,y-r*.38,r*.22,0,7);fxc.fill();
+    }}
+}
+
+/* ================= Music: tempo follows the hands ================= */
+const bgm=new Audio();bgm.loop=true;bgm.preload='auto';
+try{bgm.preservesPitch=true;bgm.mozPreservesPitch=true;bgm.webkitPreservesPitch=true;}catch(e){}
+let musicOn=true; try{musicOn=localStorage.getItem('hf-music')!=='off';}catch(e){}
+let musicReady=null, musicRate=1, musicVol=0;
+function loadMusic(){ if(!musicReady)musicReady=fetch('audio/where_the_stream_widens.mp3').then(r=>r.blob()).then(b=>{bgm.src=URL.createObjectURL(b);}).catch(()=>{}); return musicReady; }
+function tryMusic(){ if(!musicOn||!bgm.paused&&bgm.src)return; loadMusic().then(()=>{ if(musicOn&&!document.hidden){bgm.volume=musicVol;bgm.play().catch(()=>{});} }); }
+function updateMusic(dt){
+  if(!bgm.src||bgm.paused)return;
+  const boost=Math.max(0,timeScale-speed);                 // only the part the hands add
+  const target=Math.min(1.45,1+boost*.32);
+  musicRate+=(target-musicRate)*Math.min(1,dt*(target>musicRate?3:.8));
+  if(Math.abs(bgm.playbackRate-musicRate)>.01)bgm.playbackRate=musicRate;
+  musicVol+=((musicOn?.85:0)-musicVol)*Math.min(1,dt*1.5);bgm.volume=Math.max(0,Math.min(1,musicVol));
+}
+document.addEventListener('visibilitychange',()=>{ if(document.hidden)bgm.pause(); else if(musicOn&&bgm.src)bgm.play().catch(()=>{}); });
+addEventListener('pointerdown',tryMusic,true);
 
 /* ================= Interaction (touch + hands) ================= */
 const fx=document.getElementById('fx');const fxc=fx.getContext('2d');
@@ -602,9 +738,11 @@ function frame(now){
     const js=1/Math.max(timeScale,.35);
     if(flow>.3){splatVel(p.x,p.y,p.dx*1500*js*dt*60*.5,p.dy*1500*js*dt*60*.5,.0032);
       for(let k=1;k<=3;k++)splatVel(p.x+p.dx/aspect*.04*k,p.y+p.dy*.04*k,p.dx*(1250-k*180)*js*dt*30,p.dy*(1250-k*180)*js*dt*30,.0042);}
-    splatDye(p.x,p.y,pickColor(p.c),.0024,.45,.55);}
+    splatDye(p.x,p.y,pickColor(p.c),.0024,.45,.55);
+    if(flow>.3)jetSplash(p,pickColor(p.c));}
   // apply queued splats
   for(const s of queue.splice(0)){
+    if(flow>.3&&s.set)gestureSplash(s.x,s.y,s.vx,s.vy,()=>s.c,1);
     if(flow>.3){ if(s.set) {const g=1.1/Math.max(timeScale,.35);splatVelSet(s.x,s.y,s.vx*vel.r.w*g,s.vy*vel.r.h*g,s.r*1.25,s.set);}
                  else splatVel(s.x,s.y,s.dx*flow,s.dy*flow,s.r*1.2); }
     if(!s.vOnly)splatDye(s.x,s.y,s.c,s.r,s.s,s.t);
@@ -614,6 +752,7 @@ function frame(now){
   const u=use('display',[0,0]);gl.uniform3fv(u.pal,palFlat);gl.uniform1i(u.uDye,dye.r.bind(0));gl.uniform1i(u.uDet,det.r.bind(1));gl.uniform2f(u.dyeTexel,dye.r.tx,dye.r.ty);
   gl.uniform1f(u.dotSize,2.0*dpr);gl.uniform1f(u.relief,11.+7.*(1.-flow));gl.uniform1f(u.time,now*.001);blit(null);
   }
+  edgeSplash(dt);updateDrops(dt);drawDrops();updateMusic(dt);
   if(snapReq){snapReq=false;canvas.toBlob(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);
     a.download='hand-flow-'+new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')+'.png';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000);},'image/png');}
   requestAnimationFrame(frame);
@@ -636,10 +775,16 @@ const HINTS={paint:hintTxt.innerHTML,
 function setMode(m){mode=m;document.body.classList.toggle('water',m==='water');
   document.querySelectorAll('#modeSeg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.m===m));
   seedBtn.textContent=m==='water'?'잔잔하게':'새 캔버스';hintTxt.innerHTML=HINTS[m];
-  gliders.length=0;queue.length=0;try{localStorage.setItem('hf-mode',m);}catch(e){}}
+  gliders.length=0;queue.length=0;drops.length=0;try{localStorage.setItem('hf-mode',m);}catch(e){}}
 document.querySelectorAll('#modeSeg button').forEach(b=>b.onclick=()=>setMode(b.dataset.m));
 setMode(mode);
-seedBtn.onclick=()=>{if(mode==='water'){waterClear();gliders.length=0;}else seed();};
+seedBtn.onclick=()=>{if(mode==='water'){waterClear();gliders.length=0;}else seed();drops.length=0;};
+function setFloor(v){floorType=v;document.querySelectorAll('#floors .chip').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.f===v));try{localStorage.setItem('hf-floor',v);}catch(e){}}
+document.querySelectorAll('#floors .chip').forEach(b=>b.onclick=()=>setFloor(+b.dataset.f));setFloor(floorType);
+const musicBtn=document.getElementById('musicBtn');
+function setMusic(on){musicOn=on;musicBtn.textContent=on?'음악 끄기':'음악 켜기';try{localStorage.setItem('hf-music',on?'on':'off');}catch(e){}
+  if(on)tryMusic();else bgm.pause();}
+musicBtn.onclick=()=>setMusic(!musicOn);setMusic(musicOn);
 document.getElementById('snapBtn').onclick=()=>{snapReq=true;};
 // true fullscreen (also draws under the camera cut-out / status bar area)
 const goFull=()=>{const d=document.documentElement;if(document.fullscreenElement)return;

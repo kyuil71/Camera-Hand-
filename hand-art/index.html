@@ -16,13 +16,17 @@
 html,body{height:100%;background:var(--bg);color:var(--ink);font:16px/1.4 -apple-system,"Pretendard","Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
 canvas#art,canvas#fx{position:fixed;inset:0;width:100%;height:100%;display:block}
 canvas#fx{pointer-events:none}
-.top{background:linear-gradient(rgba(6,10,20,.55),rgba(6,10,20,0));padding-bottom:28px !important;position:fixed;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top) + 12px) 16px 0;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none;transition:opacity .5s}
-.brand{pointer-events:auto}
-.brand b{display:block;font-size:16px;letter-spacing:.18em;font-weight:700}
-#status{display:block;font-size:16px;color:var(--mute);margin-top:2px;text-shadow:0 1px 6px rgba(0,0,0,.6)}
-#preview{pointer-events:auto;width:112px;height:84px;border-radius:12px;border:1px solid var(--line);background:#000;display:none;object-fit:cover}
+.bar{display:block;width:56px;height:5px;border-radius:3px;background:rgba(190,196,206,.55);transition:background .35s,box-shadow .35s}
+body.detect .bar{background:#fff;box-shadow:0 0 12px rgba(255,255,255,.95)}
+#grab{position:fixed;left:0;right:0;bottom:0;z-index:5;height:calc(env(safe-area-inset-bottom) + 64px);display:flex;justify-content:center;padding-top:30px;touch-action:none;transition:opacity .3s}
+body.menu #grab{opacity:0;pointer-events:none}
+.head{display:flex;flex-direction:column;align-items:center;gap:10px;padding:2px 0 12px;touch-action:none}
+#status{font-size:16px;color:var(--ink);display:flex;align-items:center;gap:8px;text-align:center}
+#status:before{content:"";width:8px;height:8px;border-radius:50%;background:rgba(190,196,206,.6);flex:0 0 auto}
+body.detect #status:before{background:#fff;box-shadow:0 0 8px #fff}
 #freeze{position:fixed;left:50%;top:40%;transform:translate(-50%,-50%);font-size:18px;letter-spacing:.3em;padding:10px 18px;border-radius:999px;background:var(--glass);border:1px solid var(--line);opacity:0;transition:opacity .35s;pointer-events:none;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
-.dock{position:fixed;left:50%;bottom:0;transform:translateX(-50%);width:100%;max-width:430px;padding:0 16px calc(env(safe-area-inset-bottom) + 14px);transition:opacity .5s,transform .5s}
+.dock{position:fixed;left:50%;bottom:0;z-index:6;transform:translate(-50%,calc(100% + 24px));width:100%;max-width:430px;padding:0 16px calc(env(safe-area-inset-bottom) + 14px);transition:transform .38s cubic-bezier(.2,.8,.2,1)}
+body.menu .dock{transform:translate(-50%,0)}
 .panel{background:var(--glass);border:1px solid var(--line);border-radius:22px;padding:12px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
 .row{display:flex;gap:8px}
 .row+.row{margin-top:10px}
@@ -39,8 +43,6 @@ canvas#fx{pointer-events:none}
 #install{display:none}
 .hint{font-size:16px;color:var(--mute);text-align:center;margin-top:10px;line-height:1.5}
 .hint b{color:var(--ink);font-weight:600}
-body.immersive .dock{opacity:0;transform:translate(-50%,20px);pointer-events:none}
-body.immersive .top .brand{opacity:0}
 </style>
 </head>
 <body>
@@ -48,14 +50,12 @@ body.immersive .top .brand{opacity:0}
 <canvas id="fx"></canvas>
 <video id="video" playsinline muted style="display:none"></video>
 
-<div class="top">
-  <div class="brand"><b>HAND FLOW</b><span id="status">화면을 문질러 보거나 카메라를 켜세요</span></div>
-  <canvas id="preview" width="224" height="168"></canvas>
-</div>
+<div id="grab" aria-label="메뉴 열기"><span class="bar"></span></div>
 <div id="freeze">굳힘 · FREEZE</div>
 
-<div class="dock">
+<div class="dock" id="sheet">
   <div class="panel">
+    <div class="head" id="sheetHead"><span class="bar"></span><div id="status">손 인식 꺼짐 · 화면을 문질러 보세요</div></div>
     <div class="row chips" id="palettes"></div>
     <div class="row">
       <button class="btn main" id="camBtn">손 인식 시작</button>
@@ -64,10 +64,9 @@ body.immersive .top .brand{opacity:0}
     </div>
     <div class="row">
       <button class="btn" id="fsBtn">전체화면</button>
-      <button class="btn" id="hideBtn">몰입 모드</button>
       <button class="btn" id="install">앱 설치</button>
     </div>
-    <p class="hint"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 가리킨 방향으로 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
+    <p class="hint"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
   </div>
 </div>
 
@@ -76,15 +75,16 @@ body.immersive .top .brand{opacity:0}
 'use strict';
 /* ================= Palettes ================= */
 const PALETTES = {
-  '아나돌':  ['#3fa9f5','#9fd8f0','#f26a1b','#f7c844','#d8262c','#f2e6c8'],
-  '심해':    ['#0b3d6b','#1f78b4','#53c3e8','#bff0f5','#f2f7f2','#2d5d8a'],
-  '용암':    ['#3a0d0d','#a3150f','#ee4b13','#ffa62b','#ffe08a','#5c1a1a'],
-  '오로라':  ['#0f2b3d','#1fbf8f','#7ef0c3','#9b5de5','#f15bb5','#e8f6ff'],
+  '아나돌':  ['#0050ff','#00c8ff','#ff5a00','#ffd000','#ff1745','#f2fbff'],
+  '심해':    ['#0018a8','#0070ff','#00d5ff','#00ffc8','#7a3cff','#ffffff'],
+  '용암':    ['#c4001a','#ff2a00','#ff7a00','#ffc400','#ff0066','#ffe86b'],
+  '오로라':  ['#00e08a','#00f5ff','#6b2bff','#ff00c8','#ffe600','#0066ff'],
   '모노':    ['#111418','#3b4048','#8a919c','#d6d9de','#f4f2ec','#5e6570']
 };
 let paletteName = '아나돌';
 const hex2rgb = h => [1,3,5].map(i => parseInt(h.substr(i,2),16)/255);
 const pal = () => PALETTES[paletteName].map(hex2rgb);
+let palFlat = new Float32Array(pal().flat());
 
 /* ================= WebGL2 setup ================= */
 const canvas = document.getElementById('art');
@@ -141,14 +141,20 @@ gradient: H+`uniform sampler2D uP,uVel;
 void main(){float L=texture(uP,vL).x,R=texture(uP,vR).x,T=texture(uP,vT).x,B=texture(uP,vB).x;vec2 v=texture(uVel,vUv).xy-vec2(R-L,T-B);o=vec4(v,0.,1.);}`,
 scale: H+`uniform sampler2D uT;uniform float value;void main(){o=value*texture(uT,vUv);}`,
 ambient: H+`uniform sampler2D uVel;uniform float t,amp,dt;
-void main(){vec2 u=vUv;vec2 f=vec2(sin(u.y*6.3+t*.55)+.6*sin(u.y*15.+u.x*4.-t*1.2),cos(u.x*5.7-t*.47)+.6*cos(u.x*13.-u.y*5.+t*.9));
+vec2 swirl(vec2 u,vec2 c,float r,float s){vec2 d=u-c;return vec2(-d.y,d.x)*exp(-dot(d,d)/r)*s;}
+void main(){vec2 u=vUv;
+vec2 f=vec2(sin(u.y*2.3+t*.31)+.5*sin(u.y*5.1+u.x*2.2-t*.58)+.16*sin(u.y*11.+u.x*3.-t*1.05),
+            cos(u.x*2.0-t*.27)+.5*cos(u.x*4.7-u.y*2.4+t*.49)+.16*cos(u.x*10.-u.y*4.+t*.88));
+f+=swirl(u,vec2(.5+.32*sin(t*.11),.5+.3*cos(t*.14)),.07,26.);
+f-=swirl(u,vec2(.5+.3*cos(t*.09+2.),.5+.34*sin(t*.12+1.)),.05,30.);
+f+=swirl(u,vec2(.5+.25*sin(t*.17+4.),.5+.25*sin(t*.07+3.)),.02,40.);
 o=vec4(texture(uVel,vUv).xy+f*amp*dt,0.,1.);}`,
 init: H+`uniform vec3 pal[6];uniform float seed,aspect;
 float fbm(vec2 p){float s=0.,a=.5;for(int i=0;i<5;i++){s+=a*vn(p);p=p*2.03+17.1;a*=.5;}return s;}
-void main(){vec2 p=vUv*vec2(aspect,1.)*2.6+seed;float n=fbm(p);float m=fbm(p*1.7+n*3.+seed*.3);
-float k=fract(n*3.2+m*2.4)*6.;int i=int(k);vec3 c=mix(pal[i],pal[(i+1)%6],smoothstep(.55,1.,fract(k)));
+void main(){vec2 p=vUv*vec2(aspect,1.)*1.25+seed;float n=fbm(p);float m=fbm(p*1.7+n*3.+seed*.3);
+float k=fract(n*1.9+m*1.3)*6.;int i=int(k);vec3 c=mix(pal[i],pal[(i+1)%6],smoothstep(.55,1.,fract(k)));
 o=vec4(c,.4+1.6*m*m+.4*sin(k*3.14));}`,
-display: H+`uniform sampler2D uDye,uDet;uniform vec2 dyeTexel;uniform float dotSize,relief,time;
+display: H+`uniform sampler2D uDye,uDet;uniform vec3 pal[6];uniform vec2 dyeTexel;uniform float dotSize,relief,time;
 float Hh(vec2 uv){vec4 d=texture(uDye,uv);float t=texture(uDet,uv).x;
 return d.a*.78+dot(d.rgb,vec3(.3,.5,.2))*.22+(t-.5)*(.12+.1*d.a);}
 vec2 grd(vec2 uv,vec2 e){return vec2(Hh(uv-vec2(e.x,0.))-Hh(uv+vec2(e.x,0.)),Hh(uv-vec2(0.,e.y))-Hh(uv+vec2(0.,e.y)));}
@@ -162,7 +168,8 @@ float fres=pow(1.-n.z,2.);
 float hC=Hh(vUv),hW=0.;for(int i=0;i<4;i++){float a=float(i)*1.5708+.6;hW+=Hh(vUv+vec2(cos(a),sin(a))*dyeTexel*9.);}hW*=.25;
 float ao=clamp(1.-(hW-hC)*1.8,.4,1.12);
 float lum=dot(d.rgb,vec3(.3,.55,.15));
-vec3 base=mix(vec3(lum),d.rgb,1.12+.1*min(d.a,2.));
+vec3 nc=pal[0];float nd=1e3;for(int i=0;i<6;i++){vec3 q=d.rgb-pal[i];float dd=dot(q,q);if(dd<nd){nd=dd;nc=pal[i];}}
+vec3 base=mix(d.rgb,nc,.55);base=max(mix(vec3(dot(base,vec3(.3,.55,.15))),base,1.4),0.);
 base*=.9+.2*t;
 vec3 c=base*(.28+.9*diff)*ao+spec*vec3(1.,.97,.92)*(.6+.4*min(d.a,1.5))+fres*base*.35;
 vec2 q=gl_FragCoord.xy/dotSize;vec2 id=floor(q);vec2 f=fract(q)-.5;float h1=hash(id);
@@ -172,7 +179,7 @@ float dm=1.-smoothstep(r-.17,r,length(f));
 c=mix(c*.8,c*(1.03+.1*h1),dm);
 c+=step(.988,hash(id+floor(time*4.)))*spec*.7;
 c+=(hash(gl_FragCoord.xy+fract(time)*91.)-.5)*.025;
-c=1.-exp(-c*1.6);o=vec4(c,1.);}`
+c=1.-exp(-c*1.6);c=clamp(mix(vec3(dot(c,vec3(.3,.55,.15))),c,1.18),0.,1.);o=vec4(c,1.);}`
 };
 
 function compile(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);
@@ -217,7 +224,7 @@ function resize(){dpr=Math.min(window.devicePixelRatio||1,2);
   vel=dfbo(sw,sh);dye=dfbo(dw,dh);det=dfbo(dw,dh);div=fbo(sw,sh);curlF=fbo(sw,sh);pres=dfbo(sw,sh);
   seed();}
 function seed(){const u=use('init',[dye.w.tx,dye.w.ty]);
-  gl.uniform3fv(u.pal,new Float32Array(pal().flat()));gl.uniform1f(u.seed,Math.random()*100);gl.uniform1f(u.aspect,aspect);
+  gl.uniform3fv(u.pal,palFlat);gl.uniform1f(u.seed,Math.random()*100);gl.uniform1f(u.aspect,aspect);
   blit(dye.w);dye.swap();
   detSeed=Math.random()*50;detailPass(2);
   for(let i=0;i<14;i++)splatVel(Math.random(),Math.random(),(Math.random()-.5)*900,(Math.random()-.5)*900,.012);}
@@ -235,16 +242,16 @@ function detailPass(rate){const u=use('detail',[det.r.tx,det.r.ty]);gl.uniform1i
 let flow=1, flowTarget=1, simTime=0;
 function step(dt){
   const tx=[vel.r.tx,vel.r.ty];
-  let u=use('ambient',tx);gl.uniform1i(u.uVel,vel.r.bind(0));gl.uniform1f(u.t,simTime);gl.uniform1f(u.amp,38);gl.uniform1f(u.dt,dt);blit(vel.w);vel.swap();
+  let u=use('ambient',tx);gl.uniform1i(u.uVel,vel.r.bind(0));gl.uniform1f(u.t,simTime);gl.uniform1f(u.amp,34);gl.uniform1f(u.dt,dt);blit(vel.w);vel.swap();
   u=use('curl',tx);gl.uniform1i(u.uVel,vel.r.bind(0));blit(curlF);
-  u=use('vorticity',tx);gl.uniform1i(u.uVel,vel.r.bind(0));gl.uniform1i(u.uCurl,curlF.bind(1));gl.uniform1f(u.curl,32);gl.uniform1f(u.dt,dt);blit(vel.w);vel.swap();
+  u=use('vorticity',tx);gl.uniform1i(u.uVel,vel.r.bind(0));gl.uniform1i(u.uCurl,curlF.bind(1));gl.uniform1f(u.curl,15);gl.uniform1f(u.dt,dt);blit(vel.w);vel.swap();
   u=use('divergence',tx);gl.uniform1i(u.uVel,vel.r.bind(0));blit(div);
   u=use('scale',tx);gl.uniform1i(u.uT,pres.r.bind(0));gl.uniform1f(u.value,.8);blit(pres.w);pres.swap();
   u=use('pressure',tx);gl.uniform1i(u.uDiv,div.bind(1));
   for(let i=0;i<22;i++){gl.uniform1i(u.uP,pres.r.bind(0));blit(pres.w);pres.swap();}
   u=use('gradient',tx);gl.uniform1i(u.uP,pres.r.bind(0));gl.uniform1i(u.uVel,vel.r.bind(1));blit(vel.w);vel.swap();
   u=use('advect',tx);gl.uniform2f(u.simTexel,vel.r.tx,vel.r.ty);gl.uniform1f(u.dt,dt);
-  gl.uniform1i(u.uVel,vel.r.bind(0));gl.uniform1i(u.uSrc,vel.r.bind(0));gl.uniform4f(u.diss,.25,.25,0,0);blit(vel.w);vel.swap();
+  gl.uniform1i(u.uVel,vel.r.bind(0));gl.uniform1i(u.uSrc,vel.r.bind(0));gl.uniform4f(u.diss,.14,.14,0,0);blit(vel.w);vel.swap();
   u=use('maccormack',[dye.r.tx,dye.r.ty]);gl.uniform2f(u.simTexel,vel.r.tx,vel.r.ty);gl.uniform2f(u.srcTexel,dye.r.tx,dye.r.ty);gl.uniform1f(u.dt,dt);
   gl.uniform1i(u.uVel,vel.r.bind(0));gl.uniform1i(u.uSrc,dye.r.bind(1));gl.uniform4f(u.diss,.003,.003,.003,.03);blit(dye.w);dye.swap();
   gl.uniform2f(u.srcTexel,det.r.tx,det.r.ty);gl.uniform1i(u.uSrc,det.r.bind(1));gl.uniform4f(u.diss,0,0,0,0);blit(det.w);det.swap();
@@ -259,7 +266,7 @@ const pickColor=(i)=>{const p=pal();const c=p[(i+colorTick)%p.length];const k=.9
 
 // touch fallback
 const pointers=new Map();
-canvas.addEventListener('pointerdown',e=>{pointers.set(e.pointerId,{x:e.clientX/innerWidth,y:1-e.clientY/innerHeight,c:pickColor(pointers.size+(Math.random()*6|0))});wake();});
+canvas.addEventListener('pointerdown',e=>{if(document.body.classList.contains('menu')){openMenu(false);return;}pointers.set(e.pointerId,{x:e.clientX/innerWidth,y:1-e.clientY/innerHeight,c:pickColor(pointers.size+(Math.random()*6|0))});wake();});
 canvas.addEventListener('pointermove',e=>{const p=pointers.get(e.pointerId);if(!p)return;
   const x=e.clientX/innerWidth,y=1-e.clientY/innerHeight;queue.push({x,y,dx:(x-p.x)*5200,dy:(y-p.y)*5200,c:p.c,r:.0032,s:.9});p.x=x;p.y=y;});
 ['pointerup','pointercancel','pointerleave'].forEach(t=>canvas.addEventListener(t,e=>pointers.delete(e.pointerId)));
@@ -274,9 +281,8 @@ const d2=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 function onHands(res){
   const now=performance.now();
   const list=res.multiHandLandmarks||[];
-  try{drawPreview(res,list);}catch(e){}
-  if(!list.length){ if(now-lastSeen>250){for(const k in tracks)delete tracks[k];for(const k in pointState)delete pointState[k];} handInfo=[]; status(camOn?'손을 카메라에 보여주세요':''); fistSince=0; return; }
-  lastSeen=now; handInfo=[];
+  if(!list.length){ if(now-lastSeen>250){for(const k in tracks)delete tracks[k];for(const k in pointState)delete pointState[k];} handInfo=[]; setDetect(false); if(camOn)status('손 인식 켜짐 · 손을 카메라에 보여주세요'); fistSince=0; return; }
+  lastSeen=now; handInfo=[]; setDetect(true);
   let anyFist=false;
   list.forEach((lm,h)=>{
     const size=d2(lm[0],lm[9])||.1;
@@ -319,11 +325,12 @@ function onHands(res){
   });
   if(anyFist){ if(!fistSince)fistSince=now; } else fistSince=0;
   flowTarget = (fistSince && now-fistSince>160) ? 0 : 1;
-  status(`손 ${list.length}개 인식${flowTarget?'':' · 굳힘'}${handInfo.some(x=>x.point)?' · 가리키기':''}`);
+  status(`카메라 인식됨 · 손 ${list.length}개${flowTarget?'':' · 굳힘'}${handInfo.some(x=>x.point)?' · 가리키기':''}`);
 }
 
 /* ================= Camera + embedded AI ================= */
-const video=document.getElementById('video');const prev=document.getElementById('preview');const pc=prev.getContext('2d');
+const video=document.getElementById('video');
+const setDetect=on=>document.body.classList.toggle('detect',!!on);
 const statusEl=document.getElementById('status');const status=t=>{if(t)statusEl.textContent=t;};
 const camBtn=document.getElementById('camBtn');
 let stream=null, wakeLock=null;
@@ -340,16 +347,16 @@ async function startCam(){
     status('카메라 여는 중…');
     stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:640},height:{ideal:480},frameRate:{ideal:30}}});
     video.srcObject=stream;await video.play();
-    camOn=true;prev.style.display='block';camBtn.textContent='손 인식 끄기';camBtn.classList.add('on');
-    status('손을 카메라에 보여주세요');
+    camOn=true;camBtn.textContent='손 인식 끄기';camBtn.classList.add('on');
+    status('손 인식 켜짐 · 손을 카메라에 보여주세요');
     try{wakeLock=await navigator.wakeLock?.request('screen');}catch(e){}
     detectLoop();
   }catch(err){console.error(err);status(err.name==='NotAllowedError'?'카메라 권한이 거부되었어요':'시작 실패: '+(err.message||err));}
   finally{camBtn.disabled=false;}
 }
-function stopCam(){camOn=false;stream&&stream.getTracks().forEach(t=>t.stop());stream=null;prev.style.display='none';
+function stopCam(){camOn=false;stream&&stream.getTracks().forEach(t=>t.stop());stream=null;setDetect(false);
   camBtn.textContent='손 인식 시작';camBtn.classList.remove('on');handInfo=[];flowTarget=1;fistSince=0;for(const k in tracks)delete tracks[k];
-  try{wakeLock&&wakeLock.release();}catch(e){} status('화면을 문질러 보거나 카메라를 켜세요');}
+  try{wakeLock&&wakeLock.release();}catch(e){} status('손 인식 꺼짐 · 화면을 문질러 보세요');}
 async function detectLoop(){
   if(!camOn)return;
   if(!busy&&video.readyState>=2){busy=true;try{await hands.send({image:video});}catch(e){console.warn(e);}busy=false;}
@@ -357,12 +364,6 @@ async function detectLoop(){
 }
 camBtn.onclick=()=>camOn?stopCam():startCam();
 document.addEventListener('visibilitychange',async()=>{if(!document.hidden&&camOn){try{wakeLock=await navigator.wakeLock?.request('screen');}catch(e){}}});
-
-function drawPreview(res,list){
-  pc.drawImage(res.image,0,0,prev.width,prev.height);
-  pc.fillStyle='#f7c844';
-  for(const lm of list)for(const p of lm){pc.beginPath();pc.arc(p.x*prev.width,p.y*prev.height,2.5,0,7);pc.fill();}
-}
 
 /* fingertip glow overlay */
 function drawFx(){
@@ -389,8 +390,10 @@ function frame(now){
   freezeEl.style.opacity=flow<.5?1:0;
   // ambient life: drifting color drops keep the canvas evolving
   ambientClock+=dt*flow;
-  if(ambientClock>.55){ambientClock=0;const x=Math.random(),y=Math.random(),a=Math.random()*6.28;
-    splatDye(x,y,pickColor(Math.random()*6|0),.0016+Math.random()*.003,.75,.8);splatVel(x,y,Math.cos(a)*420,Math.sin(a)*420,.004);}
+  if(ambientClock>.6){ambientClock=0;const x=Math.random(),y=Math.random(),a=Math.random()*6.28;
+    const big=Math.random()<.3, r=big?.012+Math.random()*.022:.0014+Math.random()*.0035;
+    splatDye(x,y,pickColor(Math.random()*6|0),r,big?.85:.75,big?1.1:.8);
+    splatVel(x,y,Math.cos(a)*(big?650:380),Math.sin(a)*(big?650:380),big?r*1.4:.004);}
   if(Math.random()<dt*.15)colorTick++;
   // pointing jets: paint streams out of the fingertip in the pointed direction
   for(const h of handInfo){const p=h.point;if(!p)continue;
@@ -404,7 +407,7 @@ function frame(now){
   }
   if(flow>.02){simTime+=dt*flow;step(dt*flow);}
   // display
-  const u=use('display',[0,0]);gl.uniform1i(u.uDye,dye.r.bind(0));gl.uniform1i(u.uDet,det.r.bind(1));gl.uniform2f(u.dyeTexel,dye.r.tx,dye.r.ty);
+  const u=use('display',[0,0]);gl.uniform3fv(u.pal,palFlat);gl.uniform1i(u.uDye,dye.r.bind(0));gl.uniform1i(u.uDet,det.r.bind(1));gl.uniform2f(u.dyeTexel,dye.r.tx,dye.r.ty);
   gl.uniform1f(u.dotSize,2.0*dpr);gl.uniform1f(u.relief,11.+7.*(1.-flow));gl.uniform1f(u.time,now*.001);blit(null);
   if(snapReq){snapReq=false;canvas.toBlob(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);
     a.download='hand-flow-'+new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')+'.png';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000);},'image/png');}
@@ -416,7 +419,7 @@ function frame(now){
 const palWrap=document.getElementById('palettes');
 function renderPalettes(){palWrap.innerHTML='';for(const name in PALETTES){const b=document.createElement('button');b.className='chip';
   b.setAttribute('aria-pressed',name===paletteName);b.innerHTML='<i>'+PALETTES[name].map(c=>`<span style="background:${c}"></span>`).join('')+'</i>'+name;
-  b.onclick=()=>{paletteName=name;renderPalettes();for(let i=0;i<10;i++)queue.push({x:Math.random(),y:Math.random(),dx:0,dy:0,c:pickColor(i),r:.006,s:.9,t:.6});};
+  b.onclick=()=>{paletteName=name;palFlat=new Float32Array(pal().flat());renderPalettes();for(let i=0;i<10;i++)queue.push({x:Math.random(),y:Math.random(),dx:0,dy:0,c:pickColor(i),r:.006,s:.9,t:.6});};
   palWrap.appendChild(b);}}
 renderPalettes();
 document.getElementById('seedBtn').onclick=()=>seed();
@@ -424,11 +427,15 @@ document.getElementById('snapBtn').onclick=()=>{snapReq=true;};
 document.getElementById('fsBtn').onclick=()=>{const d=document.documentElement;
   if(document.fullscreenElement)document.exitFullscreen();else (d.requestFullscreen||d.webkitRequestFullscreen)?.call(d);};
 let hideTimer=0;
-function wake(){if(document.body.classList.contains('immersive')){clearTimeout(hideTimer);}}
-document.getElementById('hideBtn').onclick=()=>{document.body.classList.add('immersive');status('');};
-// leave immersive mode: tap the top-left corner
-document.querySelector('.brand').addEventListener('click',()=>document.body.classList.remove('immersive'));
-canvas.addEventListener('dblclick',()=>document.body.classList.toggle('immersive'));
+function wake(){}
+const openMenu=v=>document.body.classList.toggle('menu',v);
+function swipe(el,dir,fn){let y0=null;
+  el.addEventListener('pointerdown',e=>{y0=e.clientY;el.setPointerCapture?.(e.pointerId);});
+  el.addEventListener('pointermove',e=>{if(y0==null)return;if((y0-e.clientY)*dir>28){y0=null;fn();}});
+  el.addEventListener('pointerup',e=>{if(y0!=null&&Math.abs(y0-e.clientY)<8)fn();y0=null;});
+  el.addEventListener('pointercancel',()=>y0=null);}
+swipe(document.getElementById('grab'),1,()=>openMenu(true));          // swipe up (or tap) on the bar
+swipe(document.getElementById('sheetHead'),-1,()=>openMenu(false));   // swipe down (or tap) on the sheet handle
 
 // PWA install
 let deferred=null;const inst=document.getElementById('install');
@@ -436,7 +443,7 @@ addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferred=e;inst.st
 inst.onclick=async()=>{if(!deferred)return;deferred.prompt();await deferred.userChoice;deferred=null;inst.style.display='none';};
 if('serviceWorker' in navigator && location.protocol!=='file:'){
   addEventListener('load',()=>navigator.serviceWorker.register('sw.js').then(r=>{
-    navigator.serviceWorker.ready.then(()=>{ if(!camOn&&statusEl.textContent.startsWith('화면'))status('오프라인 저장 완료 · 화면을 문지르거나 카메라를 켜세요'); });
+    navigator.serviceWorker.ready.then(()=>{ if(!camOn&&statusEl.textContent.startsWith('손 인식 꺼짐'))status('손 인식 꺼짐 · 오프라인 저장 완료'); });
   }).catch(e=>console.warn('SW',e)));
 }
 

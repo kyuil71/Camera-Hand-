@@ -1,5 +1,5 @@
 /* Hand Flow Art — offline cache (everything, incl. the AI model, is stored on the phone) */
-const CACHE = 'hand-flow-v1';
+const CACHE = 'hand-flow-v2';
 const ASSETS = [
   './',
   './index.html',

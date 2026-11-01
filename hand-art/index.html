@@ -67,7 +67,7 @@ body.immersive .top .brand{opacity:0}
       <button class="btn" id="hideBtn">몰입 모드</button>
       <button class="btn" id="install">앱 설치</button>
     </div>
-    <p class="hint"><b>손가락</b> 흐름 그리기 · <b>엄지+검지 집기</b> 소용돌이<br><b>주먹</b> 굳히기 · 손 펴면 다시 흐름</p>
+    <p class="hint"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 가리킨 방향으로 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
   </div>
 </div>
 
@@ -104,13 +104,26 @@ const H = `#version 300 es
 precision highp float;precision highp sampler2D;
 in vec2 vUv,vL,vR,vT,vB;out vec4 o;
 float hash(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}
+float vn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+1.),f.x),f.y);}
+float bristle(vec2 uv,vec2 dims,float sd){vec2 q=uv*dims;return .55*vn(q/2.2+sd)+.3*vn(q/5.+sd*1.7)+.15*vn(q/11.-sd);}
 `;
 const FS = {
 splatVel: H+`uniform sampler2D uT;uniform float aspect,radius;uniform vec2 point;uniform vec3 color;
 void main(){vec2 p=vUv-point;p.x*=aspect;o=vec4(texture(uT,vUv).xyz+exp(-dot(p,p)/radius)*color,1.);}`,
 splatDye: H+`uniform sampler2D uT;uniform float aspect,radius,strength;uniform vec2 point;uniform vec4 color;
-void main(){vec2 p=vUv-point;p.x*=aspect;float w=clamp(exp(-dot(p,p)/radius)*strength,0.,1.);vec4 b=texture(uT,vUv);
-o=vec4(mix(b.rgb,color.rgb,w),min(b.a+w*color.a,3.));}`,
+void main(){vec2 p=vUv-point;p.x*=aspect;float g=exp(-dot(p,p)/radius);
+float w=clamp(smoothstep(.06,.5,g)*strength,0.,1.);vec4 b=texture(uT,vUv);
+o=vec4(mix(b.rgb,color.rgb,w),min(b.a+(w*.7+g*.6)*color.a*strength,3.2));}`,
+maccormack: H+`uniform sampler2D uVel,uSrc;uniform vec2 simTexel,srcTexel;uniform float dt;uniform vec4 diss;
+void main(){vec2 v=texture(uVel,vUv).xy*simTexel*dt;vec2 c=vUv-v;vec4 fwd=texture(uSrc,c);
+vec2 xf=vUv+v;vec2 vf=texture(uVel,xf).xy*simTexel*dt;vec4 back=texture(uSrc,xf-vf);
+vec4 r=fwd+.5*(texture(uSrc,vUv)-back);
+vec2 b=(floor(c/srcTexel-.5)+.5)*srcTexel;
+vec4 a1=texture(uSrc,b),a2=texture(uSrc,b+vec2(srcTexel.x,0.)),a3=texture(uSrc,b+vec2(0.,srcTexel.y)),a4=texture(uSrc,b+srcTexel);
+r=clamp(r,min(min(a1,a2),min(a3,a4)),max(max(a1,a2),max(a3,a4)));
+o=r/(1.+diss*dt);}`,
+detail: H+`uniform sampler2D uT;uniform vec2 dims;uniform float rate,sd;
+void main(){float n=bristle(vUv,dims,sd);o=vec4(mix(rate<1.?texture(uT,vUv).x:n,n,min(rate,1.)),0.,0.,1.);}`,
 advect: H+`uniform sampler2D uVel,uSrc;uniform vec2 simTexel;uniform float dt;uniform vec4 diss;
 void main(){vec2 c=vUv-dt*texture(uVel,vUv).xy*simTexel;o=texture(uSrc,c)/(1.+diss*dt);}`,
 divergence: H+`uniform sampler2D uVel;
@@ -131,33 +144,35 @@ ambient: H+`uniform sampler2D uVel;uniform float t,amp,dt;
 void main(){vec2 u=vUv;vec2 f=vec2(sin(u.y*6.3+t*.55)+.6*sin(u.y*15.+u.x*4.-t*1.2),cos(u.x*5.7-t*.47)+.6*cos(u.x*13.-u.y*5.+t*.9));
 o=vec4(texture(uVel,vUv).xy+f*amp*dt,0.,1.);}`,
 init: H+`uniform vec3 pal[6];uniform float seed,aspect;
-float vn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+1.),f.x),f.y);}
 float fbm(vec2 p){float s=0.,a=.5;for(int i=0;i<5;i++){s+=a*vn(p);p=p*2.03+17.1;a*=.5;}return s;}
 void main(){vec2 p=vUv*vec2(aspect,1.)*2.6+seed;float n=fbm(p);float m=fbm(p*1.7+n*3.+seed*.3);
 float k=fract(n*3.2+m*2.4)*6.;int i=int(k);vec3 c=mix(pal[i],pal[(i+1)%6],smoothstep(.55,1.,fract(k)));
 o=vec4(c,.4+1.6*m*m+.4*sin(k*3.14));}`,
-display: H+`uniform sampler2D uDye;uniform vec2 dyeTexel;uniform float dotSize,relief,time;
-float Hh(vec2 uv){vec4 d=texture(uDye,uv);return d.a*.7+dot(d.rgb,vec3(.3,.5,.2))*.4;}
-vec3 nrm(vec2 uv,vec2 e,float k){float l=Hh(uv-vec2(e.x,0.)),r=Hh(uv+vec2(e.x,0.)),b=Hh(uv-vec2(0.,e.y)),t=Hh(uv+vec2(0.,e.y));
-return vec3((l-r)*k,(b-t)*k,1.);}
-void main(){vec4 d=texture(uDye,vUv);
-vec3 n1=nrm(vUv,dyeTexel*1.5,relief*.45),n2=nrm(vUv,dyeTexel*5.,relief*.55),n3=nrm(vUv,dyeTexel*12.,relief*.4);
-vec3 n=normalize(vec3(n1.xy+n2.xy+n3.xy,1.));
-vec3 L=normalize(vec3(-.45,.6,.65));
-float diff=max(dot(n,L),0.);float spec=pow(max(dot(reflect(-L,n),vec3(0.,0.,1.)),0.),22.);
-float sheen=pow(1.-n.z,1.5);
-float hC=Hh(vUv),hW=(Hh(vUv+vec2(dyeTexel.x*8.,0.))+Hh(vUv-vec2(dyeTexel.x*8.,0.))+Hh(vUv+vec2(0.,dyeTexel.y*8.))+Hh(vUv-vec2(0.,dyeTexel.y*8.)))*.25;
-float ao=clamp(1.-(hW-hC)*1.6,.45,1.15);
-vec3 c=d.rgb*(.35+.85*diff)*ao+spec*.55*vec3(1.,.96,.88)+sheen*d.rgb*.25;
-c=mix(vec3(dot(c,vec3(.3,.55,.15))),c,1.22);
-vec2 g=gl_FragCoord.xy/dotSize;vec2 id=floor(g);vec2 f=fract(g)-.5;float h1=hash(id);
+display: H+`uniform sampler2D uDye,uDet;uniform vec2 dyeTexel;uniform float dotSize,relief,time;
+float Hh(vec2 uv){vec4 d=texture(uDye,uv);float t=texture(uDet,uv).x;
+return d.a*.78+dot(d.rgb,vec3(.3,.5,.2))*.22+(t-.5)*(.12+.1*d.a);}
+vec2 grd(vec2 uv,vec2 e){return vec2(Hh(uv-vec2(e.x,0.))-Hh(uv+vec2(e.x,0.)),Hh(uv-vec2(0.,e.y))-Hh(uv+vec2(0.,e.y)));}
+void main(){vec4 d=texture(uDye,vUv);float t=texture(uDet,vUv).x;
+vec2 g=grd(vUv,dyeTexel*1.2)*.42+grd(vUv,dyeTexel*4.)*.5+grd(vUv,dyeTexel*11.)*.45;
+vec3 n=normalize(vec3(g*relief,1.));
+vec3 L=normalize(vec3(-.42,.62,.66));vec3 Hv=normalize(L+vec3(0.,0.,1.));
+float diff=max(dot(n,L),0.);
+float nh=max(dot(n,Hv),0.);float spec=pow(nh,70.)*1.05+pow(nh,12.)*.16;
+float fres=pow(1.-n.z,2.);
+float hC=Hh(vUv),hW=0.;for(int i=0;i<4;i++){float a=float(i)*1.5708+.6;hW+=Hh(vUv+vec2(cos(a),sin(a))*dyeTexel*9.);}hW*=.25;
+float ao=clamp(1.-(hW-hC)*1.8,.4,1.12);
+float lum=dot(d.rgb,vec3(.3,.55,.15));
+vec3 base=mix(vec3(lum),d.rgb,1.12+.1*min(d.a,2.));
+base*=.9+.2*t;
+vec3 c=base*(.28+.9*diff)*ao+spec*vec3(1.,.97,.92)*(.6+.4*min(d.a,1.5))+fres*base*.35;
+vec2 q=gl_FragCoord.xy/dotSize;vec2 id=floor(q);vec2 f=fract(q)-.5;float h1=hash(id);
 f+=(vec2(h1,hash(id+7.31))-.5)*.45;
-float br=clamp(dot(c,vec3(.33)),0.,1.);float r=.34+.18*br+.06*h1;
-float dm=1.-smoothstep(r-.16,r,length(f));
-c=mix(c*.7,c*(1.04+.14*h1),dm);
-float tw=step(.985,hash(id+floor(time*3.)))*spec;c+=tw*.6;
-c+=(hash(gl_FragCoord.xy+fract(time)*91.)-.5)*.03;
-c=1.-exp(-c*1.7);o=vec4(c,1.);}`
+float br=clamp(dot(c,vec3(.33)),0.,1.);float r=.36+.16*br+.06*h1;
+float dm=1.-smoothstep(r-.17,r,length(f));
+c=mix(c*.8,c*(1.03+.1*h1),dm);
+c+=step(.988,hash(id+floor(time*4.)))*spec*.7;
+c+=(hash(gl_FragCoord.xy+fract(time)*91.)-.5)*.025;
+c=1.-exp(-c*1.6);o=vec4(c,1.);}`
 };
 
 function compile(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);
@@ -191,7 +206,7 @@ function use(k,texel){const s=P[k];gl.useProgram(s.p);gl.uniform2f(s.u.texel,tex
 
 /* ================= Simulation state ================= */
 const SIM_RES=128, DYE_RES=640;
-let vel,dye,div,curlF,pres,aspect=1,dpr=1;
+let vel,dye,det,detSeed=0,div,curlF,pres,aspect=1,dpr=1;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
 function resize(){dpr=Math.min(window.devicePixelRatio||1,2);
@@ -199,11 +214,12 @@ function resize(){dpr=Math.min(window.devicePixelRatio||1,2);
   if(canvas.width===w&&canvas.height===h&&vel)return;
   canvas.width=w;canvas.height=h;fx.width=w;fx.height=h;aspect=w/h;
   const [sw,sh]=res(SIM_RES),[dw,dh]=res(DYE_RES);
-  vel=dfbo(sw,sh);dye=dfbo(dw,dh);div=fbo(sw,sh);curlF=fbo(sw,sh);pres=dfbo(sw,sh);
+  vel=dfbo(sw,sh);dye=dfbo(dw,dh);det=dfbo(dw,dh);div=fbo(sw,sh);curlF=fbo(sw,sh);pres=dfbo(sw,sh);
   seed();}
 function seed(){const u=use('init',[dye.w.tx,dye.w.ty]);
   gl.uniform3fv(u.pal,new Float32Array(pal().flat()));gl.uniform1f(u.seed,Math.random()*100);gl.uniform1f(u.aspect,aspect);
   blit(dye.w);dye.swap();
+  detSeed=Math.random()*50;detailPass(2);
   for(let i=0;i<14;i++)splatVel(Math.random(),Math.random(),(Math.random()-.5)*900,(Math.random()-.5)*900,.012);}
 
 function splatVel(x,y,dx,dy,r){const u=use('splatVel',[vel.r.tx,vel.r.ty]);
@@ -214,6 +230,8 @@ function splatDye(x,y,c,r,strength,thick){const u=use('splatDye',[dye.r.tx,dye.r
   gl.uniform4f(u.color,c[0],c[1],c[2],thick==null?.6:thick);gl.uniform1f(u.radius,(r||.002)*(aspect>1?aspect:1));gl.uniform1f(u.strength,strength==null?1:strength);
   blit(dye.w);dye.swap();}
 
+function detailPass(rate){const u=use('detail',[det.r.tx,det.r.ty]);gl.uniform1i(u.uT,det.r.bind(0));
+  gl.uniform2f(u.dims,det.r.w,det.r.h);gl.uniform1f(u.rate,rate);gl.uniform1f(u.sd,detSeed);blit(det.w);det.swap();}
 let flow=1, flowTarget=1, simTime=0;
 function step(dt){
   const tx=[vel.r.tx,vel.r.ty];
@@ -227,8 +245,10 @@ function step(dt){
   u=use('gradient',tx);gl.uniform1i(u.uP,pres.r.bind(0));gl.uniform1i(u.uVel,vel.r.bind(1));blit(vel.w);vel.swap();
   u=use('advect',tx);gl.uniform2f(u.simTexel,vel.r.tx,vel.r.ty);gl.uniform1f(u.dt,dt);
   gl.uniform1i(u.uVel,vel.r.bind(0));gl.uniform1i(u.uSrc,vel.r.bind(0));gl.uniform4f(u.diss,.25,.25,0,0);blit(vel.w);vel.swap();
-  u=use('advect',[dye.r.tx,dye.r.ty]);gl.uniform2f(u.simTexel,vel.r.tx,vel.r.ty);gl.uniform1f(u.dt,dt);
-  gl.uniform1i(u.uVel,vel.r.bind(0));gl.uniform1i(u.uSrc,dye.r.bind(1));gl.uniform4f(u.diss,.004,.004,.004,.035);blit(dye.w);dye.swap();
+  u=use('maccormack',[dye.r.tx,dye.r.ty]);gl.uniform2f(u.simTexel,vel.r.tx,vel.r.ty);gl.uniform2f(u.srcTexel,dye.r.tx,dye.r.ty);gl.uniform1f(u.dt,dt);
+  gl.uniform1i(u.uVel,vel.r.bind(0));gl.uniform1i(u.uSrc,dye.r.bind(1));gl.uniform4f(u.diss,.003,.003,.003,.03);blit(dye.w);dye.swap();
+  gl.uniform2f(u.srcTexel,det.r.tx,det.r.ty);gl.uniform1i(u.uSrc,det.r.bind(1));gl.uniform4f(u.diss,0,0,0,0);blit(det.w);det.swap();
+  detailPass(.006);
 }
 
 /* ================= Interaction (touch + hands) ================= */
@@ -248,20 +268,28 @@ canvas.addEventListener('pointermove',e=>{const p=pointers.get(e.pointerId);if(!
 const TIPS=[4,8,12,16,20];
 const tracks={};            // key `${hand}-${tip}` -> {x,y}
 let hands=null, handsReady=false, camOn=false, busy=false, lastSeen=0, fistSince=0, handInfo=[];
-const pinchState={};
+const pinchState={}, pointState={};
 const d2=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 
 function onHands(res){
   const now=performance.now();
   const list=res.multiHandLandmarks||[];
-  drawPreview(res,list);
-  if(!list.length){ if(now-lastSeen>250){for(const k in tracks)delete tracks[k];} handInfo=[]; status(camOn?'손을 카메라에 보여주세요':''); fistSince=0; return; }
+  try{drawPreview(res,list);}catch(e){}
+  if(!list.length){ if(now-lastSeen>250){for(const k in tracks)delete tracks[k];for(const k in pointState)delete pointState[k];} handInfo=[]; status(camOn?'손을 카메라에 보여주세요':''); fistSince=0; return; }
   lastSeen=now; handInfo=[];
   let anyFist=false;
   list.forEach((lm,h)=>{
     const size=d2(lm[0],lm[9])||.1;
     const fist=[8,12,16,20].every(i=>d2(lm[i],lm[0])<size*1.15);
     const pinch=!fist && d2(lm[4],lm[8])<size*.38;
+    const pointing=!fist && !pinch && d2(lm[8],lm[0])>size*1.5 && [12,16,20].every(i=>d2(lm[i],lm[0])<size*1.25);
+    let point=null;
+    if(pointing){
+      let dx=(lm[8].x-lm[5].x)*aspect, dy=-(lm[8].y-lm[5].y); const l=Math.hypot(dx,dy)||1; dx/=l; dy/=l;
+      const ps=pointState[h]; if(ps){dx=ps.dx+(dx-ps.dx)*.45;dy=ps.dy+(dy-ps.dy)*.45;const l2=Math.hypot(dx,dy)||1;dx/=l2;dy/=l2;}
+      point={x:lm[8].x,y:1-lm[8].y,dx,dy,c:pointState[h]?.c??((Math.random()*6)|0)};
+      pointState[h]=point;
+    } else delete pointState[h];
     anyFist=anyFist||fist;
     const pts=[];
     TIPS.forEach((ti,j)=>{
@@ -269,7 +297,7 @@ function onHands(res){
       const key=h+'-'+ti; const prev=tracks[key];
       const sm=prev?{x:prev.x+(raw.x-prev.x)*.6,y:prev.y+(raw.y-prev.y)*.6}:raw;
       tracks[key]=sm; pts.push(sm);
-      if(!prev||fist)return;
+      if(!prev||fist||(pointing&&ti!==8))return;
       let dx=sm.x-prev.x, dy=sm.y-prev.y; const sp=Math.hypot(dx,dy);
       if(sp>.25)return;                               // tracking jump
       const isIndex=ti===8, strong=isIndex?1:.55;
@@ -287,11 +315,11 @@ function onHands(res){
         queue.push({x:mid.x+Math.cos(a)*R,y:mid.y+Math.sin(a)*R*aspect,dx:-Math.sin(a)*700*dir,dy:Math.cos(a)*700*dir,r:.0045,vOnly:true});}
     }
     pinchState[pk]=pinch;
-    handInfo.push({pts,fist,pinch,mid});
+    handInfo.push({pts,fist,pinch,mid,point});
   });
   if(anyFist){ if(!fistSince)fistSince=now; } else fistSince=0;
   flowTarget = (fistSince && now-fistSince>160) ? 0 : 1;
-  status(`손 ${list.length}개 인식 ${flowTarget? '':'· 굳힘'}`);
+  status(`손 ${list.length}개 인식${flowTarget?'':' · 굳힘'}${handInfo.some(x=>x.point)?' · 가리키기':''}`);
 }
 
 /* ================= Camera + embedded AI ================= */
@@ -344,6 +372,9 @@ function drawFx(){
   for(const h of handInfo){
     h.pts.forEach((p,i)=>{const x=p.x*fx.width,y=(1-p.y)*fx.height;const r=(i===1?11:7)*dpr*(h.fist?.7:1);
       fxc.strokeStyle=h.fist?'rgba(255,255,255,.35)':'rgba(255,248,230,.75)';fxc.beginPath();fxc.arc(x,y,r,0,7);fxc.stroke();});
+    if(h.point){const p=h.point,x=p.x*fx.width,y=(1-p.y)*fx.height,L=46*dpr,ex=x+p.dx*L,ey=y-p.dy*L,a=Math.atan2(-p.dy,p.dx);
+      fxc.strokeStyle='rgba(255,248,230,.85)';fxc.lineWidth=2*dpr;fxc.beginPath();fxc.moveTo(x,y);fxc.lineTo(ex,ey);
+      fxc.moveTo(ex,ey);fxc.lineTo(ex-Math.cos(a-.5)*12*dpr,ey-Math.sin(a-.5)*12*dpr);fxc.moveTo(ex,ey);fxc.lineTo(ex-Math.cos(a+.5)*12*dpr,ey-Math.sin(a+.5)*12*dpr);fxc.stroke();fxc.lineWidth=1.5*dpr;}
     if(h.pinch){fxc.strokeStyle='rgba(247,200,68,.8)';fxc.beginPath();fxc.arc(h.mid.x*fx.width,(1-h.mid.y)*fx.height,26*dpr,0,7);fxc.stroke();}
   }
 }
@@ -361,6 +392,11 @@ function frame(now){
   if(ambientClock>.55){ambientClock=0;const x=Math.random(),y=Math.random(),a=Math.random()*6.28;
     splatDye(x,y,pickColor(Math.random()*6|0),.0016+Math.random()*.003,.75,.8);splatVel(x,y,Math.cos(a)*420,Math.sin(a)*420,.004);}
   if(Math.random()<dt*.15)colorTick++;
+  // pointing jets: paint streams out of the fingertip in the pointed direction
+  for(const h of handInfo){const p=h.point;if(!p)continue;
+    if(flow>.3){splatVel(p.x,p.y,p.dx*1500,p.dy*1500,.0032);
+      for(let k=1;k<=3;k++)splatVel(p.x+p.dx/aspect*.04*k,p.y+p.dy*.04*k,p.dx*(1250-k*180),p.dy*(1250-k*180),.0042);}
+    splatDye(p.x,p.y,pickColor(p.c),.0024,.45,.55);}
   // apply queued splats
   for(const s of queue.splice(0)){
     if(flow>.3)splatVel(s.x,s.y,s.dx*flow,s.dy*flow,s.r*1.2);
@@ -368,8 +404,8 @@ function frame(now){
   }
   if(flow>.02){simTime+=dt*flow;step(dt*flow);}
   // display
-  const u=use('display',[0,0]);gl.uniform1i(u.uDye,dye.r.bind(0));gl.uniform2f(u.dyeTexel,dye.r.tx,dye.r.ty);
-  gl.uniform1f(u.dotSize,2.2*dpr);gl.uniform1f(u.relief,9.+6.*(1.-flow));gl.uniform1f(u.time,now*.001);blit(null);
+  const u=use('display',[0,0]);gl.uniform1i(u.uDye,dye.r.bind(0));gl.uniform1i(u.uDet,det.r.bind(1));gl.uniform2f(u.dyeTexel,dye.r.tx,dye.r.ty);
+  gl.uniform1f(u.dotSize,2.0*dpr);gl.uniform1f(u.relief,11.+7.*(1.-flow));gl.uniform1f(u.time,now*.001);blit(null);
   if(snapReq){snapReq=false;canvas.toBlob(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);
     a.download='hand-flow-'+new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')+'.png';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000);},'image/png');}
   drawFx();

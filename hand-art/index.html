@@ -106,7 +106,7 @@ body:not(.water) #floors,body:not(.water) #dipRow,body:not(.water) #rainRow{disp
     <label class="mfx" id="mfxRow"><span><b>음악 인터랙션</b><small>Music Interaction</small></span>
       <input type="checkbox" id="mfxSw" role="switch" aria-label="음악 인터랙션 Music Interaction"><i aria-hidden="true"></i></label>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 42</p>
+    <p class="hint" id="ver">버전 43</p>
   </div>
 </div>
 
@@ -908,30 +908,61 @@ function updateDips(dt){
 }
 const wTip={}, wWind=[{x:.5,y:.5,dx:0,dy:1,k:0,px:null,py:null},{x:.5,y:.5,dx:0,dy:1,k:0,px:null,py:null}];
 const windBuf=new Float32Array(8), windK=new Float32Array(2);
+/* ---- Ripple input: "퐁당" — every new contact drops ONE small stone; moving only leaves a faint wake ---- */
+const PLOP_A=2.6, PLOP_R=.00016;                 // a small pebble: tight impulse → the wave equation spreads it into clean rings
+const plops=[];                                   // contacts that started since the last frame
+const wakes=new Map();                            // per contact: distance travelled since the last wake touch
+function addPlop(x,y,k){plops.push({x,y,k:k==null?1:k});}
+function wakeStep(id,x,y,speed){                  // speed in screen-heights / s
+  let w=wakes.get(id);if(!w){w={x,y,acc:0};wakes.set(id,w);}
+  const d=Math.hypot((x-w.x)*aspect,y-w.y);w.x=x;w.y=y;if(d>.2)return;   // tracking jump
+  w.acc+=d;const step=.022;
+  while(w.acc>=step){w.acc-=step;                 // fixed spacing → event rate never multiplies the waves
+    const s=Math.min(1,Math.max(0,(speed-.08)/1.4));
+    queue.push({x,y,wake:1,amp:.06+.34*s*s,r:.00018+.00022*s});}}
+function wakeEnd(id){wakes.delete(id);}
+// camera: each finger bending down like a piano key = one plop at its tip (hysteresis + confirmation → no jitter repeats)
+const keyState={};                                // 'h'+hand+'_'+finger → {down,since,t0,x,y,cool,fired}
+const KEYS=[[8,5],[12,9],[16,13],[20,17]];
+function fingerKeys(res){
+  const now=performance.now(),list=res.multiHandLandmarks||[],seen={};
+  if(mode!=='water'||dipMode)return;
+  list.forEach((lm,h)=>{if(h>1)return;const hi=handInfo[h];if(!hi)return;
+    const wr=lm[0],ratio=KEYS.map(([t,m])=>Math.hypot(lm[t].x-wr.x,lm[t].y-wr.y)/(Math.hypot(lm[m].x-wr.x,lm[m].y-wr.y)+1e-6));
+    KEYS.forEach(([t],j)=>{const key='h'+h+'_'+j;seen[key]=1;let st=keyState[key];
+      if(!st)st=keyState[key]={down:ratio[j]<1.35,t0:0,x:0,y:0,cool:0,fired:true};
+      const r=ratio[j];
+      if(!st.down&&r<1.35){st.down=true;st.t0=now;st.x=lm[t].x;st.y=1-lm[t].y;st.fired=false;}   // pressed
+      else if(st.down&&r>1.62){st.down=false;}                                                     // released (hysteresis band 1.35–1.62)
+      // confirm ~90 ms later: still pressed, the hand is not making a fist / pinch / pointing, and another finger is still up
+      if(st.down&&!st.fired&&now-st.t0>90){st.fired=true;
+        const othersUp=ratio.filter((v,k)=>k!==j&&v>1.62).length;
+        if(!hi.fist&&!hi.pinch&&!hi.point&&othersUp>=1&&now>st.cool){addPlop(st.x,st.y,.9);st.cool=now+220;}}});});
+  for(const k in keyState)if(!seen[k])delete keyState[k];
+}
 function waterHands(dt,live){
   const seen={};
-  handInfo.forEach((h,i)=>{if(i>1)return;const W=wWind[i];
-    if(h.point&&h.pts&&h.pts[1]&&!h.fist){                       // ONE finger: the fingertip touches the water, just like a finger on the glass
+  handInfo.forEach((h,i)=>{if(i>1)return;
+    if(h.point&&h.pts&&h.pts[1]&&!h.fist){        // pointing: the fingertip is "in" the water — contact start = one plop, moving = faint wake
       const p=h.pts[1],t=wTip[i];seen[i]=1;
-      if(!t){wTip[i]={x:p.x,y:p.y,t:performance.now()};if(live)waterPoke(p.x,p.y,WATER_AMP*.9,.00035);return;}   // the moment it touches: a small ring
+      if(!t){wTip[i]={x:p.x,y:p.y,t:performance.now()};addPlop(p.x,p.y,.9);wakes.delete('hp'+i);return;}
       const dx=p.x-t.x,dy=p.y-t.y,dist=Math.hypot(dx*aspect,dy);
-      if(dist<.004)return;                                       // still: no jitter ripples
-      const el=Math.min(.12,Math.max(1/60,(performance.now()-t.t)/1000));                  // real time between camera frames
-      const n=Math.min(12,Math.ceil(dist/.0065)),vx=dx/el,vy=dy/el;
-      for(let k=1;k<=n;k++)queue.push({x:t.x+dx*k/n,y:t.y+dy*k/n,vx,vy,set:.85,r:.0032,s:.9});   // same as touch strokes, filled in between camera frames
-      t.x=p.x;t.y=p.y;t.t=performance.now();W.k*=.9;return;}
-  });
-  for(const k in wTip)if(!seen[k])delete wTip[k];
-  for(let i=0;i<2;i++){const W=wWind[i];if(!handInfo[i]||handInfo[i].point||handInfo[i].fist){W.k*=Math.exp(-dt*1.6);W.px=null;}
-    windBuf.set([W.x,W.y,W.dx,W.dy],i*4);windK[i]=W.k;}
+      if(dist<.006)return;                         // jitter
+      const el=Math.min(.12,Math.max(1/60,(performance.now()-t.t)/1000));
+      wakeStep('hp'+i,p.x,p.y,dist/el);t.x=p.x;t.y=p.y;t.t=performance.now();}});
+  for(const k in wTip)if(!seen[k]){delete wTip[k];wakeEnd('hp'+k);}
 }
 function waterFrame(dt){
   const wts=Math.min(.45+.55*timeScale,2.6);            // slider + finger speed → water time
   const sdt=dt*flow*wts; waterTime+=sdt;
   const live=flow>.3;
-  if(dipMode){queue.length=0;updateDips(dt);}else waterHands(dt,live);
+  if(dipMode){queue.length=0;plops.length=0;updateDips(dt);}else waterHands(dt,live);
+  if(plops.length){const n=plops.length,kk=1/Math.sqrt(n);            // many stones at once: each a little softer, total energy stays calm
+    if(live)for(const p of plops)waterPoke(p.x,p.y,WATER_AMP*PLOP_A*p.k*kk,PLOP_R);plops.length=0;}
   // fingers / touch / pinch rings → pressure on the surface (stronger when moving faster)
   for(const s of queue.splice(0)){ if(!live)continue;
+    if(s.wake){waterPoke(s.x,s.y,WATER_AMP*s.amp,s.r);continue;}
+    if(s.set&&!s.hand)continue;                            // touch strokes are handled as plop + wake now
     const main=s.set?s.set>.6:true;
     if(s.hand&&s.set)continue;                             // hands are handled by waterHands(): one finger = touch, several = wind
     let sp=s.vx!=null?Math.hypot(s.vx*aspect,s.vy):Math.hypot(s.dx||0,s.dy||0)/2600;
@@ -1230,12 +1261,14 @@ const pickColor=(i)=>{const p=pal();const c=p[(i+colorTick)%p.length];const k=.9
 // touch fallback
 const pointers=new Map();
 canvas.addEventListener('pointerdown',e=>{if(document.body.classList.contains('menu')){openMenu(false);return;}pointers.set(e.pointerId,{x:e.clientX/innerWidth,y:1-e.clientY/innerHeight,t:e.timeStamp,c:pickColor(pointers.size+(Math.random()*6|0))});wake();
-  if(mode==='water'&&dipMode)dipStart('t'+e.pointerId,e.clientX/innerWidth,1-e.clientY/innerHeight,.005);});
+  if(mode==='water'&&dipMode)dipStart('t'+e.pointerId,e.clientX/innerWidth,1-e.clientY/innerHeight,.005);
+  else if(mode==='water'){addPlop(e.clientX/innerWidth,1-e.clientY/innerHeight,1);wakeEnd('t'+e.pointerId);}});   // each finger that lands = one 퐁당
 canvas.addEventListener('pointermove',e=>{const p=pointers.get(e.pointerId);if(!p)return;
   const x=e.clientX/innerWidth,y=1-e.clientY/innerHeight;const dtR=Math.min(Math.max((e.timeStamp-p.t)/1000,.008),.1);feelFinger(Math.hypot((x-p.x)*aspect,y-p.y)/dtR);
-  queue.push({x,y,vx:(x-p.x)/dtR,vy:(y-p.y)/dtR,set:.85,c:p.c,r:.0032,s:.9});p.x=x;p.y=y;p.t=e.timeStamp;
+  if(mode==='water'&&!dipMode)wakeStep('t'+e.pointerId,x,y,Math.hypot((x-p.x)*aspect,y-p.y)/dtR);
+  else queue.push({x,y,vx:(x-p.x)/dtR,vy:(y-p.y)/dtR,set:.85,c:p.c,r:.0032,s:.9});p.x=x;p.y=y;p.t=e.timeStamp;
   if(dipMode)dipMove('t'+e.pointerId,x,y);});
-['pointerup','pointercancel','pointerleave'].forEach(t=>canvas.addEventListener(t,e=>{pointers.delete(e.pointerId);dipEnd('t'+e.pointerId);}));
+['pointerup','pointercancel','pointerleave'].forEach(t=>canvas.addEventListener(t,e=>{pointers.delete(e.pointerId);dipEnd('t'+e.pointerId);wakeEnd('t'+e.pointerId);}));
 
 // hand state
 const TIPS=[4,8,12,16,20];
@@ -1302,6 +1335,7 @@ function onHands(res){
   for(const k in handSize)if(!seenH[k]&&handSize[k].dipping){handSize[k].dipping=false;dipEnd('h'+k);}
   if(anyFist){ if(!fistSince)fistSince=now; } else fistSince=0;
   flowTarget = (fistSince && now-fistSince>160) ? 0 : 1;
+  fingerKeys(res);
   for(let k=q0;k<queue.length;k++)queue[k].hand=1;
   status(`카메라 인식됨 · 손 ${list.length}개${flowTarget?'':' · 굳힘'}${handInfo.some(x=>x.point)?' · 가리키기':''}`);
 }
@@ -1417,7 +1451,7 @@ const HINTS={paint:hintTxt.innerHTML,
   cloud:'<b>검지</b> 지나간 구름이 부드럽게 갈라짐 · 빠르게 움직이면 흩어짐<br><b>집기</b> 회전 흐름 · <b>손 펼치기</b> 넓게 확산 · <b>주먹</b> 천천히 안정',
   silk:'<b>검지</b> 실크가 따라 흐름 · 빠르게 움직이면 넓게 펼쳐짐<br><b>집기</b> 부드러운 소용돌이 · <b>손 펼치기</b> 활짝 펼침 · <b>주먹</b> 서서히 멈춤',
   light:'<b>손가락</b> 빛의 흐름 밀기 · <b>검지만 펴기</b> 가리킨 방향으로 빛줄기<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 멈춤',
-  water:'<b>검지 하나</b> 손끝이 물에 닿은 듯 움직임<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 물 멈춤'};
+  water:'<b>톡 터치·손가락 하나씩 구부리기</b> 퐁당 · <b>검지 하나</b> 손끝을 물에 대고 움직이기<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 물 멈춤'};
 function setMode(m){mode=m;document.body.classList.toggle('water',m==='water');document.body.classList.toggle('light',m==='light');document.body.classList.toggle('silk',m==='silk');document.body.classList.toggle('cloud',m==='cloud');
   if(m==='cloud'&&vel){const u=use('waterClear',[0,0]);blit(vel.w);vel.swap();blit(vel.w);vel.swap();}   // start calm: no leftover swirls from other modes
   document.querySelectorAll('#modeSeg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.m===m));

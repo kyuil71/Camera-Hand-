@@ -54,7 +54,8 @@ body.menu .dock{transform:translate(-50%,0)}
 .seg button[aria-pressed=true]{background:var(--ink);color:#101826}
 body.water #palettes,body.light #palettes{display:none}
 body:not(.light) #lights{display:none}
-body:not(.water) #floors,body:not(.water) #dipRow{display:none}
+body:not(.water) #floors,body:not(.water) #dipRow,body:not(.water) #rainRow{display:none}
+#rainRow{margin-bottom:10px}
 #dipRow{margin-bottom:10px}
 #dipBtn.on{background:var(--ink);color:#101826}
 .chip i.sw{width:24px;height:18px;border-radius:9px;border:1px solid rgba(255,255,255,.25)}
@@ -76,6 +77,7 @@ body:not(.water) #floors,body:not(.water) #dipRow{display:none}
     <div class="speed"><span>흐름 속도</span><input type="range" id="speed" min="0" max="100" step="1"><b id="speedVal"></b></div>
     <div class="row chips" id="palettes"></div>
     <div class="row chips" id="lights"></div>
+    <div class="row chips" id="rainRow"><button class="chip" data-r="0">비 없음</button><button class="chip" data-r="1">이슬비</button><button class="chip" data-r="2">비</button><button class="chip" data-r="3">소나기</button></div>
     <div class="row" id="dipRow"><button class="btn" id="dipBtn">손 담그기 켜기</button></div>
     <div class="row chips" id="floors"><button class="chip" data-f="2"><i class="sw" style="background:linear-gradient(135deg,#000,#1b1d20 50%,#000)"></i>검은 유리</button><button class="chip" data-f="1"><i class="sw" style="background:linear-gradient(135deg,#1c2328,#3a464e 50%,#11171b)"></i>다크 그레이</button><button class="chip" data-f="0"><i class="sw" style="background:linear-gradient(135deg,#8c8270,#c9bda4 45%,#6e675c)"></i>자갈</button></div>
     <div class="row">
@@ -90,7 +92,7 @@ body:not(.water) #floors,body:not(.water) #dipRow{display:none}
       <button class="btn" id="install">앱 설치</button>
     </div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 33</p>
+    <p class="hint" id="ver">버전 34</p>
   </div>
 </div>
 
@@ -305,7 +307,20 @@ waterPoke: H+`uniform sampler2D uT;uniform float aspect,radius,amp;uniform vec2 
 void main(){vec4 s=texture(uT,vUv);vec2 p=vUv-point;p.x*=aspect;float g=exp(-dot(p,p)/radius);o=vec4(s.x,s.y-amp*g,0.,1.);}`,
 waterGrad: H+`uniform sampler2D uT;void main(){float l=texture(uT,vL).x,r=texture(uT,vR).x,b=texture(uT,vB).x,t=texture(uT,vT).x,c=texture(uT,vUv).x;
 o=vec4((r-l)*.5,(t-b)*.5,l+r+b+t-4.*c,c);}`,
-waterRender: H+`uniform sampler2D uH,uS;uniform vec2 simTexel;uniform float aspect,time,nk,floorType;uniform vec3 sunDir;
+waterRender: H+`uniform sampler2D uH,uS;uniform vec2 simTexel;uniform float aspect,time,nk,floorType,rainN,rough;uniform vec3 sunDir;uniform vec4 rain[40];
+// raindrop impacts: fine capillary ring packets, computed per pixel (crisp at any resolution)
+vec2 rainGrad(vec2 p,out float spark){vec2 gr=vec2(0.);spark=0.;
+ for(int i=0;i<40;i++){if(float(i)>=rainN)break;vec4 r=rain[i];
+  vec2 dv=p-vec2(r.x*aspect,r.y);float d=length(dv);float age=r.z;
+  float R=.004+.11*age;                                   // ring front expands
+  float x=R-d;if(x<-.006||x>.05)continue;
+  float K=900.-380.*r.w;float W=.006+.022*age;            // wavelength, packet width grows (dispersion)
+  float A=(.25+.75*r.w)*.00045*exp(-age*2.6);
+  float env=x>0.?exp(-x*x/(W*W)):exp(-x*x/.000012);
+  float dh=A*K*cos(x*K)*env;
+  gr-=dh*dv/max(d,1e-4);
+  spark+=exp(-age*40.)*exp(-d*d/(.000004+.00003*r.w))*r.w;}   // the instant of impact
+ return gr;}
 #define TAU 6.28318530718
 vec2 h2(vec2 p){return vec2(hash(p),hash(p+19.19));}
 float fbm4(vec2 p){float s=0.,a=.5;for(int i=0;i<4;i++){s+=a*vn(p);p=p*2.07+13.7;a*=.5;}return s;}
@@ -367,10 +382,11 @@ vec3 sky(vec3 R,float t){
 void main(){
  vec2 uv=vUv;vec2 p=vec2(uv.x*aspect,uv.y);float t=time;
  vec2 gs=texture(uH,uv).xy/simTexel.y*nk;
- float gk=gustK(p,t),e=.0015;
+ float gk=min(1.,gustK(p,t)+rough),e=.0015;              /* rain roughens the whole surface */
  float s0=swellH(p,t)+ripH(p,t,gk);
  vec2 ga=vec2(swellH(p+vec2(e,0.),t)+ripH(p+vec2(e,0.),t,gk)-s0,swellH(p+vec2(0.,e),t)+ripH(p+vec2(0.,e),t,gk)-s0)/e;
  vec2 g=gs+ga;
+ float spark;g+=rainGrad(p,spark);
  vec3 N=normalize(vec3(-g,1.));
  vec3 P=vec3(p,0.);vec3 cam=vec3(.5*aspect,-.6,.85);vec3 V=normalize(cam-P);
  float cosT=clamp(dot(N,V),0.,1.);float F=.02+.98*pow(1.-cosT,5.);
@@ -408,6 +424,7 @@ void main(){
  float rise=texture(uS,uv).y;
  float foam=smoothstep(.28,.6,length(gs))*smoothstep(.05,.3,rise)*smoothstep(.35,.75,fn);
  col=mix(col,vec3(.96,.98,1.),clamp(foam,0.,1.)*.8);
+ col+=vec3(.92,.97,1.)*min(spark,1.)*.55;
  o=vec4(clamp(col,0.,1.),1.);}`
 };
 
@@ -672,6 +689,7 @@ function waterFrame(dt){
     if(g.life<=0||g.x<-.05||g.x>1.05||g.y<-.05||g.y>1.05){gliders.splice(i,1);continue;}
     if(live)waterPoke(g.x,g.y,WATER_AMP*.4*Math.min(1,g.life),.0004);}
   // a calm lake: now and then a tiny drop / fish rise
+  updateRain(dt*flow);
   dropClock-=sdt; if(dropClock<0){dropClock=1.8+Math.random()*3.5;waterPoke(Math.random(),Math.random(),WATER_AMP*(.4+Math.random()*.5),.00012);}
   // wave equation sub-steps
   wAcc+=sdt; let n=0; while(wAcc>=W_H&&n<30){
@@ -679,9 +697,26 @@ function waterFrame(dt){
     waterStep();wAcc-=W_H;n++;} if(n>=30)wAcc=0;
   let u=use('waterGrad',[wat.r.tx,wat.r.ty]);gl.uniform1i(u.uT,wat.r.bind(0));blit(wgrad);
   u=use('waterRender',[wat.r.tx,wat.r.ty]);gl.uniform1i(u.uH,wgrad.bind(0));gl.uniform1i(u.uS,wat.r.bind(1));gl.uniform2f(u.simTexel,wat.r.tx,wat.r.ty);
-  gl.uniform1f(u.aspect,aspect);gl.uniform1f(u.time,waterTime);gl.uniform1f(u.nk,W_NK);gl.uniform1f(u.floorType,floorType);gl.uniform3f(u.sunDir,SUN[0],SUN[1],SUN[2]);blit(null);
+  gl.uniform1f(u.aspect,aspect);gl.uniform1f(u.time,waterTime);gl.uniform1f(u.nk,W_NK);gl.uniform1f(u.floorType,floorType);gl.uniform4fv(u.rain,rainBuf);gl.uniform1f(u.rainN,rainDrops.length);gl.uniform1f(u.rough,roughNow);
+  gl.uniform3f(u.sunDir,SUN[0],SUN[1],SUN[2]);blit(null);
 }
 let WATER_AMP=1, HAND_K=1.6;
+/* ---- 비: raindrops on the lake ---- */
+let rainLevel=0; try{const v=parseInt(localStorage.getItem('hf-rain'));if(v>=0&&v<=3)rainLevel=v;}catch(e){}
+const RAIN_RATE=[0,3.5,11,26], RAIN_ROUGH=[0,.12,.3,.55], MAXR=40;
+const rainDrops=[]; let rainAcc=0, roughNow=0;
+const rainBuf=new Float32Array(MAXR*4);
+function updateRain(dt){
+  roughNow+=(RAIN_ROUGH[rainLevel]-roughNow)*Math.min(1,dt*.8);
+  for(let i=rainDrops.length-1;i>=0;i--){rainDrops[i].age+=dt;if(rainDrops[i].age>1.5)rainDrops.splice(i,1);}
+  rainAcc+=RAIN_RATE[rainLevel]*dt;
+  while(rainAcc>=1){rainAcc-=1;
+    if(rainDrops.length>=MAXR)rainDrops.shift();
+    const sz=Math.pow(Math.random(),1.8);                       // mostly small drops, a few big ones
+    const d={x:Math.random(),y:Math.random(),age:0,size:.2+.8*sz};rainDrops.push(d);
+    if(d.size>.75&&flow>.3)waterPoke(d.x,d.y,WATER_AMP*.35*d.size,.00006);}   // big drops also stir the lake
+  rainBuf.fill(0);rainDrops.forEach((d,i)=>rainBuf.set([d.x,d.y,d.age,d.size],i*4));
+}
 let floorType=2; try{const v=parseInt(localStorage.getItem('hf-floor4'));if(v>=0&&v<=2)floorType=v;}catch(e){}
 
 /* ================= Wall splashes: droplets that leap off the walls ================= */
@@ -1057,6 +1092,8 @@ function setDip(on){dipMode=on;dipBtn.textContent=on?'손 담그기 끄기':'손
   for(const id of dips.keys())dipEnd(id);try{localStorage.setItem('hf-dip',on?'1':'0');}catch(e){}
   if(mode==='water')hintTxt.innerHTML=on?HINTS.dip:HINTS.water;}
 dipBtn.onclick=()=>setDip(!dipMode);
+function setRain(v){rainLevel=v;document.querySelectorAll('#rainRow .chip').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.r===v));try{localStorage.setItem('hf-rain',v);}catch(e){}}
+document.querySelectorAll('#rainRow .chip').forEach(b=>b.onclick=()=>setRain(+b.dataset.r));setRain(rainLevel);
 function setFloor(v){floorType=v;document.querySelectorAll('#floors .chip').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.f===v));try{localStorage.setItem('hf-floor4',v);}catch(e){}}
 document.querySelectorAll('#floors .chip').forEach(b=>b.onclick=()=>setFloor(+b.dataset.f));setFloor(floorType);
 const musicBtn=document.getElementById('musicBtn');

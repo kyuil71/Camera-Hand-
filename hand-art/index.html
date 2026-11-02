@@ -85,7 +85,7 @@ body:not(.water) #floors{display:none}
       <button class="btn" id="install">앱 설치</button>
     </div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 17</p>
+    <p class="hint" id="ver">버전 18</p>
   </div>
 </div>
 
@@ -123,7 +123,7 @@ const H = `#version 300 es
 precision highp float;precision highp sampler2D;
 in vec2 vUv,vL,vR,vT,vB;out vec4 o;
 float hash(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}
-float vn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+1.),f.x),f.y);}
+float vn(vec2 p){vec2 i=floor(p),f=clamp(p-i,0.,1.);f=f*f*(3.-2.*f);   /* f from p-floor(p): never disagrees with i on any GPU */return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+1.),f.x),f.y);}
 float bristle(vec2 uv,vec2 dims,float sd){vec2 q=uv*dims;return .55*vn(q/2.2+sd)+.3*vn(q/5.+sd*1.7)+.15*vn(q/11.-sd);}
 `;
 const FS = {
@@ -201,7 +201,7 @@ vec3 nc=pal[0];float nd=1e3;for(int i=0;i<6;i++){vec3 q=d.rgb-pal[i];float dd=do
 vec3 base=mix(d.rgb,nc,.55);base=max(mix(vec3(dot(base,vec3(.3,.55,.15))),base,1.4),0.);
 base*=.9+.2*t;
 vec3 c=base*(.28+.9*diff)*ao+spec*vec3(1.,.97,.92)*(.6+.4*min(d.a,1.5))+fres*base*.35;
-vec2 q=gl_FragCoord.xy/dotSize;vec2 id=floor(q);vec2 f=fract(q)-.5;float h1=hash(id);
+vec2 q=gl_FragCoord.xy/dotSize;vec2 id=floor(q);vec2 f=q-id-.5;float h1=hash(id);
 f+=(vec2(h1,hash(id+7.31))-.5)*.45;
 float br=clamp(dot(c,vec3(.33)),0.,1.);float r=.36+.16*br+.06*h1;
 float dm=1.-smoothstep(r-.17,r,length(f));
@@ -258,14 +258,14 @@ float ripH(vec2 p,float t,float gk){p+=.025*vec2(vn(p*5.),vn(p*5.+9.));float s=0
  return s*(.00005+.00026*gk);}
 float caus(vec2 q,float t){                     // organic caustic web: warped cell borders, no axis-aligned structure
  q+=.55*vec2(vn(q*.55+t*.11),vn(q*.55+5.2-t*.09))+.18*vec2(vn(q*1.7-t*.2),vn(q*1.7+9.1+t*.17));
- vec2 ip=floor(q),fp=fract(q);float d1=8.,d2=8.;
+ vec2 ip=floor(q),fp=q-ip;float d1=8.,d2=8.;
  for(int y=-1;y<=1;y++)for(int x=-1;x<=1;x++){vec2 o2=vec2(x,y);vec2 h=h2(ip+o2);
-  vec2 r=o2+.5+.42*sin(t*.7+6.2831*h)-fp;float d=dot(r,r);if(d<d1){d2=d1;d1=d;}else if(d<d2)d2=d;}
+  vec2 r=o2+.5+.25*sin(t*.7+6.2831*h)-fp;float d=dot(r,r);   /* small jitter: nearest cells stay inside the 3x3 search */if(d<d1){d2=d1;d1=d;}else if(d<d2)d2=d;}
  float e=sqrt(d2)-sqrt(d1);float w=.30+.25*vn(q*.9+3.3);return pow(1.-smoothstep(0.,w,e),2.4)*(.55+.7*vn(q*.6-t*.07));}
 vec3 stoneCol(float a,float b){vec3 c=mix(vec3(.50,.45,.38),vec3(.80,.74,.63),a);
  c=mix(c,vec3(.62,.46,.31),step(.55,b));c=mix(c,vec3(.30,.29,.28),step(.76,b));c=mix(c,vec3(.68,.42,.30),step(.88,b));c=mix(c,vec3(.86,.84,.78),step(.95,b));return c;}
 float pebbles(vec2 q,float sc,float fill,out vec2 dir,out vec2 id){
- vec2 s=q*sc;vec2 ip=floor(s),fp=fract(s);float best=9.,bh=-1.;dir=vec2(0.);id=ip;
+ vec2 s=q*sc;vec2 ip=floor(s),fp=s-ip;float best=9.,bh=-1.;dir=vec2(0.);id=ip;
  for(int y=-1;y<=1;y++)for(int x=-1;x<=1;x++){vec2 o2=vec2(x,y);vec2 cid=ip+o2;
   if(hash(cid+41.)>fill)continue;
   vec2 c=o2+h2(cid)*.6+.2;float rad=.30+.20*hash(cid+5.3);float an=hash(cid+9.1)*6.2832;

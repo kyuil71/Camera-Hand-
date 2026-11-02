@@ -38,6 +38,7 @@ body.menu .dock{transform:translate(-50%,0)}
 .btn{flex:1;min-height:48px;border:1px solid var(--line);background:rgba(255,255,255,.06);color:var(--ink);border-radius:14px;font:inherit;font-size:16px;font-weight:600}
 .btn.main{flex:1.6;background:var(--ink);color:#101826;border-color:transparent}
 .btn.main.on{background:#d8262c;color:#fff}
+#gyroBtn.on{background:var(--ink);color:#101826}
 .btn:active,.chip:active{transform:scale(.97)}
 #install{display:none}
 .speed{display:flex;align-items:center;gap:12px;margin:0 2px 12px;touch-action:none}
@@ -79,11 +80,12 @@ body:not(.water) #floors{display:none}
     </div>
     <div class="row">
       <button class="btn" id="musicBtn">음악 끄기</button>
+      <button class="btn" id="gyroBtn">흔들기 켜기</button>
       <button class="btn" id="fsBtn">전체화면</button>
       <button class="btn" id="install">앱 설치</button>
     </div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 14</p>
+    <p class="hint" id="ver">버전 15</p>
   </div>
 </div>
 
@@ -145,6 +147,14 @@ detail: H+`uniform sampler2D uT;uniform vec2 dims;uniform float rate,sd;
 void main(){float n=bristle(vUv,dims,sd);o=vec4(mix(rate<1.?texture(uT,vUv).x:n,n,min(rate,1.)),0.,0.,1.);}`,
 advect: H+`uniform sampler2D uVel,uSrc;uniform vec2 simTexel;uniform float dt;uniform vec4 diss;
 void main(){vec2 c=vUv-dt*texture(uVel,vUv).xy*simTexel;o=texture(uSrc,c)/(1.+diss*dt);}`,
+advectVel: H+`uniform sampler2D uVel;uniform vec2 simTexel;uniform float dt,diss,bounce;
+void main(){vec2 c=vUv-dt*texture(uVel,vUv).xy*simTexel;vec2 f=vec2(1.);
+if(c.x<0.){c.x=-c.x;f.x=-bounce;}else if(c.x>1.){c.x=2.-c.x;f.x=-bounce;}
+if(c.y<0.){c.y=-c.y;f.y=-bounce;}else if(c.y>1.){c.y=2.-c.y;f.y=-bounce;}
+o=vec4(texture(uVel,c).xy*f/(1.+diss*dt),0.,1.);}`,
+tiltForce: H+`uniform sampler2D uVel,uDye;uniform vec2 force;uniform float k;
+void main(){vec4 d=texture(uDye,vUv);float dens=d.a+dot(d.rgb,vec3(.3,.5,.2))*.6-1.15;
+o=vec4(texture(uVel,vUv).xy+force*dens*k,0.,1.);}`,
 divergence: H+`uniform sampler2D uVel;
 void main(){float L=texture(uVel,vL).x,R=texture(uVel,vR).x,T=texture(uVel,vT).y,B=texture(uVel,vB).y;vec2 C=texture(uVel,vUv).xy;
 if(vL.x<0.)L=-C.x;if(vR.x>1.)R=-C.x;if(vT.y>1.)T=-C.y;if(vB.y<0.)B=-C.y;o=vec4(.5*(R-L+T-B),0.,0.,1.);}`,
@@ -219,10 +229,10 @@ c.a=min(c.a+max(imp-50.,0.)*dt*.016,3.2);
 c.a-=max(c.a-1.,0.)*dt*.9*band;                 // the surge slides back down the wall
 o=c;}`,
 waterClear: H+`void main(){o=vec4(0.,0.,0.,1.);}`,
-waterStep: H+`uniform sampler2D uT;uniform float c2,damp,w2,hs;
+waterStep: H+`uniform sampler2D uT;uniform float c2,damp,w2,hs,aspect;uniform vec2 tilt;
 void main(){vec4 s=texture(uT,vUv);float hC=s.x,v=s.y;
 float lap=texture(uT,vL).x+texture(uT,vR).x+texture(uT,vT).x+texture(uT,vB).x-4.*hC;
-v+=(c2*lap-w2*hC)*hs;
+v+=(c2*lap-w2*hC+tilt.x*(vUv.x-.5)*aspect+tilt.y*(vUv.y-.5))*hs;
 v*=damp;hC+=v*hs;
 o=vec4(hC,v,0.,1.);}`,
 waterPoke: H+`uniform sampler2D uT;uniform float aspect,radius,amp;uniform vec2 point;
@@ -294,11 +304,6 @@ void main(){
  float s0=swellH(p,t)+ripH(p,t,gk);
  vec2 ga=vec2(swellH(p+vec2(e,0.),t)+ripH(p+vec2(e,0.),t,gk)-s0,swellH(p+vec2(0.,e),t)+ripH(p+vec2(0.,e),t,gk)-s0)/e;
  vec2 g=gs+ga;
- float dW=min(min(uv.x,1.-uv.x)*aspect,min(uv.y,1.-uv.y));
- float nearW=exp(-dW/.022);
- float hh=texture(uH,uv).w*nk;
- nearW=exp(-dW/.03);
- g*=1.+3.*nearW;
  vec3 N=normalize(vec3(-g,1.));
  vec3 P=vec3(p,0.);vec3 cam=vec3(.5*aspect,-.6,.85);vec3 V=normalize(cam-P);
  float cosT=clamp(dot(N,V),0.,1.);float F=.02+.98*pow(1.-cosT,5.);
@@ -324,19 +329,14 @@ void main(){
  vec3 under=lit*exp(-absorb*path)+vec3(.03,.15,.16)*(floorType<.5?1.:floorType<1.5?.3:.08)*(1.-exp(-1.4*path));
  vec3 R=reflect(-V,N);R.z=abs(R.z);
  vec3 col=mix(under,sky(R,t),F);
- float wallSh=1.-.3*exp(-min(1.-uv.y,uv.x*aspect)/.03);
- col*=wallSh;
  col*=1.-.18*pow(length(uv-.5)*1.25,2.);
  col*=1.08;col=(col*(2.51*col+.03))/(col*(2.43*col+.59)+.14);
  // breaking crest at the wall: white water with bubbles, bright and glossy (applied after tone-mapping → stays white)
- float run=max(hh,0.)*exp(-dW/.045)+abs(hh)*exp(-dW/.012);
- vec2 bq=p*180.+vec2(t*1.7,-t*2.3);vec2 bi=floor(bq),bf=fract(bq)-.5;float bub=smoothstep(.42,.18,length(bf+(h2(bi)-.5)*.5))*step(.35,hash(bi));
+ // whitecaps only where a wave is steep AND still rising (e.g. where it piles against a wall) — no fixed strip
  float fn=vn(p*90.+vec2(t*2.,-t*1.3))*.55+vn(p*260.-t*3.)*.45;
- float rise=texture(uS,uv).y;                                   // water rushing up the wall right now
- float foam=smoothstep(.0012,.0045,run*(.55+.9*fn))*smoothstep(.03,.22,rise);
- vec3 white=vec3(.97,.99,1.)*(.9+.1*fn)-bub*.12;
- white+=pow(max(dot(reflect(-V,N),sunDir),0.),24.)*.4;
- col=mix(col,white,clamp(foam,0.,1.)*.95);
+ float rise=texture(uS,uv).y;
+ float foam=smoothstep(.28,.6,length(gs))*smoothstep(.05,.3,rise)*smoothstep(.35,.75,fn);
+ col=mix(col,vec3(.96,.98,1.),clamp(foam,0.,1.)*.8);
  o=vec4(clamp(col,0.,1.),1.);}`
 };
 
@@ -427,14 +427,12 @@ function step(dt){
   u=use('pressure',tx);gl.uniform1i(u.uDiv,div.bind(1));
   for(let i=0;i<22;i++){gl.uniform1i(u.uP,pres.r.bind(0));blit(pres.w);pres.swap();}
   u=use('gradient',tx);gl.uniform1i(u.uP,pres.r.bind(0));gl.uniform1i(u.uVel,vel.r.bind(1));blit(vel.w);vel.swap();
-  u=use('wallVel',tx);gl.uniform1i(u.uVel,vel.r.bind(0));gl.uniform1f(u.aspect,aspect);gl.uniform1f(u.dt,dt);gl.uniform2f(u.simTexel,vel.r.tx,vel.r.ty);blit(vel.w);vel.swap();
-  u=use('advect',tx);gl.uniform2f(u.simTexel,vel.r.tx,vel.r.ty);gl.uniform1f(u.dt,dt);
-  gl.uniform1i(u.uVel,vel.r.bind(0));gl.uniform1i(u.uSrc,vel.r.bind(0));gl.uniform4f(u.diss,.2,.2,0,0);blit(vel.w);vel.swap();
+  u=use('advectVel',tx);gl.uniform2f(u.simTexel,vel.r.tx,vel.r.ty);gl.uniform1f(u.dt,dt);gl.uniform1f(u.diss,.2);gl.uniform1f(u.bounce,1.);
+  gl.uniform1i(u.uVel,vel.r.bind(0));blit(vel.w);vel.swap();
   u=use('maccormack',[dye.r.tx,dye.r.ty]);gl.uniform2f(u.simTexel,vel.r.tx,vel.r.ty);gl.uniform2f(u.srcTexel,dye.r.tx,dye.r.ty);gl.uniform1f(u.dt,dt);
   gl.uniform1i(u.uVel,vel.r.bind(0));gl.uniform1i(u.uSrc,dye.r.bind(1));gl.uniform4f(u.diss,.003,.003,.003,.03);blit(dye.w);dye.swap();
   gl.uniform2f(u.srcTexel,det.r.tx,det.r.ty);gl.uniform1i(u.uSrc,det.r.bind(1));gl.uniform4f(u.diss,0,0,0,0);blit(det.w);det.swap();
   detailPass(.006);
-  u=use('wallPile',[dye.r.tx,dye.r.ty]);gl.uniform1i(u.uDye,dye.r.bind(0));gl.uniform1i(u.uVel,vel.r.bind(1));gl.uniform1f(u.aspect,aspect);gl.uniform1f(u.dt,dt);blit(dye.w);dye.swap();
 }
 
 /* ================= Water mode (lake) ================= */
@@ -445,17 +443,14 @@ function waterClear(){const u=use('waterClear',[0,0]);blit(wat.w);wat.swap();bli
 function waterPoke(x,y,amp,r){const u=use('waterPoke',[wat.r.tx,wat.r.ty]);gl.uniform1i(u.uT,wat.r.bind(0));
   gl.uniform1f(u.aspect,aspect);gl.uniform2f(u.point,x,y);gl.uniform1f(u.amp,amp);gl.uniform1f(u.radius,r*(aspect>1?aspect:1));blit(wat.w);wat.swap();}
 function waterStep(){const u=use('waterStep',[wat.r.tx,wat.r.ty]);gl.uniform1i(u.uT,wat.r.bind(0));
-  gl.uniform1f(u.c2,W_C*W_C);gl.uniform1f(u.damp,Math.exp(-.55*W_H));gl.uniform1f(u.w2,4.);gl.uniform1f(u.hs,W_H);blit(wat.w);wat.swap();}
+  gl.uniform1f(u.c2,W_C*W_C);gl.uniform1f(u.damp,Math.exp(-.55*W_H));gl.uniform1f(u.w2,4.);gl.uniform1f(u.hs,W_H);
+  gl.uniform1f(u.aspect,aspect);gl.uniform2f(u.tilt,-motionF[0]*.35,-motionF[1]*.35);blit(wat.w);wat.swap();}
 function waterFrame(dt){
   const wts=Math.min(.45+.55*timeScale,2.6);            // slider + finger speed → water time
   const sdt=dt*flow*wts; waterTime+=sdt;
   const live=flow>.3;
   // fingers / touch / pinch rings → pressure on the surface (stronger when moving faster)
   for(const s of queue.splice(0)){ if(!live)continue;
-    if(s.set){const d=wallDist(s.x,s.y),a=[-s.vx*aspect,s.vx*aspect,-s.vy,s.vy];
-      for(let w=0;w<4;w++)if(d[w]<.06&&a[w]>.7){const t=w<2?s.y:s.x,key='gw'+w+'_'+Math.round(t*40);
-        if((edgeCool[key]||0)>performance.now())continue;edgeCool[key]=performance.now()+90;
-        const k=Math.min(3,(a[w]-.7)/.6);for(let q=0;q<2+Math.floor(k*3);q++)spawnDrop(w,t+(Math.random()-.5)*.05,k,null,true);}}
     const sp=s.vx!=null?Math.hypot(s.vx*aspect,s.vy):Math.hypot(s.dx||0,s.dy||0)/2600;
     const main=s.set?s.set>.6:true;
     waterPoke(s.x,s.y,Math.min(.15+sp,3.2)*(main?WATER_AMP:WATER_AMP*.55)*(s.vOnly?.5:1),main?.00055:.0003);}
@@ -574,6 +569,39 @@ function drawDrops(){
       fxc.fillStyle=gr;fxc.beginPath();fxc.ellipse(sx,y,r,r*(1+Math.min(.6,Math.abs(d.vz)*.15)),0,0,7);fxc.fill();
       fxc.fillStyle='rgba(255,255,255,.85)';fxc.beginPath();fxc.arc(sx-r*.35,y-r*.38,r*.22,0,7);fxc.fill();
     }}
+}
+
+/* ================= Gyro: tilt and shake the phone ================= */
+let gyroOn=false, gBase=null, motionF=[0,0], motionRaw=[0,0], shakeAmt=0, lastMotionT=0;
+function toScreen(x,y){const ang=((screen.orientation&&screen.orientation.angle)||window.orientation||0)*Math.PI/180;
+  return [x*Math.cos(ang)+y*Math.sin(ang),-x*Math.sin(ang)+y*Math.cos(ang)];}
+function onMotion(e){
+  const a=e.accelerationIncludingGravity;if(!a||a.x==null)return;
+  const now=performance.now(),dt=Math.min(.1,(now-(lastMotionT||now))/1000)||.016;lastMotionT=now;
+  const g=toScreen(-a.x/9.81,-a.y/9.81);                    // gravity direction on the screen
+  if(!gBase)gBase=g.slice();
+  gBase[0]+=(g[0]-gBase[0])*Math.min(1,dt/4);gBase[1]+=(g[1]-gBase[1])*Math.min(1,dt/4);   // slowly forget how you hold it
+  let lin=[0,0];const la=e.acceleration;
+  if(la&&la.x!=null){lin=toScreen(-la.x/9.81,-la.y/9.81);} // shake: fluid lags behind the phone (inertia)
+  else {lin=[(g[0]-gBase[0])*.0,(g[1]-gBase[1])*.0];}
+  const fx=(g[0]-gBase[0])*1.6+lin[0]*1.1, fy=(g[1]-gBase[1])*1.6+lin[1]*1.1;
+  const m=Math.hypot(fx,fy),cap=m>2.5?2.5/m:1;motionRaw=[fx*cap,fy*cap];
+  shakeAmt=Math.hypot(lin[0],lin[1]);
+}
+function updateGyro(dt){
+  if(!gyroOn){motionF[0]*=.9;motionF[1]*=.9;return;}
+  motionF[0]+=(motionRaw[0]-motionF[0])*Math.min(1,dt*12);motionF[1]+=(motionRaw[1]-motionF[1])*Math.min(1,dt*12);
+  if(shakeAmt>.12)feelFinger(Math.min(3,shakeAmt*1.6));     // shaking speeds the scene (and the music) up
+}
+async function setGyro(on){
+  if(on){
+    try{if(typeof DeviceMotionEvent!=='undefined'&&typeof DeviceMotionEvent.requestPermission==='function'){
+      const r=await DeviceMotionEvent.requestPermission();if(r!=='granted'){status('흔들기 권한이 거부되었어요');on=false;}}}catch(e){on=false;}
+    if(on&&typeof DeviceMotionEvent==='undefined'){status('이 기기는 움직임 센서를 지원하지 않아요');on=false;}
+  }
+  gyroOn=on;gBase=null;motionRaw=[0,0];
+  if(on)addEventListener('devicemotion',onMotion);else removeEventListener('devicemotion',onMotion);
+  const b=document.getElementById('gyroBtn');if(b){b.textContent=on?'흔들기 끄기':'흔들기 켜기';b.classList.toggle('on',on);}
 }
 
 /* ================= Music: tempo follows the hands ================= */
@@ -725,7 +753,7 @@ function frame(now){
   const dt=Math.min((now-last)/1000,1/30);last=now;
   resize();
   flow+=(flowTarget-flow)*Math.min(1,dt*(flowTarget>flow?2.5:6));
-  updateTimeScale(dt);
+  updateGyro(dt);updateTimeScale(dt);
   if(mode==='water'){ waterFrame(dt); } else {
   // ambient life: drifting color drops keep the canvas evolving
   ambientClock+=dt*flow*Math.max(timeScale,.15);
@@ -740,20 +768,22 @@ function frame(now){
     if(flow>.3){splatVel(p.x,p.y,p.dx*1500*js*dt*60*.5,p.dy*1500*js*dt*60*.5,.0032);
       for(let k=1;k<=3;k++)splatVel(p.x+p.dx/aspect*.04*k,p.y+p.dy*.04*k,p.dx*(1250-k*180)*js*dt*30,p.dy*(1250-k*180)*js*dt*30,.0042);}
     splatDye(p.x,p.y,pickColor(p.c),.0024,.45,.55);
-    if(flow>.3)jetSplash(p,pickColor(p.c));}
+}
   // apply queued splats
   for(const s of queue.splice(0)){
-    if(flow>.3&&s.set)gestureSplash(s.x,s.y,s.vx,s.vy,()=>s.c,1);
     if(flow>.3){ if(s.set) {const g=1.1/Math.max(timeScale,.35);splatVelSet(s.x,s.y,s.vx*vel.r.w*g,s.vy*vel.r.h*g,s.r*1.25,s.set);}
                  else splatVel(s.x,s.y,s.dx*flow,s.dy*flow,s.r*1.2); }
     if(!s.vOnly)splatDye(s.x,s.y,s.c,s.r,s.s,s.t);
   }
+  if(flow>.02&&(Math.abs(motionF[0])+Math.abs(motionF[1]))>.01){
+    const u2=use('tiltForce',[vel.r.tx,vel.r.ty]);gl.uniform1i(u2.uVel,vel.r.bind(0));gl.uniform1i(u2.uDye,dye.r.bind(1));
+    gl.uniform2f(u2.force,motionF[0],motionF[1]);gl.uniform1f(u2.k,dt*flow*1400./Math.max(timeScale,.35));blit(vel.w);vel.swap();}
   if(flow>.02){simTime+=dt*flow*timeScale;step(dt*flow*timeScale);}
   // display
   const u=use('display',[0,0]);gl.uniform3fv(u.pal,palFlat);gl.uniform1i(u.uDye,dye.r.bind(0));gl.uniform1i(u.uDet,det.r.bind(1));gl.uniform2f(u.dyeTexel,dye.r.tx,dye.r.ty);
   gl.uniform1f(u.dotSize,2.0*dpr);gl.uniform1f(u.relief,11.+7.*(1.-flow));gl.uniform1f(u.time,now*.001);blit(null);
   }
-  edgeSplash(dt);updateDrops(dt);drawDrops();updateMusic(dt);
+  updateMusic(dt);
   if(snapReq){snapReq=false;canvas.toBlob(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);
     a.download='hand-flow-'+new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')+'.png';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000);},'image/png');}
   requestAnimationFrame(frame);
@@ -786,6 +816,7 @@ const musicBtn=document.getElementById('musicBtn');
 function setMusic(on){musicOn=on;musicBtn.textContent=on?'음악 끄기':'음악 켜기';try{localStorage.setItem('hf-music',on?'on':'off');}catch(e){}
   if(on)tryMusic();else bgm.pause();}
 musicBtn.onclick=()=>setMusic(!musicOn);setMusic(musicOn);
+document.getElementById('gyroBtn').onclick=()=>setGyro(!gyroOn);
 document.getElementById('snapBtn').onclick=()=>{snapReq=true;};
 // true fullscreen (also draws under the camera cut-out / status bar area)
 const goFull=()=>{const d=document.documentElement;if(document.fullscreenElement)return;

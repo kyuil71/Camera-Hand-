@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <style>
-:root{--bg:#0a1222;--glass:rgba(12,20,38,.62);--line:rgba(255,255,255,.14);--ink:#f4efe4;--mute:rgba(244,239,228,.66);--accent:#f7c844}
+:root{--bg:#000;--glass:rgba(12,20,38,.62);--line:rgba(255,255,255,.14);--ink:#f4efe4;--mute:rgba(244,239,228,.66);--accent:#f7c844}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;background:var(--bg);color:var(--ink);font:16px/1.4 -apple-system,"Pretendard","Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
 canvas#art,canvas#fx{position:fixed;inset:0;width:100%;height:100%;display:block}
@@ -85,7 +85,7 @@ body:not(.water) #floors{display:none}
       <button class="btn" id="install">앱 설치</button>
     </div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 16</p>
+    <p class="hint" id="ver">버전 17</p>
   </div>
 </div>
 
@@ -319,6 +319,7 @@ void main(){
  mat2 r1=mat2(.80,.60,-.60,.80),r2=mat2(.34,-.94,.94,.34);
  float c1=caus(r1*lq*8.,t*.8),c2=caus(r2*lq*12.5+vec2(3.1,1.7),t*1.0);
  float cs=(c1+c2)*.5;cs=cs*cs*1.9+cs*.18;
+ if(floorType>1.5)cs*=.5;                                                // black glass: caustics 50% weaker
  vec2 huv=vec2(hit.x/aspect,hit.y);
  float lap2=texture(uH,huv).z;
  cs*=1.+clamp(-lap2*nk*900.,-.85,3.);
@@ -475,7 +476,7 @@ function waterFrame(dt){
   gl.uniform1f(u.aspect,aspect);gl.uniform1f(u.time,waterTime);gl.uniform1f(u.nk,W_NK);gl.uniform1f(u.floorType,floorType);gl.uniform3f(u.sunDir,SUN[0],SUN[1],SUN[2]);blit(null);
 }
 let WATER_AMP=1;
-let floorType=1; try{const v=parseInt(localStorage.getItem('hf-floor3'));if(v>=0&&v<=2)floorType=v;}catch(e){}
+let floorType=2; try{const v=parseInt(localStorage.getItem('hf-floor4'));if(v>=0&&v<=2)floorType=v;}catch(e){}
 
 /* ================= Wall splashes: droplets that leap off the walls ================= */
 const drops=[]; const MAX_DROPS=320;
@@ -813,7 +814,7 @@ function setMode(m){mode=m;document.body.classList.toggle('water',m==='water');
 document.querySelectorAll('#modeSeg button').forEach(b=>b.onclick=()=>setMode(b.dataset.m));
 setMode(mode);
 seedBtn.onclick=()=>{if(mode==='water'){waterClear();gliders.length=0;}else seed();drops.length=0;};
-function setFloor(v){floorType=v;document.querySelectorAll('#floors .chip').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.f===v));try{localStorage.setItem('hf-floor3',v);}catch(e){}}
+function setFloor(v){floorType=v;document.querySelectorAll('#floors .chip').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.f===v));try{localStorage.setItem('hf-floor4',v);}catch(e){}}
 document.querySelectorAll('#floors .chip').forEach(b=>b.onclick=()=>setFloor(+b.dataset.f));setFloor(floorType);
 const musicBtn=document.getElementById('musicBtn');
 function setMusic(on){musicOn=on;musicBtn.textContent=on?'음악 끄기':'음악 켜기';try{localStorage.setItem('hf-music',on?'on':'off');}catch(e){}
@@ -825,7 +826,20 @@ document.getElementById('snapBtn').onclick=()=>{snapReq=true;};
 const goFull=()=>{const d=document.documentElement;if(document.fullscreenElement)return;
   const r=(d.requestFullscreen||d.webkitRequestFullscreen);try{const p=r?.call(d,{navigationUI:'hide'});p&&p.catch&&p.catch(()=>{});}catch(e){}};
 const isApp=()=>matchMedia('(display-mode: fullscreen)').matches||matchMedia('(display-mode: standalone)').matches;
-document.getElementById('fsBtn').onclick=()=>{if(document.fullscreenElement)document.exitFullscreen();else goFull();};
+let wantFull=false,needRefull=false,lastScreen=screen.width+'x'+screen.height,lastResizeT=0;
+try{wantFull=localStorage.getItem('hf-full')==='1';}catch(e){}
+function setWantFull(v){wantFull=v;try{localStorage.setItem('hf-full',v?'1':'0');}catch(e){}}
+document.getElementById('fsBtn').onclick=()=>{if(document.fullscreenElement){setWantFull(false);document.exitFullscreen();}else{setWantFull(true);goFull();}};
+addEventListener('resize',()=>{lastResizeT=performance.now();const k=screen.width+'x'+screen.height;
+  if(k!==lastScreen){lastScreen=k;if(wantFull)needRefull=true;}});           // folded / unfolded → different screen
+document.addEventListener('fullscreenchange',()=>{
+  if(!document.fullscreenElement&&wantFull&&performance.now()-lastResizeT>1200)setWantFull(false);  // user left fullscreen on purpose
+});
+addEventListener('pointerdown',()=>{
+  if(!wantFull)return;
+  if(!document.fullscreenElement){goFull();needRefull=false;}
+  else if(needRefull){needRefull=false;document.exitFullscreen().then(goFull).catch(()=>{});}   // re-apply on the new screen (covers the camera cut-out)
+},true);
 let hideTimer=0;
 function wake(){}   // no automatic Fullscreen API (avoids Chrome's fullscreen notice)
 const openMenu=v=>document.body.classList.toggle('menu',v);

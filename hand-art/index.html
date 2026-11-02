@@ -90,7 +90,7 @@ body:not(.water) #floors,body:not(.water) #dipRow{display:none}
       <button class="btn" id="install">앱 설치</button>
     </div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 30</p>
+    <p class="hint" id="ver">버전 31</p>
   </div>
 </div>
 
@@ -812,8 +812,20 @@ async function setGyro(on){
 const bgm=new Audio();bgm.loop=true;bgm.preload='auto';
 try{bgm.preservesPitch=true;bgm.mozPreservesPitch=true;bgm.webkitPreservesPitch=true;}catch(e){}
 let musicOn=true; try{musicOn=localStorage.getItem('hf-music')!=='off';}catch(e){}
-let musicReady=null, musicRate=1, musicVol=0;
-function loadMusic(){ if(!musicReady)musicReady=fetch('audio/where_the_stream_widens.mp3').then(r=>r.blob()).then(b=>{bgm.src=URL.createObjectURL(b);}).catch(()=>{}); return musicReady; }
+let musicReady=null, musicRate=1, musicVol=0, curTrack=null, trackBusy=false;
+const TRACKS={paint:'audio/where_the_stream_widens.mp3',water:'audio/where_the_stream_widens.mp3',light:'audio/where_the_ocean_meets_sky.mp3'};
+const trackURL={};
+function getTrack(path){ if(!trackURL[path])trackURL[path]=fetch(path).then(r=>r.blob()).then(b=>URL.createObjectURL(b)).catch(()=>null); return trackURL[path]; }
+function loadMusic(){ const path=TRACKS[mode]||TRACKS.paint;
+  if(curTrack===path&&musicReady)return musicReady;
+  curTrack=path; musicReady=getTrack(path).then(u=>{ if(u&&curTrack===path)bgm.src=u; }); return musicReady; }
+// switching modes: fade the current song out, then start the mode's own song
+async function switchTrack(){ const path=TRACKS[mode]||TRACKS.paint; if(path===curTrack||trackBusy)return;
+  trackBusy=true;
+  if(bgm.src&&!bgm.paused){ for(let i=0;i<12;i++){ bgm.volume=Math.max(0,bgm.volume*.7); await new Promise(r=>setTimeout(r,40)); } bgm.pause(); }
+  musicVol=0; await loadMusic(); trackBusy=false;
+  if(musicOn&&!document.hidden&&bgm.src){ bgm.currentTime=0; bgm.volume=0; bgm.play().catch(()=>{}); }
+  if((TRACKS[mode]||TRACKS.paint)!==curTrack)switchTrack(); }
 function tryMusic(){ if(!musicOn||!bgm.paused&&bgm.src)return; loadMusic().then(()=>{ if(musicOn&&!document.hidden){bgm.volume=musicVol;bgm.play().catch(()=>{});} }); }
 function updateMusic(dt){
   if(!bgm.src||bgm.paused)return;
@@ -1023,7 +1035,8 @@ const HINTS={paint:hintTxt.innerHTML,
 function setMode(m){mode=m;document.body.classList.toggle('water',m==='water');document.body.classList.toggle('light',m==='light');
   document.querySelectorAll('#modeSeg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.m===m));
   seedBtn.textContent=m==='water'?'잔잔하게':'새 캔버스';hintTxt.innerHTML=(m==='water'&&dipMode)?HINTS.dip:HINTS[m];
-  gliders.length=0;queue.length=0;drops.length=0;try{localStorage.setItem('hf-mode',m);}catch(e){}}
+  gliders.length=0;queue.length=0;drops.length=0;try{localStorage.setItem('hf-mode',m);}catch(e){}
+  if(curTrack)switchTrack();}
 document.querySelectorAll('#modeSeg button').forEach(b=>b.onclick=()=>setMode(b.dataset.m));
 setMode(mode);
 seedBtn.onclick=()=>{if(mode==='water'){waterClear();gliders.length=0;}else if(mode==='light'){lightSeedAll();}else seed();drops.length=0;};

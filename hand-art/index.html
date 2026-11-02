@@ -87,7 +87,7 @@ body:not(.water) #floors{display:none}
       <button class="btn" id="install">앱 설치</button>
     </div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 22</p>
+    <p class="hint" id="ver">버전 23</p>
   </div>
 </div>
 
@@ -255,7 +255,7 @@ void main(){vec4 s=texture(uP,vUv);vec2 p=s.xy;float life=s.z,lane=s.w;
 trailFade: H+`uniform sampler2D uT;uniform float k;void main(){o=texture(uT,vUv)*k;}`,
 glowDown: H+`uniform sampler2D uT;uniform vec2 px;
 void main(){vec3 c=vec3(0.);float W=0.;for(int y=-3;y<=3;y++)for(int x=-3;x<=3;x++){float w=exp(-float(x*x+y*y)*.18);c+=texture(uT,vUv+vec2(x,y)*px).rgb*w;W+=w;}o=vec4(c/W,1.);}`,
-ribbons: H+`uniform sampler2D uVel;uniform vec2 simTexel,force;uniform vec3 pal[6];uniform float time,aspect,seed;
+ribbons: H+`uniform vec4 push[4];uniform float pushA[4];uniform vec2 force;uniform vec3 pal[6];uniform float time,aspect,seed;
 vec2 h2(vec2 p){return vec2(hash(p),hash(p+19.19));}
 float fbm4(vec2 p){float s=0.,a=.5;for(int i=0;i<4;i++){s+=a*vn(p);p=p*2.07+13.7;a*=.5;}return s;}
 vec3 palC(float k){k=k-6.*floor(k/6.);int i=int(k);float f=k-float(i);i=i>5?5:i;return mix(pal[i],pal[i<5?i+1:0],smoothstep(.15,.85,f));}
@@ -268,8 +268,9 @@ void main(){
  vec2 sp=uv*vec2(aspect,1.)*240.;vec2 si=floor(sp);vec2 sf=sp-si-.5;
  col+=vec3(.8,.86,1.)*step(.996,hash(si+seed))*exp(-dot(sf,sf)*18.)*(.5+.5*sin(t*1.7+hash(si)*40.))*.7*smoothstep(.4,.95,uv.y);
  // hands / touch / tilt bend the light
- vec2 vv=texture(uVel,uv).xy*simTexel*.30;float vl=length(vv);if(vl>.12)vv*=.12/vl;
- vec2 q=uv-vv-force*.035;
+ vec2 dsp=vec2(0.);
+ for(int k=0;k<4;k++){vec2 d=(uv-push[k].xy)*vec2(aspect,1.);dsp+=push[k].zw*pushA[k]*exp(-dot(d,d)/.09);}   // broad, soft bend only
+ vec2 q=uv-dsp-force*.04;
  vec3 lightSum=vec3(0.),haze=vec3(0.);
  for(int r=0;r<7;r++){
   float fi=float(r);
@@ -283,8 +284,9 @@ void main(){
   float y0=.06+.88*(fi+.15+.7*r1)/7.;                                         // spread over the whole height
   float near=clamp(1.-y0,0.,1.);
   float A=.04+.13*near;
-  float c=y0+A*sin(q.x*(2.0+1.4*r2)-t*.25*dir+r1*6.28)+A*.35*sin(q.x*(4.2+2.*r3)+t*.33+r2*6.28);
-  float W=(.03+.10*near*near+.02*near)*(.78+.30*sin(q.x*3.1+t*.2+r2*6.28));
+  float ph1=t*.30+3.2*sin(t*.085+fi*1.7);                                     // fast … slow … fast
+  float c=y0+A*sin(q.x*(1.8+1.2*r2)-ph1*dir+r1*6.28)+A*.30*sin(q.x*(3.0+1.2*r3)-ph1*.7*dir+r2*6.28);
+  float W=(.03+.10*near*near+.02*near)*(.78+.30*sin(q.x*2.3-ph1*.5*dir+r2*6.28));
   float v=(q.y-c)/W;
   float band=exp(-v*v*.7);
   float halo=exp(-v*v*.09);                                                   // wide soft glow around the ribbon
@@ -292,27 +294,19 @@ void main(){
   haze+=cc*halo*env*xenv*(.018+.03*near);
   if(band<.003)continue;
   float N=9.+14.*near;
-  float s=v*N*.5+.06*sin(q.x*5.+t*.4+fi*2.);                                  // fine parallel strands
+  float s=v*N*.5;                                                             // clean parallel strands
   float sf2=s-floor(s)-.5,sid=floor(s);
   float th=.005+.005*near;
   float L=exp(-sf2*sf2/th)+exp(-sf2*sf2/.06)*.12;
   float hs=hash(vec2(sid,fi+cyc));
-  float dxp=q.x*aspect*(30.+34.*hash(vec2(sid,fi+3.)))-t*dir*(1.2+1.8*hs);
-  float dd=dxp-floor(dxp)-.5;
-  float dots=exp(-dd*dd/.004)*step(.40,hs)*exp(-sf2*sf2/(th*1.4));            // tiny beads running along strands
+  float dots=(.5+.5*sin(q.x*aspect*(5.+4.*hs)-ph1*dir*(2.+2.*hs)+hs*6.28));dots=dots*dots*dots*exp(-sf2*sf2/(th*1.4))*.6;   // long soft pulses of light gliding along the strands
   float crest=.45+1.1*smoothstep(-.7,1.1,v*dir);
   float I=(L*crest*(.8+.5*hs)*1.9+dots*3.)*band*env*xenv*(.7+.7*near);
   float hot=smoothstep(.55,1.,band)*smoothstep(.2,1.,v*dir+.6);               // white-hot core / crest
   lightSum+=mix(cc,vec3(1.,.97,.93),hot*.35)*I;
-  float vs=v*dir;                                                             // fine sparks lifting off the crest
-  if(vs>.6&&vs<3.4){vec2 g=vec2(q.x*aspect*90.,vs*8.-t*1.2);vec2 gi=floor(g),gf=g-gi-.5;
-   float hh=hash(gi+fi*17.+cyc);float spk=step(.88,hh)*exp(-dot(gf,gf)*30.)*exp(-(vs-.6)*1.0);
-   lightSum+=mix(cc,vec3(1.),.4)*spk*2.2*env*xenv;}
  }
- // faint light mist and micro sparkles between the ribbons (no round orbs)
+ // faint light mist between the ribbons
  haze+=avg*.015*fbm4(vec2(uv.x*aspect*2.,uv.y*3.)+t*.02);
- vec2 mp=uv*vec2(aspect,1.)*160.;vec2 mi=floor(mp),mf=mp-mi-.5;float mh=hash(mi+seed*1.7);
- lightSum+=palC(mh*40.+uv.x*3.)*step(.985,mh)*exp(-dot(mf,mf)*40.)*(.35+.35*sin(t*2.+mh*60.));
  lightSum+=haze;
  col+=lightSum;
  col+=lightSum*lightSum*.18;                                                // bloom on the brightest parts
@@ -587,17 +581,20 @@ function fboX(w,h,ifmt,type,filt){const t=gl.createTexture();gl.bindTexture(gl.T
   return {t,f,w,h,tx:1/w,ty:1/h,bind(u){gl.activeTexture(gl.TEXTURE0+u);gl.bindTexture(gl.TEXTURE_2D,t);return u;}};}
 function lightAlloc(){}
 function lightSeedAll(){lightSeed=Math.random()*100;}
+const pushes=[0,1,2,3].map(()=>({x:.5,y:.5,vx:0,vy:0,a:0}));let pushNext=0;
+function addPush(x,y,vx,vy){                                   // remember a hand gesture as a soft, decaying bend
+  let best=null,bd=1e9;for(const p of pushes){const d=Math.hypot(p.x-x,p.y-y);if(p.a>.05&&d<bd){bd=d;best=p;}}
+  if(!best||bd>.25){best=pushes[pushNext];pushNext=(pushNext+1)%4;best.x=x;best.y=y;best.vx=0;best.vy=0;best.a=0;}
+  const k=.25;best.x+=(x-best.x)*k;best.y+=(y-best.y)*k;
+  const m=Math.hypot(vx,vy),cap=m>2.5?2.5/m:1;best.vx+=(vx*cap*.06-best.vx)*k;best.vy+=(vy*cap*.06-best.vy)*k;best.a=Math.min(1,best.a+.35);}
 function lightFrame(dt){
   const live=flow>.3, ldt=dt*flow*(.35+timeScale);
   lightTime+=ldt;
-  // hands / touch / pinch / pointing → bend and push the ribbons (shared flow field)
-  for(const h of handInfo){const p=h.point;if(!p||!live)continue;
-    splatVel(p.x,p.y,p.dx*900*dt*30,p.dy*900*dt*30,.0032);
-    for(let k=1;k<=3;k++)splatVel(p.x+p.dx/aspect*.04*k,p.y+p.dy*.04*k,p.dx*(800-k*120)*dt*30,p.dy*(800-k*120)*dt*30,.0042);}
+  for(const h of handInfo){const p=h.point;if(p&&live)addPush(p.x,p.y,p.dx/aspect*1.2,p.dy*1.2);}
   for(const s of queue.splice(0)){ if(!live)continue;
-    if(s.set){splatVelSet(s.x,s.y,s.vx*vel.r.w,s.vy*vel.r.h,s.r*2.2,s.set);} else splatVel(s.x,s.y,s.dx*.6,s.dy*.6,s.r*1.6);}
-  if(flow>.02){simTime+=ldt;stepVel(ldt,0);}
-  const u=use('ribbons',[0,0]);gl.uniform1i(u.uVel,vel.r.bind(0));gl.uniform2f(u.simTexel,vel.r.tx,vel.r.ty);
+    if(s.set)addPush(s.x,s.y,s.vx,s.vy);else if(s.dx!=null)addPush(s.x,s.y,s.dx/2500,s.dy/2500);}
+  const pa=[],pf=[];for(const p of pushes){p.a*=Math.exp(-dt*flow*.9);pf.push(p.x,p.y,p.vx,p.vy);pa.push(p.a);}
+  const u=use('ribbons',[0,0]);gl.uniform4fv(u.push,new Float32Array(pf));gl.uniform1fv(u.pushA,new Float32Array(pa));
   gl.uniform2f(u.force,motionF[0],motionF[1]);gl.uniform3fv(u.pal,lightFlat);gl.uniform1f(u.time,lightTime);
   gl.uniform1f(u.aspect,aspect);gl.uniform1f(u.seed,lightSeed);blit(null);
 }

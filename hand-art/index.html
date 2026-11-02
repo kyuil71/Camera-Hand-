@@ -52,7 +52,8 @@ body.menu .dock{transform:translate(-50%,0)}
 .seg{gap:0;margin:0 0 12px;border:1px solid var(--line);border-radius:14px;padding:3px;background:rgba(255,255,255,.04)}
 .seg button{flex:1;min-height:42px;border:0;border-radius:11px;background:transparent;color:var(--mute);font:inherit;font-size:16px;font-weight:600}
 .seg button[aria-pressed=true]{background:var(--ink);color:#101826}
-body.water #palettes{display:none}
+body.water #palettes,body.light #palettes{display:none}
+body:not(.light) #lights{display:none}
 body:not(.water) #floors{display:none}
 .chip i.sw{width:24px;height:18px;border-radius:9px;border:1px solid rgba(255,255,255,.25)}
 .hint{font-size:16px;color:var(--mute);text-align:center;margin-top:10px;line-height:1.5}
@@ -69,9 +70,10 @@ body:not(.water) #floors{display:none}
 <div class="dock" id="sheet">
   <div class="panel">
     <div class="head" id="sheetHead"><span class="bar"></span><div id="status">손 인식 꺼짐 · 화면을 문질러 보세요</div></div>
-    <div class="row seg" id="modeSeg"><button data-m="paint">물감</button><button data-m="water">물</button></div>
+    <div class="row seg" id="modeSeg"><button data-m="paint">물감</button><button data-m="water">물</button><button data-m="light">빛</button></div>
     <div class="speed"><span>흐름 속도</span><input type="range" id="speed" min="0" max="100" step="1"><b id="speedVal"></b></div>
     <div class="row chips" id="palettes"></div>
+    <div class="row chips" id="lights"></div>
     <div class="row chips" id="floors"><button class="chip" data-f="2"><i class="sw" style="background:linear-gradient(135deg,#000,#1b1d20 50%,#000)"></i>검은 유리</button><button class="chip" data-f="1"><i class="sw" style="background:linear-gradient(135deg,#1c2328,#3a464e 50%,#11171b)"></i>다크 그레이</button><button class="chip" data-f="0"><i class="sw" style="background:linear-gradient(135deg,#8c8270,#c9bda4 45%,#6e675c)"></i>자갈</button></div>
     <div class="row">
       <button class="btn main" id="camBtn">손 인식 시작</button>
@@ -85,7 +87,7 @@ body:not(.water) #floors{display:none}
       <button class="btn" id="install">앱 설치</button>
     </div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 18</p>
+    <p class="hint" id="ver">버전 19</p>
   </div>
 </div>
 
@@ -229,6 +231,42 @@ c.a=min(c.a+max(imp-50.,0.)*dt*.016,3.2);
 c.a-=max(c.a-1.,0.)*dt*.9*band;                 // the surge slides back down the wall
 o=c;}`,
 waterClear: H+`void main(){o=vec4(0.,0.,0.,1.);}`,
+partInit: H+`uniform float seed;
+void main(){vec2 q=gl_FragCoord.xy;o=vec4(hash(q+seed),hash(q*1.31+seed+7.),hash(q*.77+seed+3.),hash(q*2.13+seed+11.));}`,
+partStep: H+`uniform sampler2D uP,uVel;uniform vec2 simTexel,force;uniform float dt,t,seed,aspect;
+vec2 flowB(vec2 p,float t){            // big slow wave currents that never cross the walls (stream function)
+ float PI=3.14159;vec2 v=vec2(0.);
+ float a1=.030*cos(t*.13),a2=.020*sin(t*.17+1.),a3=.014*cos(t*.11+2.),a4=.010*sin(t*.23);
+ v+=a1*PI*vec2(sin(PI*p.x)*cos(PI*p.y),-cos(PI*p.x)*sin(PI*p.y));
+ v+=a2*PI*vec2(sin(2.*PI*p.x)*cos(PI*p.y),-2.*cos(2.*PI*p.x)*sin(PI*p.y));
+ v+=a3*PI*vec2(3.*sin(PI*p.x)*cos(3.*PI*p.y),-cos(PI*p.x)*sin(3.*PI*p.y));
+ v+=a4*PI*vec2(2.*sin(3.*PI*p.x)*cos(2.*PI*p.y),-3.*cos(3.*PI*p.x)*sin(2.*PI*p.y));
+ return v;}
+void main(){vec4 s=texture(uP,vUv);vec2 p=s.xy;float life=s.z,lane=s.w;
+ vec2 v=texture(uVel,p).xy*simTexel;                       // hands / touch / pinch push the light
+ float ph=lane*6.2831;
+ vec2 w=vec2(.010*sin(p.y*9.+t*.5+ph),.018*sin(p.x*8.+t*.7+ph)); // ripples along the strands
+ p+=(v+flowB(p,t)*1.6+w+force*.05)*dt;
+ if(p.x<0.)p.x=-p.x;if(p.x>1.)p.x=2.-p.x;if(p.y<0.)p.y=-p.y;if(p.y>1.)p.y=2.-p.y;   // bounce off the walls
+ float eW=min(min(p.x,1.-p.x)*aspect,min(p.y,1.-p.y));
+ life-=dt*(.05+.08*hash(vUv*91.7))+dt*4.*smoothstep(.03,.0,eW);      /* no light piling up along the walls */
+ if(life<0.){p=vec2(hash(vUv+t+seed),hash(vUv*1.7+t+seed+3.));life=1.;}
+ o=vec4(p,life,lane);}`,
+trailFade: H+`uniform sampler2D uT;uniform float k;void main(){o=texture(uT,vUv)*k;}`,
+glowDown: H+`uniform sampler2D uT;uniform vec2 px;
+void main(){vec3 c=vec3(0.);float W=0.;for(int y=-3;y<=3;y++)for(int x=-3;x<=3;x++){float w=exp(-float(x*x+y*y)*.18);c+=texture(uT,vUv+vec2(x,y)*px).rgb*w;W+=w;}o=vec4(c/W,1.);}`,
+lightComp: H+`uniform sampler2D uT,uG;uniform vec3 pal[6];uniform float time,aspect;
+void main(){vec2 uv=vUv;vec3 avg=(pal[0]+pal[1]+pal[2]+pal[3]+pal[4]+pal[5])/6.;
+ vec3 bg=mix(vec3(.004,.006,.016),vec3(.012,.018,.045),uv.y);
+ bg+=avg*.22*exp(-pow((uv.y-.80)/.07,2.))*(.6+.4*vn(vec2(uv.x*3.+time*.05,1.)));          // horizon glow
+ bg+=avg*.06*exp(-pow((uv.y-.80)/.25,2.));
+ vec2 sp=uv*vec2(aspect,1.)*260.;vec2 si=floor(sp);float st=step(.996,hash(si))*smoothstep(.5,.0,length(sp-si-.5))*(.5+.5*sin(time*2.+hash(si)*40.));
+ bg+=vec3(.8,.85,1.)*st*.6*smoothstep(.35,.9,uv.y);
+ vec3 tr=texture(uT,uv).rgb,gw=texture(uG,uv).rgb;
+ vec3 c=bg+tr*.85+gw*.55;
+ c=1.-exp(-c*1.15);c=clamp(mix(vec3(dot(c,vec3(.3,.55,.15))),c,1.3),0.,1.);
+ o=vec4(c,1.);}`,
+
 waterStep: H+`uniform sampler2D uT;uniform float c2,damp,w2,hs,aspect;uniform vec2 tilt;
 void main(){vec4 s=texture(uT,vUv);float hC=s.x,v=s.y;
 float lap=texture(uT,vL).x+texture(uT,vR).x+texture(uT,vT).x+texture(uT,vB).x-4.*hC;
@@ -347,6 +385,29 @@ void main(){
 function compile(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);
   if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(s));return s;}
 const vs = compile(gl.VERTEX_SHADER,VS);
+const PT_VS=`#version 300 es
+precision highp float;precision highp sampler2D;
+uniform sampler2D uP;uniform float psize,t,bigPass;uniform vec3 pal[6];
+out vec3 vc;out float vb;
+float rnd(float n){return fract(sin(n*12.9898)*43758.5453);}
+void main(){int w=textureSize(uP,0).x;ivec2 id=ivec2(gl_VertexID%w,gl_VertexID/w);vec4 s=texelFetch(uP,id,0);
+ float n=float(gl_VertexID),h=rnd(n),h2=rnd(n+.37);
+ float big=step(.993,h2);float bright=step(.90,h);
+ gl_Position=vec4(s.xy*2.-1.,0.,1.);
+ float k=fract(.5+.45*sin(s.x*3.1+t*.05)*cos(s.y*2.3-t*.04)+s.y*.85+s.x*.45+t*.012)*6.;int i=int(k);vec3 c=mix(pal[i],pal[(i+1)%6],smoothstep(.2,.8,fract(k)));
+ float fade=smoothstep(0.,.12,s.z)*smoothstep(1.,.9,s.z)*smoothstep(0.,.04,min(min(s.x,1.-s.x),min(s.y,1.-s.y)));
+ if(abs(big-bigPass)>.5){gl_PointSize=0.;vc=vec3(0.);vb=0.;return;}
+ gl_PointSize=big>.5?psize*(7.+16.*h):(bright>.5?psize*(1.6+1.4*h2):psize*(.9+.6*h));
+ vc=c*fade*(big>.5?.30:(bright>.5?.85:.07));vb=big;}`;
+const PT_FS=`#version 300 es
+precision highp float;in vec3 vc;in float vb;out vec4 o;
+void main(){vec2 d=gl_PointCoord-.5;float r=length(d)*2.;
+ float a=vb>.5?smoothstep(1.,.82,r)*(.55+.45*smoothstep(.4,.95,r)):exp(-r*r*3.5);
+ o=vec4(vc*a,1.);}`;
+const PTP=(()=>{const p=gl.createProgram();gl.attachShader(p,compile(gl.VERTEX_SHADER,PT_VS));gl.attachShader(p,compile(gl.FRAGMENT_SHADER,PT_FS));gl.linkProgram(p);
+  if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(p));
+  const u={};['uP','psize','t','bigPass','pal'].forEach(k=>u[k]=gl.getUniformLocation(p,k));return {p,u};})();
+const vaoPts=gl.createVertexArray();
 const P = {};
 for(const k in FS){const p=gl.createProgram();gl.attachShader(p,vs);gl.attachShader(p,compile(gl.FRAGMENT_SHADER,FS[k]));
   gl.bindAttribLocation(p,0,'aPos');gl.linkProgram(p);
@@ -385,7 +446,7 @@ function resize(){dpr=Math.min(window.devicePixelRatio||1,2);
   canvas.width=w;canvas.height=h;fx.width=w;fx.height=h;aspect=w/h;
   const [sw,sh]=res(SIM_RES),[dw,dh]=res(DYE_RES);
   vel=dfbo(sw,sh);dye=dfbo(dw,dh);det=dfbo(dw,dh);div=fbo(sw,sh);curlF=fbo(sw,sh);pres=dfbo(sw,sh);
-  const [ww,wh]=res(WATER_RES);wat=dfbo(ww,wh);wgrad=fbo(ww,wh);waterClear();
+  const [ww,wh]=res(WATER_RES);wat=dfbo(ww,wh);lightAlloc();wgrad=fbo(ww,wh);waterClear();
   seed();}
 function seed(){const u=use('init',[dye.w.tx,dye.w.ty]);
   gl.uniform3fv(u.pal,palFlat);gl.uniform1f(u.seed,Math.random()*100);gl.uniform1f(u.aspect,aspect);
@@ -421,9 +482,9 @@ function updateTimeScale(dt){
   const target=Math.min(speed+boost*(.35+.5*Math.min(speed,2)),4);
   timeScale+=(target-timeScale)*Math.min(1,dt*(target>timeScale?5:1.1));   // quick to speed up, gentle to calm down
 }
-function step(dt){
+function stepVel(dt,amb){
   const tx=[vel.r.tx,vel.r.ty];
-  let u=use('ambient',tx);gl.uniform1i(u.uVel,vel.r.bind(0));gl.uniform1f(u.t,simTime);gl.uniform1f(u.amp,34);gl.uniform1f(u.dt,dt);blit(vel.w);vel.swap();
+  let u=use('ambient',tx);gl.uniform1i(u.uVel,vel.r.bind(0));gl.uniform1f(u.t,simTime);gl.uniform1f(u.amp,amb==null?34:amb);gl.uniform1f(u.dt,dt);blit(vel.w);vel.swap();
   u=use('curl',tx);gl.uniform1i(u.uVel,vel.r.bind(0));blit(curlF);
   u=use('vorticity',tx);gl.uniform1i(u.uVel,vel.r.bind(0));gl.uniform1i(u.uCurl,curlF.bind(1));gl.uniform1f(u.curl,15);gl.uniform1f(u.dt,dt);blit(vel.w);vel.swap();
   u=use('divergence',tx);gl.uniform1i(u.uVel,vel.r.bind(0));blit(div);
@@ -433,14 +494,72 @@ function step(dt){
   u=use('gradient',tx);gl.uniform1i(u.uP,pres.r.bind(0));gl.uniform1i(u.uVel,vel.r.bind(1));blit(vel.w);vel.swap();
   u=use('advectVel',tx);gl.uniform2f(u.simTexel,vel.r.tx,vel.r.ty);gl.uniform1f(u.dt,dt);gl.uniform1f(u.diss,.2);gl.uniform1f(u.bounce,1.);
   gl.uniform1i(u.uVel,vel.r.bind(0));blit(vel.w);vel.swap();
+}
+function step(dt){
+  stepVel(dt);let u;
   u=use('maccormack',[dye.r.tx,dye.r.ty]);gl.uniform2f(u.simTexel,vel.r.tx,vel.r.ty);gl.uniform2f(u.srcTexel,dye.r.tx,dye.r.ty);gl.uniform1f(u.dt,dt);
   gl.uniform1i(u.uVel,vel.r.bind(0));gl.uniform1i(u.uSrc,dye.r.bind(1));gl.uniform4f(u.diss,.003,.003,.003,.03);blit(dye.w);dye.swap();
   gl.uniform2f(u.srcTexel,det.r.tx,det.r.ty);gl.uniform1i(u.uSrc,det.r.bind(1));gl.uniform4f(u.diss,0,0,0,0);blit(det.w);det.swap();
   detailPass(.006);
 }
 
+/* ================= Light mode (particle light waves) ================= */
+const LIGHTS={
+  '다채로움':['#2b6bff','#00e1ff','#b04dff','#ff3da5','#ff9a2e','#ffd34a'],
+  '초록':    ['#00ff9c','#2dffd2','#7dff4a','#00c46a','#b8ffd9','#1fe0a0'],
+  '노랑':    ['#ffd23f','#ffb000','#ffe98a','#ff8a1f','#fff4c7','#ffc84a'],
+  '하양':    ['#ffffff','#e6eeff','#fff6e5','#cfd9ea','#f4f8ff','#dfe7f5'],
+  '파랑':    ['#1e5bff','#00b3ff','#4fd8ff','#2a2fd6','#9ad7ff','#5a7dff']};
+let lightName='다채로움'; try{const v=localStorage.getItem('hf-light');if(v&&LIGHTS[v])lightName=v;}catch(e){}
+let lightFlat=new Float32Array(LIGHTS[lightName].map(hex2rgb).flat());
+const PART_N=256; let parts=null,trail=null,glowF=null,lightTime=0,lightSeed=0;
+const hasF32=!!gl.getExtension('EXT_color_buffer_float');
+function fboX(w,h,ifmt,type,filt){const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,filt);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,filt);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  gl.texImage2D(gl.TEXTURE_2D,0,ifmt,w,h,0,gl.RGBA,type,null);
+  const f=gl.createFramebuffer();gl.bindFramebuffer(gl.FRAMEBUFFER,f);gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,t,0);
+  gl.viewport(0,0,w,h);gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT);
+  return {t,f,w,h,tx:1/w,ty:1/h,bind(u){gl.activeTexture(gl.TEXTURE0+u);gl.bindTexture(gl.TEXTURE_2D,t);return u;}};}
+function lightAlloc(){
+  const pf=hasF32?gl.RGBA32F:IFMT, pt=hasF32?gl.FLOAT:TYPE;
+  if(!parts){parts={r:fboX(PART_N,PART_N,pf,pt,gl.NEAREST),w:fboX(PART_N,PART_N,pf,pt,gl.NEAREST),swap(){const x=this.r;this.r=this.w;this.w=x;}};lightSeedAll();}
+  trail=dfbo(canvas.width,canvas.height);
+  glowF=fbo(Math.max(1,canvas.width>>2),Math.max(1,canvas.height>>2));
+}
+function lightSeedAll(){lightSeed=Math.random()*100;const u=use('partInit',[0,0]);gl.uniform1f(u.seed,lightSeed);blit(parts.w);parts.swap();
+  if(trail){gl.bindFramebuffer(gl.FRAMEBUFFER,trail.r.f);gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT);gl.bindFramebuffer(gl.FRAMEBUFFER,trail.w.f);gl.clear(gl.COLOR_BUFFER_BIT);}}
+function drawPoints(target,bigPass){
+  if(target){gl.bindFramebuffer(gl.FRAMEBUFFER,target.f);gl.viewport(0,0,target.w,target.h);}else{gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,canvas.width,canvas.height);}
+  gl.useProgram(PTP.p);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,parts.r.t);gl.uniform1i(PTP.u.uP,0);
+  gl.uniform1f(PTP.u.psize,dpr*1.15);gl.uniform1f(PTP.u.t,lightTime);gl.uniform1f(PTP.u.bigPass,bigPass);gl.uniform3fv(PTP.u.pal,lightFlat);
+  gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE);gl.bindVertexArray(vaoPts);gl.drawArrays(gl.POINTS,0,PART_N*PART_N);
+  gl.bindVertexArray(vao);gl.disable(gl.BLEND);}
+function lightFrame(dt){
+  const live=flow>.3, ldt=dt*flow*(.35+timeScale);
+  lightTime+=ldt;
+  // hands / touch / pinch / pointing → push the light (same flow field as the paint)
+  for(const h of handInfo){const p=h.point;if(!p||!live)continue;
+    splatVel(p.x,p.y,p.dx*900*dt*30,p.dy*900*dt*30,.0032);
+    for(let k=1;k<=3;k++)splatVel(p.x+p.dx/aspect*.04*k,p.y+p.dy*.04*k,p.dx*(800-k*120)*dt*30,p.dy*(800-k*120)*dt*30,.0042);}
+  for(const s of queue.splice(0)){ if(!live)continue;
+    if(s.set){splatVelSet(s.x,s.y,s.vx*vel.r.w,s.vy*vel.r.h,s.r*1.6,s.set);} else splatVel(s.x,s.y,s.dx*.6,s.dy*.6,s.r*1.4);}
+  if(flow>.02){simTime+=ldt;stepVel(ldt,12);}
+  // particles
+  let u=use('partStep',[0,0]);gl.uniform1i(u.uP,parts.r.bind(0));gl.uniform1i(u.uVel,vel.r.bind(1));gl.uniform2f(u.simTexel,vel.r.tx,vel.r.ty);
+  gl.uniform2f(u.force,motionF[0],motionF[1]);gl.uniform1f(u.dt,ldt);gl.uniform1f(u.t,lightTime);gl.uniform1f(u.seed,lightSeed);gl.uniform1f(u.aspect,aspect);
+  blit(parts.w);parts.swap();
+  // light trails: fade, then add the sparks
+  u=use('trailFade',[0,0]);gl.uniform1i(u.uT,trail.r.bind(0));gl.uniform1f(u.k,Math.exp(-dt*flow*2.6));blit(trail.w);trail.swap();
+  drawPoints(trail.r,0);
+  u=use('glowDown',[0,0]);gl.uniform1i(u.uT,trail.r.bind(0));gl.uniform2f(u.px,trail.r.tx*3,trail.r.ty*3);blit(glowF);
+  u=use('lightComp',[0,0]);gl.uniform1i(u.uT,trail.r.bind(0));gl.uniform1i(u.uG,glowF.bind(1));gl.uniform3fv(u.pal,lightFlat);
+  gl.uniform1f(u.time,lightTime);gl.uniform1f(u.aspect,aspect);blit(null);
+  drawPoints(null,1);                                   // soft bokeh orbs on top (no trails)
+}
+
 /* ================= Water mode (lake) ================= */
-let mode='paint'; try{if(localStorage.getItem('hf-mode')==='water')mode='water';}catch(e){}
+let mode='paint'; try{const m=localStorage.getItem('hf-mode');if(m==='water'||m==='light')mode=m;}catch(e){}
 let waterTime=0, wAcc=0, dropClock=0, glideClock=0; const gliders=[];
 const W_C=250, W_H=1/540, W_NK=.2, SUN=(()=>{const v=[.12,.82,.56],l=Math.hypot(...v);return v.map(x=>x/l);})();
 function waterClear(){const u=use('waterClear',[0,0]);blit(wat.w);wat.swap();blit(wat.w);wat.swap();}
@@ -758,7 +877,7 @@ function frame(now){
   resize();
   flow+=(flowTarget-flow)*Math.min(1,dt*(flowTarget>flow?2.5:6));
   updateGyro(dt);updateTimeScale(dt);
-  if(mode==='water'){ waterFrame(dt); } else {
+  if(mode==='water'){ waterFrame(dt); } else if(mode==='light'){ lightFrame(dt); } else {
   // ambient life: drifting color drops keep the canvas evolving
   ambientClock+=dt*flow*Math.max(timeScale,.15);
   if(ambientClock>.6){ambientClock=0;const x=Math.random(),y=Math.random(),a=Math.random()*6.28;
@@ -806,14 +925,21 @@ function applySpeed(v){speedVal=+v;speed=sliderToSpeed(speedVal);if(handAct<.05)
 speedEl.value=speedVal;applySpeed(speedVal);speedEl.addEventListener('input',e=>applySpeed(e.target.value));
 const seedBtn=document.getElementById('seedBtn'),hintTxt=document.getElementById('hintTxt');
 const HINTS={paint:hintTxt.innerHTML,
+  light:'<b>손가락</b> 빛의 흐름 밀기 · <b>검지만 펴기</b> 가리킨 방향으로 빛줄기<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 멈춤',
   water:'<b>손가락</b> 물결 만들기 · <b>검지만 펴기</b> 가리킨 방향으로 물결<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 물 멈춤'};
-function setMode(m){mode=m;document.body.classList.toggle('water',m==='water');
+function setMode(m){mode=m;document.body.classList.toggle('water',m==='water');document.body.classList.toggle('light',m==='light');
   document.querySelectorAll('#modeSeg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.m===m));
   seedBtn.textContent=m==='water'?'잔잔하게':'새 캔버스';hintTxt.innerHTML=HINTS[m];
   gliders.length=0;queue.length=0;drops.length=0;try{localStorage.setItem('hf-mode',m);}catch(e){}}
 document.querySelectorAll('#modeSeg button').forEach(b=>b.onclick=()=>setMode(b.dataset.m));
 setMode(mode);
-seedBtn.onclick=()=>{if(mode==='water'){waterClear();gliders.length=0;}else seed();drops.length=0;};
+seedBtn.onclick=()=>{if(mode==='water'){waterClear();gliders.length=0;}else if(mode==='light'){lightSeedAll();}else seed();drops.length=0;};
+const lightWrap=document.getElementById('lights');
+function renderLights(){lightWrap.innerHTML='';for(const name in LIGHTS){const b=document.createElement('button');b.className='chip';
+  b.setAttribute('aria-pressed',name===lightName);b.innerHTML='<i>'+LIGHTS[name].map(c=>`<span style="background:${c}"></span>`).join('')+'</i>'+name;
+  b.onclick=()=>{lightName=name;lightFlat=new Float32Array(LIGHTS[name].map(hex2rgb).flat());try{localStorage.setItem('hf-light',name);}catch(e){}renderLights();};
+  lightWrap.appendChild(b);}}
+renderLights();
 function setFloor(v){floorType=v;document.querySelectorAll('#floors .chip').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.f===v));try{localStorage.setItem('hf-floor4',v);}catch(e){}}
 document.querySelectorAll('#floors .chip').forEach(b=>b.onclick=()=>setFloor(+b.dataset.f));setFloor(floorType);
 const musicBtn=document.getElementById('musicBtn');

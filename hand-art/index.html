@@ -87,7 +87,7 @@ body:not(.water) #floors{display:none}
       <button class="btn" id="install">앱 설치</button>
     </div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 19</p>
+    <p class="hint" id="ver">버전 20</p>
   </div>
 </div>
 
@@ -255,6 +255,66 @@ void main(){vec4 s=texture(uP,vUv);vec2 p=s.xy;float life=s.z,lane=s.w;
 trailFade: H+`uniform sampler2D uT;uniform float k;void main(){o=texture(uT,vUv)*k;}`,
 glowDown: H+`uniform sampler2D uT;uniform vec2 px;
 void main(){vec3 c=vec3(0.);float W=0.;for(int y=-3;y<=3;y++)for(int x=-3;x<=3;x++){float w=exp(-float(x*x+y*y)*.18);c+=texture(uT,vUv+vec2(x,y)*px).rgb*w;W+=w;}o=vec4(c/W,1.);}`,
+ribbons: H+`uniform sampler2D uVel;uniform vec2 simTexel,force;uniform vec3 pal[6];uniform float time,aspect,seed;
+vec2 h2(vec2 p){return vec2(hash(p),hash(p+19.19));}
+vec3 palC(float k){k=k-6.*floor(k/6.);int i=int(k);float f=k-float(i);i=i>5?5:i;return mix(pal[i],pal[i<5?i+1:0],smoothstep(.15,.85,f));}
+void main(){
+ vec2 uv=vUv;float t=time;
+ vec3 avg=(pal[0]+pal[1]+pal[2]+pal[3]+pal[4]+pal[5])/6.;
+ // night background, horizon glow, a few stars
+ vec3 col=mix(vec3(.003,.004,.012),vec3(.010,.014,.035),uv.y);
+ col+=avg*.07*exp(-pow((uv.y-.86)/.16,2.))*(.6+.4*vn(vec2(uv.x*2.+t*.03,2.)));
+ vec2 sp=uv*vec2(aspect,1.)*240.;vec2 si=floor(sp);vec2 sf=sp-si-.5;
+ col+=vec3(.8,.86,1.)*step(.996,hash(si+seed))*exp(-dot(sf,sf)*18.)*(.5+.5*sin(t*1.7+hash(si)*40.))*.7*smoothstep(.4,.95,uv.y);
+ // hands / touch / tilt bend the light
+ vec2 vv=texture(uVel,uv).xy*simTexel*.30;float vl=length(vv);if(vl>.12)vv*=.12/vl;
+ vec2 q=uv-vv-force*.035;
+ vec3 lightSum=vec3(0.);
+ for(int r=0;r<5;r++){
+  float fi=float(r);
+  float P=26.+fi*6.7, ph=t/P+fi*.29+seed*.013;float cyc=floor(ph),fr=ph-cyc;
+  float r1=hash(vec2(fi*3.1,cyc+seed)),r2=hash(vec2(fi+7.3,cyc+seed)),r3=hash(vec2(fi+13.7,cyc+seed));
+  float env=smoothstep(0.,.22,fr)*smoothstep(1.,.72,fr);                  // fades in … and out
+  float dir=r3<.5?1.:-1.;
+  float xc=mix(-.55,1.55,dir>0.?fr:1.-fr);                                  // drifts across the screen
+  float xenv=exp(-pow((q.x-xc)/(.55+.35*r2),2.));
+  if(env*xenv<.01)continue;
+  float y0=.14+.72*r1, near=1.-y0;
+  float A=.05+.10*near;
+  float c=y0+A*sin(q.x*(2.2+1.5*r2)-t*.25*dir+r1*6.28)+A*.35*sin(q.x*(4.5+2.*r3)+t*.33+r2*6.28);
+  float W=(.04+.10*near)*(.75+.30*sin(q.x*3.1+t*.2+r2*6.28));
+  float v=(q.y-c)/W;
+  float band=exp(-v*v*.75);
+  if(band<.003)continue;
+  float N=8.+12.*near;
+  float s=v*N*.5+.06*sin(q.x*5.+t*.4+fi*2.);                             // fine parallel strands, gently braided
+  float sf2=s-floor(s)-.5,sid=floor(s);
+  float th=.004+.004*near;
+  float L=exp(-sf2*sf2/th)+exp(-sf2*sf2/.05)*.15;
+  float hs=hash(vec2(sid,fi+cyc));
+  float dxp=q.x*aspect*(26.+30.*hash(vec2(sid,fi+3.)))-t*dir*(1.2+1.8*hs);
+  float dd=dxp-floor(dxp)-.5;
+  float dots=exp(-dd*dd/.006)*step(.45,hs)*exp(-sf2*sf2/(th*1.6));              // beads of light running along strands
+  float crest=.30+.95*smoothstep(-.6,1.1,v*dir);
+  float I=(L*crest*(.7+.5*hs)*1.4+dots*2.4)*band*env*xenv*(.6+.6*near);
+  vec3 cc=palC(q.x*2.2+fi*1.37+v*.35+t*.04+r1*6.);
+  lightSum+=cc*I;
+  // spray of sparks lifting off the crest
+  float vs=v*dir;
+  if(vs>.6&&vs<3.2){vec2 g=vec2(q.x*aspect*70.,vs*7.-t*1.2);vec2 gi=floor(g),gf=g-gi-.5;
+   float hh=hash(gi+fi*17.+cyc);float spk=step(.90,hh)*exp(-dot(gf,gf)*14.)*exp(-(vs-.6)*1.1);
+   lightSum+=palC(q.x*2.2+fi*1.37+1.5)*spk*1.6*env*xenv;}
+ }
+ // soft bokeh orbs drifting slowly
+ for(int b=0;b<2;b++){float sc=b==0?5.:8.;vec2 bq=vec2(uv.x*aspect,uv.y+t*.006*(1.+float(b)))*sc;vec2 bi=floor(bq),bf=bq-bi;
+  float hb=hash(bi+float(b)*31.+seed);if(hb>.80){vec2 cpos=.5+.25*(h2(bi)-.5);float rad=.07+.09*hash(bi+5.);
+   float d=length(bf-cpos)/rad;float orb=smoothstep(1.,.86,d)*(.55+.45*smoothstep(.45,.95,d));
+   lightSum+=palC(hb*30.+bi.x)*orb*(.14+.14*hash(bi+9.));}}
+ col+=lightSum;
+ col+=lightSum*lightSum*.25;                                                // bloom on the brightest beads
+ col=1.-exp(-col*1.3);
+ col=clamp(mix(vec3(dot(col,vec3(.3,.55,.15))),col,1.25),0.,1.);
+ o=vec4(col,1.);}`,
 lightComp: H+`uniform sampler2D uT,uG;uniform vec3 pal[6];uniform float time,aspect;
 void main(){vec2 uv=vUv;vec3 avg=(pal[0]+pal[1]+pal[2]+pal[3]+pal[4]+pal[5])/6.;
  vec3 bg=mix(vec3(.004,.006,.016),vec3(.012,.018,.045),uv.y);
@@ -521,41 +581,21 @@ function fboX(w,h,ifmt,type,filt){const t=gl.createTexture();gl.bindTexture(gl.T
   const f=gl.createFramebuffer();gl.bindFramebuffer(gl.FRAMEBUFFER,f);gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,t,0);
   gl.viewport(0,0,w,h);gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT);
   return {t,f,w,h,tx:1/w,ty:1/h,bind(u){gl.activeTexture(gl.TEXTURE0+u);gl.bindTexture(gl.TEXTURE_2D,t);return u;}};}
-function lightAlloc(){
-  const pf=hasF32?gl.RGBA32F:IFMT, pt=hasF32?gl.FLOAT:TYPE;
-  if(!parts){parts={r:fboX(PART_N,PART_N,pf,pt,gl.NEAREST),w:fboX(PART_N,PART_N,pf,pt,gl.NEAREST),swap(){const x=this.r;this.r=this.w;this.w=x;}};lightSeedAll();}
-  trail=dfbo(canvas.width,canvas.height);
-  glowF=fbo(Math.max(1,canvas.width>>2),Math.max(1,canvas.height>>2));
-}
-function lightSeedAll(){lightSeed=Math.random()*100;const u=use('partInit',[0,0]);gl.uniform1f(u.seed,lightSeed);blit(parts.w);parts.swap();
-  if(trail){gl.bindFramebuffer(gl.FRAMEBUFFER,trail.r.f);gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT);gl.bindFramebuffer(gl.FRAMEBUFFER,trail.w.f);gl.clear(gl.COLOR_BUFFER_BIT);}}
-function drawPoints(target,bigPass){
-  if(target){gl.bindFramebuffer(gl.FRAMEBUFFER,target.f);gl.viewport(0,0,target.w,target.h);}else{gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,canvas.width,canvas.height);}
-  gl.useProgram(PTP.p);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,parts.r.t);gl.uniform1i(PTP.u.uP,0);
-  gl.uniform1f(PTP.u.psize,dpr*1.15);gl.uniform1f(PTP.u.t,lightTime);gl.uniform1f(PTP.u.bigPass,bigPass);gl.uniform3fv(PTP.u.pal,lightFlat);
-  gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE);gl.bindVertexArray(vaoPts);gl.drawArrays(gl.POINTS,0,PART_N*PART_N);
-  gl.bindVertexArray(vao);gl.disable(gl.BLEND);}
+function lightAlloc(){}
+function lightSeedAll(){lightSeed=Math.random()*100;}
 function lightFrame(dt){
   const live=flow>.3, ldt=dt*flow*(.35+timeScale);
   lightTime+=ldt;
-  // hands / touch / pinch / pointing → push the light (same flow field as the paint)
+  // hands / touch / pinch / pointing → bend and push the ribbons (shared flow field)
   for(const h of handInfo){const p=h.point;if(!p||!live)continue;
     splatVel(p.x,p.y,p.dx*900*dt*30,p.dy*900*dt*30,.0032);
     for(let k=1;k<=3;k++)splatVel(p.x+p.dx/aspect*.04*k,p.y+p.dy*.04*k,p.dx*(800-k*120)*dt*30,p.dy*(800-k*120)*dt*30,.0042);}
   for(const s of queue.splice(0)){ if(!live)continue;
-    if(s.set){splatVelSet(s.x,s.y,s.vx*vel.r.w,s.vy*vel.r.h,s.r*1.6,s.set);} else splatVel(s.x,s.y,s.dx*.6,s.dy*.6,s.r*1.4);}
-  if(flow>.02){simTime+=ldt;stepVel(ldt,12);}
-  // particles
-  let u=use('partStep',[0,0]);gl.uniform1i(u.uP,parts.r.bind(0));gl.uniform1i(u.uVel,vel.r.bind(1));gl.uniform2f(u.simTexel,vel.r.tx,vel.r.ty);
-  gl.uniform2f(u.force,motionF[0],motionF[1]);gl.uniform1f(u.dt,ldt);gl.uniform1f(u.t,lightTime);gl.uniform1f(u.seed,lightSeed);gl.uniform1f(u.aspect,aspect);
-  blit(parts.w);parts.swap();
-  // light trails: fade, then add the sparks
-  u=use('trailFade',[0,0]);gl.uniform1i(u.uT,trail.r.bind(0));gl.uniform1f(u.k,Math.exp(-dt*flow*2.6));blit(trail.w);trail.swap();
-  drawPoints(trail.r,0);
-  u=use('glowDown',[0,0]);gl.uniform1i(u.uT,trail.r.bind(0));gl.uniform2f(u.px,trail.r.tx*3,trail.r.ty*3);blit(glowF);
-  u=use('lightComp',[0,0]);gl.uniform1i(u.uT,trail.r.bind(0));gl.uniform1i(u.uG,glowF.bind(1));gl.uniform3fv(u.pal,lightFlat);
-  gl.uniform1f(u.time,lightTime);gl.uniform1f(u.aspect,aspect);blit(null);
-  drawPoints(null,1);                                   // soft bokeh orbs on top (no trails)
+    if(s.set){splatVelSet(s.x,s.y,s.vx*vel.r.w,s.vy*vel.r.h,s.r*2.2,s.set);} else splatVel(s.x,s.y,s.dx*.6,s.dy*.6,s.r*1.6);}
+  if(flow>.02){simTime+=ldt;stepVel(ldt,0);}
+  const u=use('ribbons',[0,0]);gl.uniform1i(u.uVel,vel.r.bind(0));gl.uniform2f(u.simTexel,vel.r.tx,vel.r.ty);
+  gl.uniform2f(u.force,motionF[0],motionF[1]);gl.uniform3fv(u.pal,lightFlat);gl.uniform1f(u.time,lightTime);
+  gl.uniform1f(u.aspect,aspect);gl.uniform1f(u.seed,lightSeed);blit(null);
 }
 
 /* ================= Water mode (lake) ================= */
@@ -927,7 +967,8 @@ const seedBtn=document.getElementById('seedBtn'),hintTxt=document.getElementById
 const HINTS={paint:hintTxt.innerHTML,
   light:'<b>손가락</b> 빛의 흐름 밀기 · <b>검지만 펴기</b> 가리킨 방향으로 빛줄기<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 멈춤',
   water:'<b>손가락</b> 물결 만들기 · <b>검지만 펴기</b> 가리킨 방향으로 물결<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 물 멈춤'};
-function setMode(m){mode=m;document.body.classList.toggle('water',m==='water');document.body.classList.toggle('light',m==='light');
+function setMode(m){if(m==='light'&&vel){const u=use('waterClear',[0,0]);blit(vel.w);vel.swap();blit(vel.w);vel.swap();}
+  mode=m;document.body.classList.toggle('water',m==='water');document.body.classList.toggle('light',m==='light');
   document.querySelectorAll('#modeSeg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.m===m));
   seedBtn.textContent=m==='water'?'잔잔하게':'새 캔버스';hintTxt.innerHTML=HINTS[m];
   gliders.length=0;queue.length=0;drops.length=0;try{localStorage.setItem('hf-mode',m);}catch(e){}}

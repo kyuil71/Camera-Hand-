@@ -90,7 +90,7 @@ body:not(.water) #floors,body:not(.water) #dipRow{display:none}
       <button class="btn" id="install">앱 설치</button>
     </div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 31</p>
+    <p class="hint" id="ver">버전 32</p>
   </div>
 </div>
 
@@ -813,7 +813,7 @@ const bgm=new Audio();bgm.loop=true;bgm.preload='auto';
 try{bgm.preservesPitch=true;bgm.mozPreservesPitch=true;bgm.webkitPreservesPitch=true;}catch(e){}
 let musicOn=true; try{musicOn=localStorage.getItem('hf-music')!=='off';}catch(e){}
 let musicReady=null, musicRate=1, musicVol=0, curTrack=null, trackBusy=false;
-const TRACKS={paint:'audio/where_the_stream_widens.mp3',water:'audio/where_the_stream_widens.mp3',light:'audio/where_the_ocean_meets_sky.mp3'};
+const TRACKS={paint:'audio/where_the_stream_widens.mp3',water:'audio/glass_upon_the_lake.mp3',light:'audio/where_the_ocean_meets_sky.mp3'};
 const trackURL={};
 function getTrack(path){ if(!trackURL[path])trackURL[path]=fetch(path).then(r=>r.blob()).then(b=>URL.createObjectURL(b)).catch(()=>null); return trackURL[path]; }
 function loadMusic(){ const path=TRACKS[mode]||TRACKS.paint;

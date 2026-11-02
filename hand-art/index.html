@@ -87,7 +87,7 @@ body:not(.water) #floors{display:none}
       <button class="btn" id="install">앱 설치</button>
     </div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 21</p>
+    <p class="hint" id="ver">버전 22</p>
   </div>
 </div>
 
@@ -350,8 +350,8 @@ float swellH(vec2 p,float t){
        +.0042*sin(dot(p,vec2(-.45,.89))*11.0-t*1.10+1.3)
        +.0030*sin(dot(p,vec2(.97,-.24))*17.0-t*1.35+2.1)
        +.0018*sin(dot(p,vec2(.20,.98))*27.0-t*1.70+.4);}
-float gustK(vec2 p,float t){return smoothstep(.38,.78,fbm4(p*1.3+vec2(t*.05,t*.03)));}
-float ripH(vec2 p,float t,float gk){p+=.025*vec2(vn(p*5.),vn(p*5.+9.));float s=0.;
+float gustK(vec2 p,float t){float g=.5+.25*sin(p.x*2.3+p.y*1.1+t*.11)+.15*sin(p.x*-1.4+p.y*3.1-t*.08)+.10*sin(p.x*4.7-p.y*2.6+t*.17);return smoothstep(.38,.78,g);}
+float ripH(vec2 p,float t,float gk){p+=.012*vec2(sin(p.y*7.3+p.x*2.1)+sin(p.x*4.9-p.y*3.7),sin(p.x*6.1-p.y*1.9)+sin(p.y*5.3+p.x*3.3));float s=0.;
  s+=sin(dot(p,vec2(.93,.37))*61.-t*2.6);
  s+=sin(dot(p,vec2(-.41,.91))*73.-t*2.9+1.7);
  s+=.8*sin(dot(p,vec2(.12,-.99))*89.-t*3.2+4.1);
@@ -362,7 +362,7 @@ float caus(vec2 q,float t){                     // organic caustic web: warped c
  q+=.55*vec2(vn(q*.55+t*.11),vn(q*.55+5.2-t*.09))+.18*vec2(vn(q*1.7-t*.2),vn(q*1.7+9.1+t*.17));
  vec2 ip=floor(q),fp=q-ip;float d1=8.,d2=8.;
  for(int y=-1;y<=1;y++)for(int x=-1;x<=1;x++){vec2 o2=vec2(x,y);vec2 h=h2(ip+o2);
-  vec2 r=o2+.5+.25*sin(t*.7+6.2831*h)-fp;float d=dot(r,r);   /* small jitter: nearest cells stay inside the 3x3 search */if(d<d1){d2=d1;d1=d;}else if(d<d2)d2=d;}
+  vec2 r=o2+.5+.2*sin(t*.7+6.2831*h)-fp;float d=dot(r,r);   /* small jitter: nearest cells stay inside the 3x3 search */if(d<d1){d2=d1;d1=d;}else if(d<d2)d2=d;}
  float e=sqrt(d2)-sqrt(d1);float w=.30+.25*vn(q*.9+3.3);return pow(1.-smoothstep(0.,w,e),2.4)*(.55+.7*vn(q*.6-t*.07));}
 vec3 stoneCol(float a,float b){vec3 c=mix(vec3(.50,.45,.38),vec3(.80,.74,.63),a);
  c=mix(c,vec3(.62,.46,.31),step(.55,b));c=mix(c,vec3(.30,.29,.28),step(.76,b));c=mix(c,vec3(.68,.42,.30),step(.88,b));c=mix(c,vec3(.86,.84,.78),step(.95,b));return c;}

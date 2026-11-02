@@ -60,6 +60,13 @@ body:not(.water) #floors,body:not(.water) #dipRow,body:not(.water) #rainRow{disp
 #dipRow{margin-bottom:10px}
 #dipBtn.on{background:var(--ink);color:#101826}
 .chip i.sw{width:24px;height:18px;border-radius:9px;border:1px solid rgba(255,255,255,.25)}
+.mfx{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px;padding:10px 14px;min-height:52px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.04);cursor:pointer}
+.mfx span{display:flex;flex-direction:column;line-height:1.25}.mfx b{font-size:16px;font-weight:600}.mfx small{font-size:13px;color:var(--mute)}
+.mfx input{position:absolute;opacity:0;pointer-events:none}
+.mfx i{position:relative;flex:0 0 auto;width:52px;height:30px;border-radius:15px;background:rgba(255,255,255,.18);transition:background .25s}
+.mfx i:after{content:"OFF";position:absolute;left:3px;top:3px;width:24px;height:24px;border-radius:50%;background:#fff;transition:transform .25s;font-size:0}
+.mfx input:checked+i{background:var(--accent)}.mfx input:checked+i:after{transform:translateX(22px)}
+.mfx.off{opacity:.45}
 .hint{font-size:16px;color:var(--mute);text-align:center;margin-top:10px;line-height:1.5}
 .hint b{color:var(--ink);font-weight:600}
 </style>
@@ -93,8 +100,10 @@ body:not(.water) #floors,body:not(.water) #dipRow,body:not(.water) #rainRow{disp
       <button class="btn" id="fsBtn">전체화면</button>
       <button class="btn" id="install">앱 설치</button>
     </div>
+    <label class="mfx" id="mfxRow"><span><b>음악 인터랙션</b><small>Music Interaction</small></span>
+      <input type="checkbox" id="mfxSw" role="switch" aria-label="음악 인터랙션 Music Interaction"><i aria-hidden="true"></i></label>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 35</p>
+    <p class="hint" id="ver">버전 36</p>
   </div>
 </div>
 
@@ -1012,16 +1021,90 @@ async function switchTrack(){ const path=TRACKS[mode]||TRACKS.paint; if(path===c
   musicVol=0; await loadMusic(); trackBusy=false;
   if(musicOn&&!document.hidden&&bgm.src){ bgm.currentTime=0; bgm.volume=0; bgm.play().catch(()=>{}); }
   if((TRACKS[mode]||TRACKS.paint)!==curTrack)switchTrack(); }
-function tryMusic(){ if(!musicOn||!bgm.paused&&bgm.src)return; loadMusic().then(()=>{ if(musicOn&&!document.hidden){bgm.volume=musicVol;bgm.play().catch(()=>{});} }); }
+function tryMusic(){ if(MFX.on){ if(mfxBuild())mfxResume(); } if(!musicOn||!bgm.paused&&bgm.src)return; loadMusic().then(()=>{ if(musicOn&&!document.hidden){bgm.volume=musicVol;bgm.play().catch(()=>{});} }); }
 function updateMusic(dt){
+  mfxUpdate();
   if(!bgm.src||bgm.paused)return;
   const boost=Math.max(0,timeScale-speed);                 // only the part the hands add
-  const target=Math.min(1.45,1+boost*.32);
+  const target=MFX.on?1:Math.min(1.45,1+boost*.32);
   musicRate+=(target-musicRate)*Math.min(1,dt*(target>musicRate?3:.8));
   if(Math.abs(bgm.playbackRate-musicRate)>.01)bgm.playbackRate=musicRate;
   musicVol+=((musicOn?.85:0)-musicVol)*Math.min(1,dt*1.5);bgm.volume=Math.max(0,Math.min(1,musicVol));
 }
-document.addEventListener('visibilitychange',()=>{ if(document.hidden)bgm.pause(); else if(musicOn&&bgm.src)bgm.play().catch(()=>{}); });
+document.addEventListener('visibilitychange',()=>{ if(document.hidden)bgm.pause(); else { if(MFX.ctx&&MFX.ctx.state!=='running')MFX.ctx.resume().catch(()=>{}); if(musicOn&&bgm.src)bgm.play().catch(()=>{}); } });
+
+/* ================= Music Interaction (Web Audio) =================
+   bgm → MediaElementSource → low-pass → stereo pan ─┬→ dry ─┬→ gain → speakers
+                                                      └→ convolver reverb → wet ┘
+   Built once, on the first user tap after the switch is ON. Hand data comes from the existing
+   MediaPipe results (handInfo) — no second model. When OFF every node sits at a neutral value,
+   so the sound is identical to plain playback. */
+const MFX={on:false,ctx:null,src:null,lp:null,pan:null,dry:null,wet:null,conv:null,gain:null,
+  s:{x:.5,y:.5,v:0,pinch:0,seen:0,px:null,py:null,pt:0}, sent:{g:1,p:0,f:20000,w:0}, lastSend:0};
+try{MFX.on=localStorage.getItem('hf-mfx')==='1';}catch(e){}
+function mfxImpulse(ctx){                       // gentle 2.4 s hall: decaying, slightly darkened stereo noise (built once)
+  const sr=ctx.sampleRate,len=Math.floor(sr*2.4),b=ctx.createBuffer(2,len,sr);
+  for(let c=0;c<2;c++){const d=b.getChannelData(c);let lp=0;
+    for(let i=0;i<len;i++){const t=i/sr,n=Math.random()*2-1;lp+=(n-lp)*(.35-.25*Math.min(1,t/2.4));
+      d[i]=lp*Math.pow(1-i/len,2.2)*Math.exp(-t*1.1)*(i<sr*.012?i/(sr*.012):1);}}
+  return b;}
+function mfxBuild(){
+  if(MFX.ctx)return true;
+  try{const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return false;
+    const ctx=new AC();MFX.ctx=ctx;
+    MFX.src=ctx.createMediaElementSource(bgm);                     // only ever once for this element
+    MFX.lp=ctx.createBiquadFilter();MFX.lp.type='lowpass';MFX.lp.frequency.value=20000;MFX.lp.Q.value=.5;
+    MFX.pan=ctx.createStereoPanner?ctx.createStereoPanner():null;
+    MFX.dry=ctx.createGain();MFX.wet=ctx.createGain();MFX.wet.gain.value=0;
+    MFX.conv=ctx.createConvolver();MFX.conv.buffer=mfxImpulse(ctx);
+    MFX.gain=ctx.createGain();
+    const mid=MFX.pan||MFX.lp;
+    MFX.src.connect(MFX.lp);if(MFX.pan)MFX.lp.connect(MFX.pan);
+    mid.connect(MFX.dry);mid.connect(MFX.conv);MFX.conv.connect(MFX.wet);
+    MFX.dry.connect(MFX.gain);MFX.wet.connect(MFX.gain);MFX.gain.connect(ctx.destination);
+    return true;}catch(e){console.warn('MFX',e);MFX.ctx=null;return false;}}
+function mfxResume(){ if(MFX.ctx&&MFX.ctx.state!=='running')MFX.ctx.resume().catch(()=>{}); }
+function mfxSet(param,val,tc){const t=MFX.ctx.currentTime;try{param.cancelScheduledValues(t);param.setTargetAtTime(val,t,tc);}catch(e){param.value=val;}}
+// called from the render loop (no extra timers); audio params are touched at most ~8×/s and only when they really change
+function mfxUpdate(){
+  const S=MFX.s,now=performance.now();const dt=Math.min(.25,(now-(MFX.lastT||now))/1000);MFX.lastT=now;   // real time, independent of frame rate
+  const h=handInfo.find(x=>x&&x.palm);
+  if(MFX.on&&h){
+    const x=h.palm.x,y=h.palm.y;
+    const spd=Math.max(0,handAct-.08);                             // existing finger-speed measure; dead zone for jitter
+    S.v+=(Math.min(spd,2.5)-S.v)*Math.min(1,dt*(spd>S.v?2.2:.9));
+    const a=Math.min(1,dt*1.8);                                    // input smoothing
+    if(Math.abs(x-S.x)>.015)S.x+=(x-S.x)*a; if(Math.abs(y-S.y)>.015)S.y+=(y-S.y)*a;
+    S.pinch+=((h.pinch?1:0)-S.pinch)*Math.min(1,dt*(h.pinch?1.6:.7));
+    S.seen=now;
+  } else if(now-S.seen>350){                                      // hand gone (or switch OFF): drift home
+    const a=Math.min(1,dt*1.4);S.x+=(.5-S.x)*a;S.y+=(.5-S.y)*a;S.v+=(0-S.v)*a;S.pinch+=(0-S.pinch)*Math.min(1,dt*.9);}
+  // presence: eases in over ~0.5 s when a hand appears, back out over ~2 s when it is gone → everything returns home smoothly
+  const present=MFX.on&&now-S.seen<350;
+  S.pres=(S.pres||0)+((present?1:0)-(S.pres||0))*Math.min(1,dt*(present?2.5:1.1));
+  if(!MFX.ctx)return;
+  if(now-MFX.lastSend<120)return;MFX.lastSend=now;
+  const active=MFX.on&&S.pres>.002,P=S.pres;
+  // A: height → 60–100 % of the normal volume (hand high = full, low = softer); B: left/right → pan ±0.5
+  const g=active?1+P*(.6+.4*Math.min(1,Math.max(0,(S.y-.15)/.7))-1):1;
+  const p=active?P*Math.max(-.5,Math.min(.5,(S.x-.5)*1.1)):0;
+  // C: slow hand → warm (≈5.5 kHz), fast hand → bright (≈18 kHz); no hand → untouched (20 kHz)
+  const f=active?Math.exp(Math.log(20000)+P*(Math.log(5500*Math.pow(18000/5500,Math.min(1,S.v/1.2)))-Math.log(20000))):20000;
+  // D: pinch → up to 22 % wet
+  const w=active?.22*S.pinch*P:0;
+  const T=MFX.sent;
+  if(Math.abs(g-T.g)>.01){mfxSet(MFX.gain.gain,g,.35);T.g=g;}
+  if(MFX.pan&&Math.abs(p-T.p)>.01){mfxSet(MFX.pan.pan,p,.4);T.p=p;}
+  if(Math.abs(Math.log(f/T.f))>.03){mfxSet(MFX.lp.frequency,f,.3);T.f=f;}
+  if(Math.abs(w-T.w)>.005){mfxSet(MFX.wet.gain,w,.45);mfxSet(MFX.dry.gain,1-w*.35,.45);T.w=w;}
+}
+function setMfx(on,fromUser){
+  MFX.on=on;try{localStorage.setItem('hf-mfx',on?'1':'0');}catch(e){}
+  const sw=document.getElementById('mfxSw');if(sw)sw.checked=on;
+  if(on&&fromUser){ if(mfxBuild())mfxResume(); }
+  if(!on&&MFX.ctx){const T=MFX.sent;mfxSet(MFX.gain.gain,1,.4);if(MFX.pan)mfxSet(MFX.pan.pan,0,.4);mfxSet(MFX.lp.frequency,20000,.4);
+    mfxSet(MFX.wet.gain,0,.4);mfxSet(MFX.dry.gain,1,.4);T.g=1;T.p=0;T.f=20000;T.w=0;}            // AudioContext is created inside the tap → mobile autoplay rules
+}
 addEventListener('pointerdown',tryMusic,true);
 
 /* ================= Interaction (touch + hands) ================= */
@@ -1252,6 +1335,10 @@ const musicBtn=document.getElementById('musicBtn');
 function setMusic(on){musicOn=on;musicBtn.textContent=on?'음악 끄기':'음악 켜기';try{localStorage.setItem('hf-music',on?'on':'off');}catch(e){}
   if(on)tryMusic();else bgm.pause();}
 musicBtn.onclick=()=>setMusic(!musicOn);setMusic(musicOn);
+const mfxSw=document.getElementById('mfxSw'),mfxRow=document.getElementById('mfxRow');
+mfxSw.addEventListener('change',()=>setMfx(mfxSw.checked,true));
+setMfx(MFX.on,false);
+const _setMusic=setMusic;setMusic=function(on){_setMusic(on);mfxRow.classList.toggle('off',!on);};mfxRow.classList.toggle('off',!musicOn);
 document.getElementById('gyroBtn').onclick=()=>setGyro(!gyroOn);
 setDip(dipMode);
 document.getElementById('snapBtn').onclick=()=>{snapReq=true;};

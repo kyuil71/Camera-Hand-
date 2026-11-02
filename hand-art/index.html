@@ -90,7 +90,7 @@ body:not(.water) #floors,body:not(.water) #dipRow{display:none}
       <button class="btn" id="install">앱 설치</button>
     </div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 27</p>
+    <p class="hint" id="ver">버전 28</p>
   </div>
 </div>
 
@@ -394,6 +394,7 @@ void main(){
  vec3 under=lit*exp(-absorb*path)+vec3(.03,.15,.16)*(floorType<.5?1.:floorType<1.5?.3:.16)*(1.-exp(-1.4*path));
  vec3 R=reflect(-V,N);R.z=abs(R.z);
  vec3 col=mix(under,sky(R,t),F);
+ float rip=length(gs);col+=vec3(.75,.88,.95)*smoothstep(.10,.45,rip)*.16;      // ripple crests catch the light → rings read clearly
  col*=1.-.18*pow(length(uv-.5)*1.25,2.);
  col*=1.08;col=(col*(2.51*col+.03))/(col*(2.43*col+.59)+.14);
  // breaking crest at the wall: white water with bubbles, bright and glossy (applied after tone-mapping → stays white)
@@ -611,7 +612,7 @@ function lightFrame(dt){
 /* ================= Water mode (lake) ================= */
 let mode='paint'; try{const m=localStorage.getItem('hf-mode');if(m==='water'||m==='light')mode=m;}catch(e){}
 let waterTime=0, wAcc=0, dropClock=0, glideClock=0; const gliders=[];
-const W_C=250, W_H=1/540, W_NK=.2, SUN=(()=>{const v=[.12,.82,.56],l=Math.hypot(...v);return v.map(x=>x/l);})();
+const W_C=250, W_H=1/540, W_NK=.32, SUN=(()=>{const v=[.12,.82,.56],l=Math.hypot(...v);return v.map(x=>x/l);})();
 function waterClear(){const u=use('waterClear',[0,0]);blit(wat.w);wat.swap();blit(wat.w);wat.swap();}
 function waterPoke(x,y,amp,r){const u=use('waterPoke',[wat.r.tx,wat.r.ty]);gl.uniform1i(u.uT,wat.r.bind(0));
   gl.uniform1f(u.aspect,aspect);gl.uniform2f(u.point,x,y);gl.uniform1f(u.amp,amp);gl.uniform1f(u.radius,r*(aspect>1?aspect:1));blit(wat.w);wat.swap();}
@@ -631,7 +632,7 @@ function updateDips(dt){
   const now=performance.now();
   for(const [id,d] of dips){
     if(d.on){
-      if(!d.entered){d.entered=true;waterPoke(d.x,d.y,WATER_AMP*.8,d.r*.35);}            // touching the surface: first ring
+      if(!d.entered){d.entered=true;waterPoke(d.x,d.y,WATER_AMP*2.0,d.r*.3);}            // touching the surface: first ring
       const hold=(now-d.t0)/1000;
       const target=DIP_MAX*(1-Math.exp(-hold/1.1));                                       // short = a light touch, long = deep
       d.depth+=(target-d.depth)*Math.min(1,dt*5);
@@ -647,10 +648,12 @@ function waterFrame(dt){
   if(dipMode){queue.length=0;updateDips(dt);}
   // fingers / touch / pinch rings → pressure on the surface (stronger when moving faster)
   for(const s of queue.splice(0)){ if(!live)continue;
+    if(s.tap){waterPoke(s.x,s.y,WATER_AMP*2.4,.00045);waterPoke(s.x,s.y,-WATER_AMP*.9,.0012);continue;}   // a light touch: clear ring of ripples
     const main=s.set?s.set>.6:true;
     if(s.hand&&s.set&&!main)continue;                      // a hand acts like ONE finger on the water (index tip), not five
     let sp=s.vx!=null?Math.hypot(s.vx*aspect,s.vy):Math.hypot(s.dx||0,s.dy||0)/2600;
     if(s.hand)sp=Math.max(0,sp-.15);                       // ignore camera-tracking jitter
+    else sp=Math.max(sp,.55);                               // touch: even a gentle stroke shows ripples
     // camera frames come ~2× less often than touch events → ×1.4, then ×1.15 so a gesture is just a little stronger than touch
     const hk=s.hand?(s.vOnly?.3:HAND_K):1;                       // hand gestures: just a little stronger than one finger on the glass
     waterPoke(s.x,s.y,Math.min(.15+sp,3.2)*(main?WATER_AMP:WATER_AMP*.55)*(s.vOnly?.5:1)*hk,main?.00055:.0003);}
@@ -834,7 +837,8 @@ const pickColor=(i)=>{const p=pal();const c=p[(i+colorTick)%p.length];const k=.9
 // touch fallback
 const pointers=new Map();
 canvas.addEventListener('pointerdown',e=>{if(document.body.classList.contains('menu')){openMenu(false);return;}pointers.set(e.pointerId,{x:e.clientX/innerWidth,y:1-e.clientY/innerHeight,t:e.timeStamp,c:pickColor(pointers.size+(Math.random()*6|0))});wake();
-  if(mode==='water'&&dipMode)dipStart('t'+e.pointerId,e.clientX/innerWidth,1-e.clientY/innerHeight,.005);});
+  if(mode==='water'&&dipMode)dipStart('t'+e.pointerId,e.clientX/innerWidth,1-e.clientY/innerHeight,.005);
+  else if(mode==='water')queue.push({x:e.clientX/innerWidth,y:1-e.clientY/innerHeight,tap:1});});
 canvas.addEventListener('pointermove',e=>{const p=pointers.get(e.pointerId);if(!p)return;
   const x=e.clientX/innerWidth,y=1-e.clientY/innerHeight;const dtR=Math.min(Math.max((e.timeStamp-p.t)/1000,.008),.1);feelFinger(Math.hypot((x-p.x)*aspect,y-p.y)/dtR);
   queue.push({x,y,vx:(x-p.x)/dtR,vy:(y-p.y)/dtR,set:.85,c:p.c,r:.0032,s:.9});p.x=x;p.y=y;p.t=e.timeStamp;

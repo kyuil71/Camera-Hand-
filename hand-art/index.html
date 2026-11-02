@@ -90,7 +90,7 @@ body:not(.water) #floors,body:not(.water) #dipRow{display:none}
       <button class="btn" id="install">앱 설치</button>
     </div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 25</p>
+    <p class="hint" id="ver">버전 26</p>
   </div>
 </div>
 
@@ -236,7 +236,7 @@ o=c;}`,
 waterClear: H+`void main(){o=vec4(0.,0.,0.,1.);}`,
 partInit: H+`uniform float seed;
 void main(){vec2 q=gl_FragCoord.xy;o=vec4(hash(q+seed),hash(q*1.31+seed+7.),hash(q*.77+seed+3.),hash(q*2.13+seed+11.));}`,
-partStep: H+`uniform sampler2D uP,uVel;uniform vec2 simTexel,force;uniform float dt,t,seed,aspect;
+partStep: H+`uniform sampler2D uP,uVel;uniform vec2 simTexel,force;uniform float dt,t,seed,aspect,emitFrac;uniform vec4 emit[4];uniform float emitK[4];
 vec2 flowB(vec2 p,float t){            // big slow wave currents that never cross the walls (stream function)
  float PI=3.14159;vec2 v=vec2(0.);
  float a1=.030*cos(t*.13),a2=.020*sin(t*.17+1.),a3=.014*cos(t*.11+2.),a4=.010*sin(t*.23);
@@ -250,10 +250,27 @@ void main(){vec4 s=texture(uP,vUv);vec2 p=s.xy;float life=s.z,lane=s.w;
  float ph=lane*6.2831;
  vec2 w=vec2(.010*sin(p.y*9.+t*.5+ph),.018*sin(p.x*8.+t*.7+ph)); // ripples along the strands
  p+=(v+flowB(p,t)*1.6+w+force*.05)*dt;
+ bool born=lane>=1.;
+ if(born){                                                   // newly emitted light: shoot out along its jet, slowing as it ages
+  float q=(lane-1.)*4.;float ang=fract(q)*6.2831;float young=smoothstep(.55,1.,life);
+  ang+=.55*sin(life*9.+t*.9)+.25*sin(life*23.-t*1.3);                 // the stream sways like a ribbon of paint
+  p+=vec2(cos(ang)/aspect,sin(ang))*(.04+.24*young)*dt;}
+ for(int k=0;k<4;k++){if(emitK[k]<=0.)continue;             // fresh light pushes the old light aside (like paint)
+  vec2 d=(p-emit[k].xy)*vec2(aspect,1.);float g=exp(-dot(d,d)/.010);
+  if(!born)p+=normalize(d+1e-5)/vec2(aspect,1.)*g*emitK[k]*.45*dt;}
  if(p.x<0.)p.x=-p.x;if(p.x>1.)p.x=2.-p.x;if(p.y<0.)p.y=-p.y;if(p.y>1.)p.y=2.-p.y;   // bounce off the walls
  float eW=min(min(p.x,1.-p.x)*aspect,min(p.y,1.-p.y));
  life-=dt*(.05+.08*hash(vUv*91.7))+dt*4.*smoothstep(.03,.0,eW);      /* no light piling up along the walls */
- if(life<0.){p=vec2(hash(vUv+t+seed),hash(vUv*1.7+t+seed+3.));life=1.;}
+ if(life<0.){p=vec2(hash(vUv+t+seed),hash(vUv*1.7+t+seed+3.));life=1.;lane=fract(lane);}
+ // emission: a few particles per frame are reborn at a fingertip as a new, bright stream
+ float tot=emitK[0]+emitK[1]+emitK[2]+emitK[3];
+ if(tot>0.&&hash(vUv*913.7+fract(t*3.17)*97.)<emitFrac*tot){
+  float r=hash(vUv*37.1+fract(t*1.93)*51.)*tot;int ei=0;float acc=emitK[0];
+  if(r>acc){ei=1;acc+=emitK[1];} if(r>acc){ei=2;acc+=emitK[2];} if(r>acc){ei=3;}
+  vec4 e=emit[ei];float ang=atan(e.w,e.z)+(hash(vUv*5.3+t)-.5)*.9;
+  float j=hash(vUv*11.7+t)*.02;
+  p=e.xy+vec2(cos(ang)/aspect,sin(ang))*j+(vec2(hash(vUv*3.1+t),hash(vUv*4.7+t))-.5)*vec2(.006/aspect,.006);
+  life=1.;lane=1.+(float(ei)+fract(ang/6.2831)*.999)/4.;}
  o=vec4(p,life,lane);}`,
 trailFade: H+`uniform sampler2D uT;uniform float k;void main(){o=texture(uT,vUv)*k;}`,
 glowDown: H+`uniform sampler2D uT;uniform vec2 px;
@@ -394,18 +411,23 @@ function compile(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);
 const vs = compile(gl.VERTEX_SHADER,VS);
 const PT_VS=`#version 300 es
 precision highp float;precision highp sampler2D;
-uniform sampler2D uP;uniform float psize,t,bigPass;uniform vec3 pal[6];
+uniform sampler2D uP;uniform float psize,t,bigPass;uniform vec3 pal[6];uniform vec3 emCol[4];
 out vec3 vc;out float vb;
 float rnd(float n){return fract(sin(n*12.9898)*43758.5453);}
 void main(){int w=textureSize(uP,0).x;ivec2 id=ivec2(gl_VertexID%w,gl_VertexID/w);vec4 s=texelFetch(uP,id,0);
  float n=float(gl_VertexID),h=rnd(n),h2=rnd(n+.37);
- float big=step(.993,h2);float bright=step(.90,h);
+ float born=step(1.,s.w);
+ float big=step(.993,h2)*(1.-born);float bright=step(.90,h);
  gl_Position=vec4(s.xy*2.-1.,0.,1.);
  float k=fract(.5+.45*sin(s.x*3.1+t*.05)*cos(s.y*2.3-t*.04)+s.y*.85+s.x*.45+t*.012)*6.;int i=int(k);vec3 c=mix(pal[i],pal[(i+1)%6],smoothstep(.2,.8,fract(k)));
  float fade=smoothstep(0.,.12,s.z)*smoothstep(1.,.9,s.z)*smoothstep(0.,.04,min(min(s.x,1.-s.x),min(s.y,1.-s.y)));
  if(abs(big-bigPass)>.5){gl_PointSize=0.;vc=vec3(0.);vb=0.;return;}
  gl_PointSize=big>.5?psize*(7.+16.*h):(bright>.5?psize*(1.6+1.4*h2):psize*(.9+.6*h));
- vc=c*fade*(big>.5?.30:(bright>.5?.85:.07));vb=big;}`;
+ vc=c*fade*(big>.5?.30:(bright>.5?.85:.07));vb=big;
+ if(born>.5){int ei=int(min(3.,floor((s.w-1.)*4.)));vec3 ec=emCol[ei];
+  float young=smoothstep(.55,1.,s.z);float edge=smoothstep(0.,.04,min(min(s.x,1.-s.x),min(s.y,1.-s.y)))*smoothstep(0.,.12,s.z);
+  vc=mix(mix(c,ec,.75),vec3(1.),.10*young)*edge*(.25+.85*young)*(.6+.6*h);
+  gl_PointSize=psize*(1.6+1.6*h)*(1.+.6*young);}}`;
 const PT_FS=`#version 300 es
 precision highp float;in vec3 vc;in float vb;out vec4 o;
 void main(){vec2 d=gl_PointCoord-.5;float r=length(d)*2.;
@@ -413,7 +435,7 @@ void main(){vec2 d=gl_PointCoord-.5;float r=length(d)*2.;
  o=vec4(vc*a,1.);}`;
 const PTP=(()=>{const p=gl.createProgram();gl.attachShader(p,compile(gl.VERTEX_SHADER,PT_VS));gl.attachShader(p,compile(gl.FRAGMENT_SHADER,PT_FS));gl.linkProgram(p);
   if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(p));
-  const u={};['uP','psize','t','bigPass','pal'].forEach(k=>u[k]=gl.getUniformLocation(p,k));return {p,u};})();
+  const u={};['uP','psize','t','bigPass','pal','emCol'].forEach(k=>u[k]=gl.getUniformLocation(p,k));return {p,u};})();
 const vaoPts=gl.createVertexArray();
 const P = {};
 for(const k in FS){const p=gl.createProgram();gl.attachShader(p,vs);gl.attachShader(p,compile(gl.FRAGMENT_SHADER,FS[k]));
@@ -539,9 +561,24 @@ function lightSeedAll(){lightSeed=Math.random()*100;const u=use('partInit',[0,0]
 function drawPoints(target,bigPass){
   if(target){gl.bindFramebuffer(gl.FRAMEBUFFER,target.f);gl.viewport(0,0,target.w,target.h);}else{gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,canvas.width,canvas.height);}
   gl.useProgram(PTP.p);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,parts.r.t);gl.uniform1i(PTP.u.uP,0);
-  gl.uniform1f(PTP.u.psize,dpr*1.15);gl.uniform1f(PTP.u.t,lightTime);gl.uniform1f(PTP.u.bigPass,bigPass);gl.uniform3fv(PTP.u.pal,lightFlat);
+  gl.uniform1f(PTP.u.psize,dpr*1.15);gl.uniform1f(PTP.u.t,lightTime);gl.uniform1f(PTP.u.bigPass,bigPass);gl.uniform3fv(PTP.u.pal,lightFlat);gl.uniform3fv(PTP.u.emCol,emColFlat());
   gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE);gl.bindVertexArray(vaoPts);gl.drawArrays(gl.POINTS,0,PART_N*PART_N);
   gl.bindVertexArray(vao);gl.disable(gl.BLEND);}
+const emState=new Map();
+function emColFlat(){const P=LIGHTS[lightName].map(hex2rgb);return new Float32Array([...P[1],...P[4],...P[2],...P[5]]);}
+function emUpd(key,x,y,point,dt){let e=emState.get(key);
+  if(!e){e={x,y,dx:0,dy:1,k:0,seen:0};emState.set(key,e);}
+  const vx=(x-e.x)*aspect/Math.max(dt,.016),vy=(y-e.y)/Math.max(dt,.016);
+  let tx=e.dx,ty=e.dy;
+  if(point){tx=point.dx;ty=point.dy;} else if(Math.hypot(vx,vy)>.12){tx=vx;ty=vy;}
+  const l=Math.hypot(tx,ty)||1;e.dx+=(tx/l-e.dx)*.25;e.dy+=(ty/l-e.dy)*.25;
+  e.x=x;e.y=y;e.k=Math.min(1,e.k+dt*4);e.seen=performance.now();return e;}
+function gatherEmitters(dt){
+  const out=[];
+  handInfo.forEach((h,i)=>{if(out.length<4&&!h.fist&&h.pts&&h.pts[1])out.push(emUpd('h'+i,h.pts[1].x,h.pts[1].y,h.point,dt));});
+  for(const [id,p] of pointers){if(out.length>=4)break;out.push(emUpd('t'+id,p.x,p.y,null,dt));}
+  for(const [k,e] of emState)if(performance.now()-e.seen>400)emState.delete(k);
+  return out;}
 function lightFrame(dt){
   const live=flow>.3, ldt=dt*flow*(.35+timeScale);
   lightTime+=ldt;
@@ -553,7 +590,10 @@ function lightFrame(dt){
     if(s.set){splatVelSet(s.x,s.y,s.vx*vel.r.w,s.vy*vel.r.h,s.r*1.6,s.set);} else splatVel(s.x,s.y,s.dx*.6,s.dy*.6,s.r*1.4);}
   if(flow>.02){simTime+=ldt;stepVel(ldt,12);}
   // particles
+  const em=live?gatherEmitters(dt):[];const ev=new Float32Array(16),ek=new Float32Array(4);
+  em.forEach((e,i)=>{ev.set([e.x,e.y,e.dx,e.dy],i*4);ek[i]=e.k;});
   let u=use('partStep',[0,0]);gl.uniform1i(u.uP,parts.r.bind(0));gl.uniform1i(u.uVel,vel.r.bind(1));gl.uniform2f(u.simTexel,vel.r.tx,vel.r.ty);
+  gl.uniform4fv(u.emit,ev);gl.uniform1fv(u.emitK,ek);gl.uniform1f(u.emitFrac,Math.min(.02,1500*dt/(PART_N*PART_N)));
   gl.uniform2f(u.force,motionF[0],motionF[1]);gl.uniform1f(u.dt,ldt);gl.uniform1f(u.t,lightTime);gl.uniform1f(u.seed,lightSeed);gl.uniform1f(u.aspect,aspect);
   blit(parts.w);parts.swap();
   // light trails: fade, then add the sparks

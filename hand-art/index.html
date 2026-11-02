@@ -90,7 +90,7 @@ body:not(.water) #floors,body:not(.water) #dipRow{display:none}
       <button class="btn" id="install">앱 설치</button>
     </div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 29</p>
+    <p class="hint" id="ver">버전 30</p>
   </div>
 </div>
 
@@ -1091,6 +1091,12 @@ if('serviceWorker' in navigator && location.protocol!=='file:'){
   }).catch(e=>console.warn('SW',e)));
 }
 
+// keep the screen from auto-rotating while the app runs (works in the installed app / fullscreen)
+function lockOrientation(){try{const o=screen.orientation;if(o&&o.lock)o.lock('portrait').catch(()=>{});}catch(e){}}
+lockOrientation();
+addEventListener('pointerdown',lockOrientation,{capture:true,once:true});
+document.addEventListener('fullscreenchange',lockOrientation);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)lockOrientation();});
 resize();requestAnimationFrame(frame);
 </script>
 </body>

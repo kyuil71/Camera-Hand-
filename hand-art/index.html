@@ -49,10 +49,12 @@ body.menu .dock{transform:translate(-50%,0)}
 #speed::-webkit-slider-thumb{-webkit-appearance:none;width:26px;height:26px;margin-top:-11px;border-radius:50%;background:#fff;box-shadow:0 1px 6px rgba(0,0,0,.4)}
 #speed::-moz-range-track{height:4px;border-radius:2px;background:linear-gradient(90deg,#00c8ff,#ffd000,#ff5a00)}
 #speed::-moz-range-thumb{width:26px;height:26px;border:0;border-radius:50%;background:#fff}
-.seg{gap:0;margin:0 0 12px;border:1px solid var(--line);border-radius:14px;padding:3px;background:rgba(255,255,255,.04)}
-.seg button{flex:1;min-height:42px;border:0;border-radius:11px;background:transparent;color:var(--mute);font:inherit;font-size:16px;font-weight:600}
+.seg{gap:0;margin:0 0 12px;overflow-x:auto;scrollbar-width:none;border:1px solid var(--line);border-radius:14px;padding:3px;background:rgba(255,255,255,.04)}
+.seg::-webkit-scrollbar{display:none}
+.seg button{flex:1 0 auto;padding:0 10px;min-height:42px;border:0;border-radius:11px;background:transparent;color:var(--mute);font:inherit;font-size:16px;font-weight:600}
 .seg button[aria-pressed=true]{background:var(--ink);color:#101826}
-body.water #palettes,body.light #palettes,body.silk #palettes{display:none}
+body.water #palettes,body.light #palettes,body.silk #palettes,body.cloud #palettes{display:none}
+body:not(.cloud) #clouds{display:none}
 body:not(.silk) #silks{display:none}
 body:not(.light) #lights{display:none}
 body:not(.water) #floors,body:not(.water) #dipRow,body:not(.water) #rainRow{display:none}
@@ -81,11 +83,12 @@ body:not(.water) #floors,body:not(.water) #dipRow,body:not(.water) #rainRow{disp
 <div class="dock" id="sheet">
   <div class="panel">
     <div class="head" id="sheetHead"><span class="bar"></span><div id="status">손 인식 꺼짐 · 화면을 문질러 보세요</div></div>
-    <div class="row seg" id="modeSeg"><button data-m="paint">Pigment</button><button data-m="water">Ripple</button><button data-m="light">Aurora</button><button data-m="silk">Silk</button></div>
+    <div class="row seg" id="modeSeg"><button data-m="paint">Pigment</button><button data-m="water">Ripple</button><button data-m="light">Aurora</button><button data-m="silk">Silk</button><button data-m="cloud">Cloud</button></div>
     <div class="speed"><span>흐름 속도</span><input type="range" id="speed" min="0" max="100" step="1"><b id="speedVal"></b></div>
     <div class="row chips" id="palettes"></div>
     <div class="row chips" id="lights"></div>
     <div class="row chips" id="silks"></div>
+    <div class="row chips" id="clouds"></div>
     <div class="row chips" id="rainRow"><button class="chip" data-r="0">비 없음</button><button class="chip" data-r="1">이슬비</button><button class="chip" data-r="2">비</button><button class="chip" data-r="3">소나기</button></div>
     <div class="row" id="dipRow"><button class="btn" id="dipBtn">손 담그기 켜기</button></div>
     <div class="row chips" id="floors"><button class="chip" data-f="2"><i class="sw" style="background:linear-gradient(135deg,#000,#1b1d20 50%,#000)"></i>검은 유리</button><button class="chip" data-f="1"><i class="sw" style="background:linear-gradient(135deg,#1c2328,#3a464e 50%,#11171b)"></i>다크 그레이</button><button class="chip" data-f="0"><i class="sw" style="background:linear-gradient(135deg,#8c8270,#c9bda4 45%,#6e675c)"></i>자갈</button></div>
@@ -103,7 +106,7 @@ body:not(.water) #floors,body:not(.water) #dipRow,body:not(.water) #rainRow{disp
     <label class="mfx" id="mfxRow"><span><b>음악 인터랙션</b><small>Music Interaction</small></span>
       <input type="checkbox" id="mfxSw" role="switch" aria-label="음악 인터랙션 Music Interaction"><i aria-hidden="true"></i></label>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 37</p>
+    <p class="hint" id="ver">버전 38</p>
   </div>
 </div>
 
@@ -253,6 +256,52 @@ c.a=min(c.a+max(imp-50.,0.)*dt*.016,3.2);
 c.a-=max(c.a-1.,0.)*dt*.9*band;                 // the surge slides back down the wall
 o=c;}`,
 waterClear: H+`void main(){o=vec4(0.,0.,0.,1.);}`,
+cloudDisp: H+`uniform sampler2D uD,uVel;uniform vec2 simTexel;uniform float dt,relax,clearK;
+// displacement (RG) + thinning (B) left behind by the hands; advected, then slowly healing → clouds part and drift back together
+void main(){vec2 v=texture(uVel,vUv).xy*simTexel;
+ vec4 d=texture(uD,vUv-v*dt);
+ d.xy+=v*dt;d.xy*=exp(-dt*relax);
+ d.z=max(d.z*exp(-dt*.45),min(1.,length(v)*clearK));
+ o=vec4(clamp(d.xy,-.35,.35),d.z,1.);}`,
+cloudPass: H+`uniform sampler2D uD;uniform float time,aspect,seed;
+uniform vec3 skyTop,skyBot,litC,shdC,sunC;uniform vec2 sunP;uniform vec4 sty;uniform vec3 lay;
+// rotated octaves → no axis-aligned structure
+float fb5(vec2 p){mat2 m=mat2(1.62,1.18,-1.18,1.62);float s=0.,a=.5;for(int i=0;i<5;i++){s+=a*vn(p);p=m*p;a*=.5;}return s;}
+float fb3(vec2 p){mat2 m=mat2(1.62,1.18,-1.18,1.62);float s=0.,a=.5;for(int i=0;i<3;i++){s+=a*vn(p);p=m*p;a*=.5;}return s/.875;}
+// one cloud layer: domain-warped fbm, coverage that slowly breathes → clouds form, spread, merge and thin out
+vec2 cloudL(vec2 p,float t,float sc,float spd,float sd,vec2 ld){
+ vec2 q=p*sc+vec2(t*spd,t*spd*.27)+sd;
+ vec2 w=vec2(fb3(q*.55+vec2(0.,t*.013)),fb3(q*.55+vec2(5.2,1.3)-t*.011))-.5;
+ vec2 qq=q+w*sty.w;
+ float d=fb5(qq);
+ float cov=sty.x+.10*sin(t*.043+sd)+.16*(fb3(p*.45+vec2(t*.006,-t*.004)+sd*.7)-.5);
+ float lo=1.-cov;
+ float dens=smoothstep(lo,lo+sty.y,d);
+ float dl=fb5(qq+ld*.35);                                    // density a little toward the light
+ float lit=clamp(.55+(d-dl)*5.,0.,1.);                       // facing the light → brighter, underside → shadow
+ return vec2(dens,lit);}
+void main(){vec2 uv=vUv;vec4 D=texture(uD,uv);
+ vec2 p=vec2(uv.x*aspect,uv.y)-vec2(D.x*aspect,D.y);
+ float t=time;
+ vec3 col=mix(skyBot,skyTop,smoothstep(0.,1.,uv.y));
+ vec2 sp=vec2(sunP.x*aspect,sunP.y);float sd2=length(vec2(uv.x*aspect,uv.y)-sp);
+ col+=sunC*(.22*exp(-sd2*sd2/.05)+.08*exp(-sd2*sd2/.6));
+ vec2 ld=normalize(sp-vec2(.5*aspect,.5)+1e-4);            // one light direction for the whole sky (no pinch at the sun)
+ float thin=1.-.85*D.z;
+ // far → near: slower, smaller, paler at the back; faster, bigger and denser in front (parallax)
+ for(int i=0;i<3;i++){float fi=float(i);
+  float sc=lay.x*(1.7-.45*fi),spd=lay.y*(.45+.55*fi),al=(.45+.25*fi)*lay.z;
+  vec2 c=cloudL(p+vec2(0.,fi*.13),t,sc,spd,seed+fi*7.31,ld);
+  float a=c.x*al*thin;
+  vec3 cc=mix(shdC,litC,c.y);
+  float rim=smoothstep(.15,.55,c.x)*(1.-smoothstep(.55,.95,c.x))*smoothstep(.6,1.,c.y);
+  cc+=sunC*rim*.35*exp(-sd2*.9);                             // silver lining on the side facing the light
+  cc=mix(cc,col,.35*(1.-fi*.45));                            // aerial perspective
+  col=mix(col,cc,a);}
+ o=vec4(col,1.);}`,
+cloudOut: H+`uniform sampler2D uC;uniform float time;
+void main(){vec3 c=texture(uC,vUv).rgb;c*=1.-.18*pow(length(vUv-.5)*1.2,2.);
+ c+=(hash(gl_FragCoord.xy+fract(time)*53.)-.5)*.008;o=vec4(c,1.);}`,
 silkBg: H+`uniform vec3 c1,c2;uniform float time,aspect;
 void main(){vec2 uv=vUv;vec2 p=vec2(uv.x*aspect,uv.y);
  vec3 col=mix(vec3(.010,.012,.022),vec3(.022,.026,.045),uv.y);
@@ -563,7 +612,7 @@ function resize(){dpr=Math.min(window.devicePixelRatio||1,2);
   canvas.width=w;canvas.height=h;fx.width=w;fx.height=h;aspect=w/h;
   const [sw,sh]=res(SIM_RES),[dw,dh]=res(DYE_RES);
   vel=dfbo(sw,sh);dye=dfbo(dw,dh);det=dfbo(dw,dh);div=fbo(sw,sh);curlF=fbo(sw,sh);pres=dfbo(sw,sh);
-  const [ww,wh]=res(WATER_RES);wat=dfbo(ww,wh);lightAlloc();wgrad=fbo(ww,wh);waterClear();
+  const [ww,wh]=res(WATER_RES);wat=dfbo(ww,wh);lightAlloc();cloudAlloc();wgrad=fbo(ww,wh);waterClear();
   seed();}
 function seed(){const u=use('init',[dye.w.tx,dye.w.ty]);
   gl.uniform3fv(u.pal,palFlat);gl.uniform1f(u.seed,Math.random()*100);gl.uniform1f(u.aspect,aspect);
@@ -787,8 +836,42 @@ function silkFrame(dt){
   gl.disable(gl.BLEND);gl.bindVertexArray(vao);
 }
 
+/* ================= Cloud mode: clouds and mist that form, drift, merge and thin out ================= */
+const CLOUDS={
+  'Mist':      {top:'#AEBBCB',bot:'#E4E9EF',lit:'#FFFFFF',shd:'#B9C4D2',sun:'#FFFFFF',sunP:[.7,.85],cov:.66,soft:.50,sc:2.0,spd:.010,warp:1.1,al:.70,relax:.30},
+  'Dream Cloud':{top:'#8FB2F5',bot:'#F4D3E6',lit:'#FFF7FB',shd:'#C2AEE3',sun:'#FFE8F2',sunP:[.25,.8],cov:.62,soft:.28,sc:2.8,spd:.018,warp:1.6,al:1.0,relax:.40},
+  'Twilight':  {top:'#231845',bot:'#E58AA6',lit:'#FFC4D2',shd:'#4C2F6E',sun:'#FFB27A',sunP:[.55,.18],cov:.55,soft:.20,sc:3.0,spd:.014,warp:2.0,al:1.0,relax:.35},
+  'Moonlight': {top:'#03060F',bot:'#0E1C36',lit:'#93AEDB',shd:'#121C33',sun:'#CFE0FF',sunP:[.72,.82],cov:.47,soft:.24,sc:2.6,spd:.008,warp:1.5,al:.72,relax:.28}};
+let cloudName='Dream Cloud'; try{const v=localStorage.getItem('hf-cloud');if(v&&CLOUDS[v])cloudName=v;}catch(e){}
+let cloudT=0, cloudSeed=Math.random()*50, cDisp=null, cFbo=null;
+const CLOUD_SCALE=.5;                                   // clouds are soft: render at half resolution, upscale (mobile)
+function cloudAlloc(){const [sw,sh]=res(160);cDisp=dfbo(sw,sh);
+  cFbo=fbo(Math.max(1,Math.round(canvas.width*CLOUD_SCALE)),Math.max(1,Math.round(canvas.height*CLOUD_SCALE)));}
+function cloudReset(){cloudSeed=Math.random()*50;if(!cDisp)return;for(const t of [cDisp.r,cDisp.w]){gl.bindFramebuffer(gl.FRAMEBUFFER,t.f);gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT);}}
+function cloudFrame(dt){
+  const st=CLOUDS[cloudName],live=flow>.3,k=dt*flow*(.35+timeScale);
+  cloudT+=k;
+  // hands / touch → gentle pushes in the shared flow field (no grabbing, no explosions)
+  for(const h of handInfo){if(!live)break;
+    if(h.point){const p=h.point;splatVel(p.x,p.y,p.dx*380*dt*30,p.dy*380*dt*30,.004);}
+    if(h.open&&h.palm)for(let a=0;a<6;a++){const an=a/6*6.283+cloudT;splatVel(h.palm.x+Math.cos(an)*.05/aspect,h.palm.y+Math.sin(an)*.05,Math.cos(an)*160*dt*30,Math.sin(an)*160*dt*30,.006);}}
+  for(const s of queue.splice(0)){if(!live)continue;
+    const g=s.hand?.55:.7;                                // calm: never over-sensitive
+    if(s.set)splatVelSet(s.x,s.y,s.vx*vel.r.w*g,s.vy*vel.r.h*g,s.r*2.4,s.set*.8);else splatVel(s.x,s.y,s.dx*.35,s.dy*.35,s.r*2);}
+  if(flow>.02){simTime+=k;stepVel(k,0,4,0);}
+  if(Math.abs(motionF[0])+Math.abs(motionF[1])>.01&&live)splatVel(.5,.5,motionF[0]*60,motionF[1]*60,.25);
+  let u=use('cloudDisp',[cDisp.r.tx,cDisp.r.ty]);gl.uniform1i(u.uD,cDisp.r.bind(0));gl.uniform1i(u.uVel,vel.r.bind(1));
+  gl.uniform2f(u.simTexel,vel.r.tx,vel.r.ty);gl.uniform1f(u.dt,k);gl.uniform1f(u.relax,st.relax);gl.uniform1f(u.clearK,.9);blit(cDisp.w);cDisp.swap();
+  u=use('cloudPass',[cFbo.tx,cFbo.ty]);gl.uniform1i(u.uD,cDisp.r.bind(0));
+  gl.uniform1f(u.time,cloudT);gl.uniform1f(u.aspect,aspect);gl.uniform1f(u.seed,cloudSeed);
+  const c=x=>hex2rgb(x);gl.uniform3f(u.skyTop,...c(st.top));gl.uniform3f(u.skyBot,...c(st.bot));gl.uniform3f(u.litC,...c(st.lit));
+  gl.uniform3f(u.shdC,...c(st.shd));gl.uniform3f(u.sunC,...c(st.sun));gl.uniform2f(u.sunP,st.sunP[0],st.sunP[1]);
+  gl.uniform4f(u.sty,st.cov,st.soft,st.sc,st.warp);gl.uniform3f(u.lay,st.sc,st.spd*60,st.al);blit(cFbo);
+  u=use('cloudOut',[0,0]);gl.uniform1i(u.uC,cFbo.bind(0));gl.uniform1f(u.time,cloudT);blit(null);
+}
+
 /* ================= Water mode (lake) ================= */
-let mode='paint'; try{const m=localStorage.getItem('hf-mode');if(m==='water'||m==='light'||m==='silk')mode=m;}catch(e){}
+let mode='paint'; try{const m=localStorage.getItem('hf-mode');if(m==='water'||m==='light'||m==='silk'||m==='cloud')mode=m;}catch(e){}
 let waterTime=0, wAcc=0, dropClock=0, glideClock=0; const gliders=[];
 const W_C=250, W_H=1/540, W_NK=.24, SUN=(()=>{const v=[.12,.82,.56],l=Math.hypot(...v);return v.map(x=>x/l);})();
 function waterClear(){const u=use('waterClear',[0,0]);blit(wat.w);wat.swap();blit(wat.w);wat.swap();}
@@ -1253,7 +1336,7 @@ function frame(now){
   resize();
   flow+=(flowTarget-flow)*Math.min(1,dt*(flowTarget>flow?2.5:6));
   updateGyro(dt);updateTimeScale(dt);
-  if(mode==='water'){ waterFrame(dt); } else if(mode==='light'){ lightFrame(dt); } else if(mode==='silk'){ queue.length=0; silkFrame(dt); } else {
+  if(mode==='water'){ waterFrame(dt); } else if(mode==='light'){ lightFrame(dt); } else if(mode==='silk'){ queue.length=0; silkFrame(dt); } else if(mode==='cloud'){ cloudFrame(dt); } else {
   // ambient life: drifting color drops keep the canvas evolving
   ambientClock+=dt*flow*Math.max(timeScale,.15);
   if(ambientClock>.6){ambientClock=0;const x=Math.random(),y=Math.random(),a=Math.random()*6.28;
@@ -1302,17 +1385,19 @@ speedEl.value=speedVal;applySpeed(speedVal);speedEl.addEventListener('input',e=>
 const seedBtn=document.getElementById('seedBtn'),hintTxt=document.getElementById('hintTxt');
 const HINTS={paint:hintTxt.innerHTML,
   dip:'<b>손 담그기</b> · 터치: 오래 누를수록 깊게, 톡 누르면 살짝<br>손: 손바닥을 화면 쪽으로 내밀어 오래 둘수록 깊게, 떼면 물이 되솟음',
+  cloud:'<b>검지</b> 지나간 구름이 부드럽게 갈라짐 · 빠르게 움직이면 흩어짐<br><b>집기</b> 회전 흐름 · <b>손 펼치기</b> 넓게 확산 · <b>주먹</b> 천천히 안정',
   silk:'<b>검지</b> 실크가 따라 흐름 · 빠르게 움직이면 넓게 펼쳐짐<br><b>집기</b> 부드러운 소용돌이 · <b>손 펼치기</b> 활짝 펼침 · <b>주먹</b> 서서히 멈춤',
   light:'<b>손가락</b> 빛의 흐름 밀기 · <b>검지만 펴기</b> 가리킨 방향으로 빛줄기<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 멈춤',
   water:'<b>손가락</b> 물결 만들기 · <b>검지만 펴기</b> 가리킨 방향으로 물결<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 물 멈춤'};
-function setMode(m){mode=m;document.body.classList.toggle('water',m==='water');document.body.classList.toggle('light',m==='light');document.body.classList.toggle('silk',m==='silk');
+function setMode(m){mode=m;document.body.classList.toggle('water',m==='water');document.body.classList.toggle('light',m==='light');document.body.classList.toggle('silk',m==='silk');document.body.classList.toggle('cloud',m==='cloud');
+  if(m==='cloud'&&vel){const u=use('waterClear',[0,0]);blit(vel.w);vel.swap();blit(vel.w);vel.swap();}   // start calm: no leftover swirls from other modes
   document.querySelectorAll('#modeSeg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.m===m));
   seedBtn.textContent=m==='water'?'잔잔하게':'새 캔버스';hintTxt.innerHTML=(m==='water'&&dipMode)?HINTS.dip:HINTS[m];
   gliders.length=0;queue.length=0;drops.length=0;try{localStorage.setItem('hf-mode',m);}catch(e){}
   if(curTrack)switchTrack();}
 document.querySelectorAll('#modeSeg button').forEach(b=>b.onclick=()=>setMode(b.dataset.m));
 setMode(mode);
-seedBtn.onclick=()=>{if(mode==='water'){waterClear();gliders.length=0;}else if(mode==='light'){lightSeedAll();}else if(mode==='silk'){silkInit();}else seed();drops.length=0;};
+seedBtn.onclick=()=>{if(mode==='water'){waterClear();gliders.length=0;}else if(mode==='light'){lightSeedAll();}else if(mode==='silk'){silkInit();}else if(mode==='cloud'){cloudReset();}else seed();drops.length=0;};
 const lightWrap=document.getElementById('lights');
 function renderLights(){lightWrap.innerHTML='';for(const name in LIGHTS){const b=document.createElement('button');b.className='chip';
   b.setAttribute('aria-pressed',name===lightName);b.innerHTML='<i>'+LIGHTS[name].map(c=>`<span style="background:${c}"></span>`).join('')+'</i>'+name;
@@ -1324,6 +1409,11 @@ function renderSilks(){silkWrap.innerHTML='';for(const name in SILKS){const b=do
   b.setAttribute('aria-pressed',name===silkName);b.innerHTML='<i>'+SILKS[name].map(c=>`<span style="background:${c}"></span>`).join('')+'</i>'+name;
   b.onclick=()=>{silkName=name;try{localStorage.setItem('hf-silk',name);}catch(e){}renderSilks();};silkWrap.appendChild(b);}}
 renderSilks();
+const cloudWrap=document.getElementById('clouds');
+function renderClouds(){cloudWrap.innerHTML='';for(const name in CLOUDS){const st=CLOUDS[name],b=document.createElement('button');b.className='chip';
+  b.setAttribute('aria-pressed',name===cloudName);b.innerHTML='<i>'+[st.top,st.shd,st.lit,st.bot].map(c=>`<span style="background:${c}"></span>`).join('')+'</i>'+name;
+  b.onclick=()=>{cloudName=name;try{localStorage.setItem('hf-cloud',name);}catch(e){}renderClouds();};cloudWrap.appendChild(b);}}
+renderClouds();
 const dipBtn=document.getElementById('dipBtn');
 function setDip(on){dipMode=on;dipBtn.textContent=on?'손 담그기 끄기':'손 담그기 켜기';dipBtn.classList.toggle('on',on);
   for(const id of dips.keys())dipEnd(id);try{localStorage.setItem('hf-dip',on?'1':'0');}catch(e){}

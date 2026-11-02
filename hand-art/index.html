@@ -106,7 +106,7 @@ body:not(.water) #floors,body:not(.water) #dipRow,body:not(.water) #rainRow{disp
     <label class="mfx" id="mfxRow"><span><b>음악 인터랙션</b><small>Music Interaction</small></span>
       <input type="checkbox" id="mfxSw" role="switch" aria-label="음악 인터랙션 Music Interaction"><i aria-hidden="true"></i></label>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 40</p>
+    <p class="hint" id="ver">버전 41</p>
   </div>
 </div>
 
@@ -376,7 +376,7 @@ waterPoke: H+`uniform sampler2D uT;uniform float aspect,radius,amp;uniform vec2 
 void main(){vec4 s=texture(uT,vUv);vec2 p=vUv-point;p.x*=aspect;float g=exp(-dot(p,p)/radius);o=vec4(s.x,s.y-amp*g,0.,1.);}`,
 waterGrad: H+`uniform sampler2D uT;void main(){float l=texture(uT,vL).x,r=texture(uT,vR).x,b=texture(uT,vB).x,t=texture(uT,vT).x,c=texture(uT,vUv).x;
 o=vec4((r-l)*.5,(t-b)*.5,l+r+b+t-4.*c,c);}`,
-waterRender: H+`uniform sampler2D uH,uS;uniform vec2 simTexel;uniform float aspect,time,nk,floorType,rainN,rough;uniform vec3 sunDir;uniform vec4 rain[40];
+waterRender: H+`uniform sampler2D uH,uS;uniform vec2 simTexel;uniform float aspect,time,nk,floorType,rainN,rough;uniform vec3 sunDir;uniform vec4 rain[40];uniform vec2 viewT;
 // raindrop impacts: fine capillary ring packets, computed per pixel (crisp at any resolution)
 vec2 rainGrad(vec2 p,vec2 gsurf,out float spark){vec2 gr=vec2(0.);spark=0.;
  vec2 pw=p+gsurf*.0035+.0025*vec2(sin(p.y*61.+p.x*23.),sin(p.x*57.-p.y*31.));   // rings ride on and are bent by the existing waves
@@ -459,7 +459,7 @@ void main(){
  vec2 g=gs+ga;
  float spark;g+=rainGrad(p,gs+ga*.6,spark);
  vec3 N=normalize(vec3(-g,1.));
- vec3 P=vec3(p,0.);vec3 cam=vec3(.5*aspect,-.6,.85);vec3 V=normalize(cam-P);
+ vec3 P=vec3(p,0.);vec3 cam=vec3(.5*aspect,-.6,.85)+vec3(viewT.x*aspect*.9,viewT.y*1.1,0.);vec3 V=normalize(cam-P);   // the phone's tilt moves the viewpoint
  float cosT=clamp(dot(N,V),0.,1.);float F=.02+.98*pow(1.-cosT,5.);
  vec3 rd=refract(-V,N,1./1.333);
  float depth=floorType<.5?.045+.30*pow(smoothstep(-.1,1.15,uv.y),1.4)+.03*(fbm4(p*2.2)-.5):.10+.10*smoothstep(-.1,1.1,uv.y);
@@ -956,7 +956,9 @@ function waterFrame(dt){
   let u=use('waterGrad',[wat.r.tx,wat.r.ty]);gl.uniform1i(u.uT,wat.r.bind(0));blit(wgrad);
   u=use('waterRender',[wat.r.tx,wat.r.ty]);gl.uniform1i(u.uH,wgrad.bind(0));gl.uniform1i(u.uS,wat.r.bind(1));gl.uniform2f(u.simTexel,wat.r.tx,wat.r.ty);
   gl.uniform1f(u.aspect,aspect);gl.uniform1f(u.time,waterTime);gl.uniform1f(u.nk,W_NK);gl.uniform1f(u.floorType,floorType);gl.uniform4fv(u.rain,rainBuf);gl.uniform1f(u.rainN,rainDrops.length);gl.uniform1f(u.rough,roughNow);
-  gl.uniform3f(u.sunDir,SUN[0],SUN[1],SUN[2]);blit(null);
+  {const tx=Math.max(-.6,Math.min(.6,viewTilt[0])),ty=Math.max(-.6,Math.min(.6,viewTilt[1]));gl.uniform2f(u.viewT,tx,ty);
+   const sx=SUN[0]-tx*.55,sy=SUN[1]-ty*.55,sz=SUN[2],l=Math.hypot(sx,sy,sz);gl.uniform3f(u.sunDir,sx/l,sy/l,sz/l);}   // light swings the other way
+  blit(null);
 }
 let WATER_AMP=1, HAND_K=.75;
 /* ---- 비: raindrops on the lake ---- */
@@ -1078,11 +1080,14 @@ function drawDrops(){
 let gyroOn=false, gBase=null, motionF=[0,0], motionRaw=[0,0], shakeAmt=0, lastMotionT=0;
 function toScreen(x,y){const ang=((screen.orientation&&screen.orientation.angle)||window.orientation||0)*Math.PI/180;
   return [x*Math.cos(ang)+y*Math.sin(ang),-x*Math.sin(ang)+y*Math.cos(ang)];}
+let gView=null,viewRaw=[0,0];const viewTilt=[0,0];
 function onMotion(e){
   const a=e.accelerationIncludingGravity;if(!a||a.x==null)return;
   const now=performance.now(),dt=Math.min(.1,(now-(lastMotionT||now))/1000)||.016;lastMotionT=now;
   const g=toScreen(-a.x/9.81,-a.y/9.81);                    // gravity direction on the screen
   if(!gBase)gBase=g.slice();
+  if(!gView)gView=g.slice();gView[0]+=(g[0]-gView[0])*Math.min(1,dt/14);gView[1]+=(g[1]-gView[1])*Math.min(1,dt/14);   // very slow reference → reflections follow how the phone is tilted
+  viewRaw=[g[0]-gView[0],g[1]-gView[1]];
   gBase[0]+=(g[0]-gBase[0])*Math.min(1,dt/4);gBase[1]+=(g[1]-gBase[1])*Math.min(1,dt/4);   // slowly forget how you hold it
   let lin=[0,0];const la=e.acceleration;
   if(la&&la.x!=null){lin=toScreen(-la.x/9.81,-la.y/9.81);} // shake: fluid lags behind the phone (inertia)
@@ -1092,11 +1097,12 @@ function onMotion(e){
   shakeAmt=Math.hypot(lin[0],lin[1]);
 }
 function updateGyro(dt){
+  const vk=Math.min(1,dt*(gyroOn?5:2));viewTilt[0]+=((gyroOn?viewRaw[0]:0)-viewTilt[0])*vk;viewTilt[1]+=((gyroOn?viewRaw[1]:0)-viewTilt[1])*vk;
   if(!gyroOn){motionF[0]*=.9;motionF[1]*=.9;return;}
   motionF[0]+=(motionRaw[0]-motionF[0])*Math.min(1,dt*12);motionF[1]+=(motionRaw[1]-motionF[1])*Math.min(1,dt*12);
   if(shakeAmt>.12)feelFinger(Math.min(3,shakeAmt*1.6));     // shaking speeds the scene (and the music) up
 }
-async function setGyro(on){
+async function setGyro(on){gView=null;viewRaw=[0,0];
   if(on){
     try{if(typeof DeviceMotionEvent!=='undefined'&&typeof DeviceMotionEvent.requestPermission==='function'){
       const r=await DeviceMotionEvent.requestPermission();if(r!=='granted'){status('흔들기 권한이 거부되었어요');on=false;}}}catch(e){on=false;}

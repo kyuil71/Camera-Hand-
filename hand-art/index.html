@@ -106,7 +106,7 @@ body:not(.water) #floors,body:not(.water) #dipRow,body:not(.water) #rainRow{disp
     <label class="mfx" id="mfxRow"><span><b>음악 인터랙션</b><small>Music Interaction</small></span>
       <input type="checkbox" id="mfxSw" role="switch" aria-label="음악 인터랙션 Music Interaction"><i aria-hidden="true"></i></label>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 41</p>
+    <p class="hint" id="ver">버전 42</p>
   </div>
 </div>
 
@@ -313,7 +313,7 @@ void main(){vec2 uv=vUv;vec2 p=vec2(uv.x*aspect,uv.y);
  o=vec4(col,1.);}`,
 partInit: H+`uniform float seed;
 void main(){vec2 q=gl_FragCoord.xy;o=vec4(hash(q+seed),hash(q*1.31+seed+7.),hash(q*.77+seed+3.),hash(q*2.13+seed+11.));}`,
-partStep: H+`uniform sampler2D uP,uVel;uniform vec2 simTexel,force;uniform float dt,t,seed,aspect,emitFrac;uniform vec4 emit[4];uniform float emitK[4],emitHue[4];
+partStep: H+`uniform sampler2D uP,uVel;uniform vec2 simTexel,force,tilt;uniform float dt,t,seed,aspect,emitFrac;uniform vec4 emit[4];uniform float emitK[4],emitHue[4];
 vec2 flowB(vec2 p,float t){            // big slow wave currents that never cross the walls (stream function)
  float PI=3.14159;vec2 v=vec2(0.);
  float a1=.030*cos(t*.13),a2=.020*sin(t*.17+1.),a3=.014*cos(t*.11+2.),a4=.010*sin(t*.23);
@@ -326,7 +326,11 @@ void main(){vec4 s=texture(uP,vUv);vec2 p=s.xy;float life=s.z,lane=s.w;
  vec2 v=texture(uVel,p).xy*simTexel;                       // hands / touch / pinch push the light
  float ph=lane*6.2831;
  vec2 w=vec2(.010*sin(p.y*9.+t*.5+ph),.018*sin(p.x*8.+t*.7+ph)); // ripples along the strands
- p+=(v+flowB(p,t)*1.6+w+force*.05)*dt;
+ vec2 fb=v+flowB(p,t)*1.6;                                      // the whole current at this point
+ float tl=length(tilt);
+ if(tl>.01){float al=dot(fb,tilt)/(length(fb)*tl+1e-5);          // flowing the way the phone leans → faster, against it → slower
+  fb*=clamp(1.+al*tl*2.6,.25,2.6);fb+=tilt*.04;}
+ p+=(fb+w+force*.05)*dt;
  bool born=lane>=1.;float hue=fract(lane);
  if(born){p+=v*.6*dt;}                                      // new light rides its own flow harder → it carves its own stream
  for(int k=0;k<4;k++){if(emitK[k]<=0.)continue;             // fresh light pushes every other light aside (like paint)
@@ -734,7 +738,7 @@ function lightFrame(dt){
   if(flow>.02){simTime+=ldt;stepVel(ldt,12);}
   let u=use('partStep',[0,0]);gl.uniform1i(u.uP,parts.r.bind(0));gl.uniform1i(u.uVel,vel.r.bind(1));gl.uniform2f(u.simTexel,vel.r.tx,vel.r.ty);
   gl.uniform4fv(u.emit,ev);gl.uniform1fv(u.emitK,ek);gl.uniform1fv(u.emitHue,eh);gl.uniform1f(u.emitFrac,Math.min(.02,1500*dt/(PART_N*PART_N)));
-  gl.uniform2f(u.force,motionF[0],motionF[1]);gl.uniform1f(u.dt,ldt);gl.uniform1f(u.t,lightTime);gl.uniform1f(u.seed,lightSeed);gl.uniform1f(u.aspect,aspect);
+  gl.uniform2f(u.force,motionF[0],motionF[1]);gl.uniform2f(u.tilt,Math.max(-.7,Math.min(.7,viewTilt[0])),Math.max(-.7,Math.min(.7,viewTilt[1])));gl.uniform1f(u.dt,ldt);gl.uniform1f(u.t,lightTime);gl.uniform1f(u.seed,lightSeed);gl.uniform1f(u.aspect,aspect);
   blit(parts.w);parts.swap();
   // light trails: fade, then add the sparks
   u=use('trailFade',[0,0]);gl.uniform1i(u.uT,trail.r.bind(0));gl.uniform1f(u.k,Math.exp(-dt*flow*2.6));blit(trail.w);trail.swap();

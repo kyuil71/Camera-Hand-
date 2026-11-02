@@ -1,7 +1,7 @@
 /* Hand Flow Art — offline cache
    · 화면 파일(index.html 등): 온라인이면 항상 새로 받아옴(network-first), 오프라인이면 저장본 사용
    · AI 모델·런타임(mediapipe/): 한 번 받으면 그대로 재사용(버전 올려도 다시 받지 않음) */
-const CORE = 'hand-flow-core-v44';
+const CORE = 'hand-flow-core-v43';
 const MODEL = 'hand-flow-model-v1';
 const CORE_ASSETS = ['./', './index.html', './manifest.json', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'];
 const MODEL_ASSETS = [

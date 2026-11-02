@@ -106,7 +106,7 @@ body:not(.water) #floors,body:not(.water) #dipRow,body:not(.water) #rainRow{disp
     <label class="mfx" id="mfxRow"><span><b>음악 인터랙션</b><small>Music Interaction</small></span>
       <input type="checkbox" id="mfxSw" role="switch" aria-label="음악 인터랙션 Music Interaction"><i aria-hidden="true"></i></label>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 44</p>
+    <p class="hint" id="ver">버전 43</p>
   </div>
 </div>
 
@@ -958,10 +958,7 @@ function waterFrame(dt){
   const live=flow>.3;
   if(dipMode){queue.length=0;plops.length=0;updateDips(dt);}else waterHands(dt,live);
   if(plops.length){const n=plops.length,kk=1/Math.sqrt(n);            // many stones at once: each a little softer, total energy stays calm
-    if(live)for(const p of plops){waterPoke(p.x,p.y,WATER_AMP*PLOP_A*p.k*kk,PLOP_R);
-      if(rainDrops.length>=MAXR)rainDrops.shift();
-      rainDrops.push({x:p.x,y:p.y,age:0,size:1.75*Math.sqrt(kk)*p.k});}   // + crisp capillary rings and a glint right where the finger touched
-    plops.length=0;}
+    if(live)for(const p of plops)waterPoke(p.x,p.y,WATER_AMP*PLOP_A*p.k*kk,PLOP_R);plops.length=0;}
   // fingers / touch / pinch rings → pressure on the surface (stronger when moving faster)
   for(const s of queue.splice(0)){ if(!live)continue;
     if(s.wake){waterPoke(s.x,s.y,WATER_AMP*s.amp,s.r);continue;}

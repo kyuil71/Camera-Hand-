@@ -72,7 +72,7 @@ body:not(.water) #floors,body:not(.water) #dipRow{display:none}
 <div class="dock" id="sheet">
   <div class="panel">
     <div class="head" id="sheetHead"><span class="bar"></span><div id="status">손 인식 꺼짐 · 화면을 문질러 보세요</div></div>
-    <div class="row seg" id="modeSeg"><button data-m="paint">물감</button><button data-m="water">물</button><button data-m="light">빛</button></div>
+    <div class="row seg" id="modeSeg"><button data-m="paint">Pigment</button><button data-m="water">Ripple</button><button data-m="light">Aurora</button></div>
     <div class="speed"><span>흐름 속도</span><input type="range" id="speed" min="0" max="100" step="1"><b id="speedVal"></b></div>
     <div class="row chips" id="palettes"></div>
     <div class="row chips" id="lights"></div>
@@ -90,7 +90,7 @@ body:not(.water) #floors,body:not(.water) #dipRow{display:none}
       <button class="btn" id="install">앱 설치</button>
     </div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 32</p>
+    <p class="hint" id="ver">버전 33</p>
   </div>
 </div>
 
@@ -99,13 +99,13 @@ body:not(.water) #floors,body:not(.water) #dipRow{display:none}
 'use strict';
 /* ================= Palettes ================= */
 const PALETTES = {
-  '아나돌':  ['#0050ff','#00c8ff','#ff5a00','#ffd000','#ff1745','#f2fbff'],
-  '심해':    ['#0018a8','#0070ff','#00d5ff','#00ffc8','#7a3cff','#ffffff'],
-  '용암':    ['#c4001a','#ff2a00','#ff7a00','#ffc400','#ff0066','#ffe86b'],
-  '오로라':  ['#00e08a','#00f5ff','#6b2bff','#ff00c8','#ffe600','#0066ff'],
-  '모노':    ['#111418','#3b4048','#8a919c','#d6d9de','#f4f2ec','#5e6570']
+  'Neon':      ['#00F0FF','#FF007F','#FFEF00','#4BFF36','#BF4BF8','#001EFF'],
+  'Cyber':     ['#FE0194','#00E5FF','#7C4DFF','#F500EB','#0CD4FF','#EFFE01'],
+  'Synthwave': ['#3A0CA3','#7209B7','#B5179E','#F72585','#4361EE','#4CC9F0'],
+  'Tropical':  ['#4DEEEA','#74EE15','#FFE700','#F000FF','#001EFF','#00FFA3'],
+  'Dream':     ['#FF5BFF','#D34DEE','#7B2BFF','#2AC9F9','#56F1FF','#F72585']
 };
-let paletteName = '아나돌';
+let paletteName = 'Neon';
 const hex2rgb = h => [1,3,5].map(i => parseInt(h.substr(i,2),16)/255);
 const pal = () => PALETTES[paletteName].map(hex2rgb);
 let palFlat = new Float32Array(pal().flat());
@@ -140,13 +140,14 @@ splatDye: H+`uniform sampler2D uT;uniform float aspect,radius,strength;uniform v
 void main(){vec2 p=vUv-point;p.x*=aspect;float g=exp(-dot(p,p)/radius);
 float w=clamp(smoothstep(.06,.5,g)*strength,0.,1.);vec4 b=texture(uT,vUv);
 o=vec4(mix(b.rgb,color.rgb,w),min(b.a+(w*.7+g*.6)*color.a*strength,3.2));}`,
-maccormack: H+`uniform sampler2D uVel,uSrc;uniform vec2 simTexel,srcTexel;uniform float dt;uniform vec4 diss;
+maccormack: H+`uniform sampler2D uVel,uSrc;uniform vec2 simTexel,srcTexel;uniform float dt,sharp;uniform vec4 diss;
 void main(){vec2 v=texture(uVel,vUv).xy*simTexel*dt;vec2 c=vUv-v;vec4 fwd=texture(uSrc,c);
 vec2 xf=vUv+v;vec2 vf=texture(uVel,xf).xy*simTexel*dt;vec4 back=texture(uSrc,xf-vf);
 vec4 r=fwd+.5*(texture(uSrc,vUv)-back);
 vec2 b=(floor(c/srcTexel-.5)+.5)*srcTexel;
 vec4 a1=texture(uSrc,b),a2=texture(uSrc,b+vec2(srcTexel.x,0.)),a3=texture(uSrc,b+vec2(0.,srcTexel.y)),a4=texture(uSrc,b+srcTexel);
 r=clamp(r,min(min(a1,a2),min(a3,a4)),max(max(a1,a2),max(a3,a4)));
+r=mix(fwd,r,sharp);
 o=r/(1.+diss*dt);}`,
 detail: H+`uniform sampler2D uT;uniform vec2 dims;uniform float rate,sd;
 void main(){float n=bristle(vUv,dims,sd);o=vec4(mix(rate<1.?texture(uT,vUv).x:n,n,min(rate,1.)),0.,0.,1.);}`,
@@ -174,14 +175,14 @@ void main(){float L=texture(uP,vL).x,R=texture(uP,vR).x,T=texture(uP,vT).x,B=tex
 gradient: H+`uniform sampler2D uP,uVel;
 void main(){float L=texture(uP,vL).x,R=texture(uP,vR).x,T=texture(uP,vT).x,B=texture(uP,vB).x;vec2 v=texture(uVel,vUv).xy-vec2(R-L,T-B);o=vec4(v,0.,1.);}`,
 scale: H+`uniform sampler2D uT;uniform float value;void main(){o=value*texture(uT,vUv);}`,
-ambient: H+`uniform sampler2D uVel;uniform float t,amp,dt;
+ambient: H+`uniform sampler2D uVel;uniform float t,amp,dt,fine;
 vec2 swirl(vec2 u,vec2 c,float r,float s){vec2 d=u-c;return vec2(-d.y,d.x)*exp(-dot(d,d)/r)*s;}
 void main(){vec2 u=vUv;
-vec2 f=vec2(sin(u.y*2.3+t*.31)+.5*sin(u.y*5.1+u.x*2.2-t*.58)+.16*sin(u.y*11.+u.x*3.-t*1.05),
-            cos(u.x*2.0-t*.27)+.5*cos(u.x*4.7-u.y*2.4+t*.49)+.16*cos(u.x*10.-u.y*4.+t*.88));
+vec2 f=vec2(sin(u.y*2.3+t*.31)+.5*sin(u.y*5.1+u.x*2.2-t*.58)+.16*fine*sin(u.y*11.+u.x*3.-t*1.05),
+            cos(u.x*2.0-t*.27)+.5*cos(u.x*4.7-u.y*2.4+t*.49)+.16*fine*cos(u.x*10.-u.y*4.+t*.88));
 f+=swirl(u,vec2(.5+.32*sin(t*.11),.5+.3*cos(t*.14)),.07,26.);
 f-=swirl(u,vec2(.5+.3*cos(t*.09+2.),.5+.34*sin(t*.12+1.)),.05,30.);
-f+=swirl(u,vec2(.5+.25*sin(t*.17+4.),.5+.25*sin(t*.07+3.)),.02,40.);
+f+=swirl(u,vec2(.5+.25*sin(t*.17+4.),.5+.25*sin(t*.07+3.)),.02,40.*fine);
 o=vec4(texture(uVel,vUv).xy+f*amp*dt,0.,1.);}`,
 init: H+`uniform vec3 pal[6];uniform float seed,aspect;
 float fbm(vec2 p){float s=0.,a=.5;for(int i=0;i<5;i++){s+=a*vn(p);p=p*2.03+17.1;a*=.5;}return s;}
@@ -190,27 +191,32 @@ float k=fract(n*1.9+m*1.3)*6.;int i=int(k);vec3 c=mix(pal[i],pal[(i+1)%6],smooth
 o=vec4(c,.4+1.6*m*m+.4*sin(k*3.14));}`,
 display: H+`uniform sampler2D uDye,uDet;uniform vec3 pal[6];uniform vec2 dyeTexel;uniform float dotSize,relief,time;
 float Hh(vec2 uv){vec4 d=texture(uDye,uv);float t=texture(uDet,uv).x;
-return d.a*.78+dot(d.rgb,vec3(.3,.5,.2))*.22+(t-.5)*(.12+.1*d.a);}
+return d.a*.78+dot(d.rgb,vec3(.3,.5,.2))*.22+(t-.5)*(.05+.04*d.a);}
 vec2 grd(vec2 uv,vec2 e){return vec2(Hh(uv-vec2(e.x,0.))-Hh(uv+vec2(e.x,0.)),Hh(uv-vec2(0.,e.y))-Hh(uv+vec2(0.,e.y)));}
 void main(){vec4 d=texture(uDye,vUv);float t=texture(uDet,vUv).x;
-vec2 g=grd(vUv,dyeTexel*1.2)*.42+grd(vUv,dyeTexel*4.)*.5+grd(vUv,dyeTexel*11.)*.45;
+vec2 g=grd(vUv,dyeTexel*1.5)*.22+grd(vUv,dyeTexel*4.5)*.55+grd(vUv,dyeTexel*12.)*.55;
 vec3 n=normalize(vec3(g*relief,1.));
 vec3 L=normalize(vec3(-.42,.62,.66));vec3 Hv=normalize(L+vec3(0.,0.,1.));
 float diff=max(dot(n,L),0.);
 float nh=max(dot(n,Hv),0.);float spec=pow(nh,70.)*1.05+pow(nh,12.)*.16;
 float fres=pow(1.-n.z,2.);
 float hC=Hh(vUv),hW=0.;for(int i=0;i<4;i++){float a=float(i)*1.5708+.6;hW+=Hh(vUv+vec2(cos(a),sin(a))*dyeTexel*9.);}hW*=.25;
-float ao=clamp(1.-(hW-hC)*1.8,.4,1.12);
+float ao=clamp(1.-(hW-hC)*1.5,.62,1.1);
 float lum=dot(d.rgb,vec3(.3,.55,.15));
 vec3 nc=pal[0];float nd=1e3;for(int i=0;i<6;i++){vec3 q=d.rgb-pal[i];float dd=dot(q,q);if(dd<nd){nd=dd;nc=pal[i];}}
-vec3 base=mix(d.rgb,nc,.55);base=max(mix(vec3(dot(base,vec3(.3,.55,.15))),base,1.4),0.);
-base*=.9+.2*t;
-vec3 c=base*(.28+.9*diff)*ao+spec*vec3(1.,.97,.92)*(.6+.4*min(d.a,1.5))+fres*base*.35;
+vec3 base=mix(d.rgb,nc,.6);
+{vec3 b=clamp(base,0.,1.);float mx=max(b.r,max(b.g,b.b)),mn=min(b.r,min(b.g,b.b)),dl=mx-mn;   // to HSV
+ float hh=0.;if(dl>1e-4){if(mx==b.r)hh=mod((b.g-b.b)/dl,6.);else if(mx==b.g)hh=(b.b-b.r)/dl+2.;else hh=(b.r-b.g)/dl+4.;}
+ float sat=mx>0.?dl/mx:0.;
+ float S=dl<.02?sat:max(sat,.82),V=max(mx,.72);                                           // force vivid: no muddy / brown / grey mixes
+ vec3 k=clamp(abs(mod(hh+vec3(0.,4.,2.),6.)-3.)-1.,0.,1.);base=V*mix(vec3(1.),k,S);}
+base*=.95+.1*t;
+vec3 c=base*(.52+.62*diff)*ao+spec*vec3(1.,.97,.92)*(.6+.4*min(d.a,1.5))+fres*base*.35;
 vec2 q=gl_FragCoord.xy/dotSize;vec2 id=floor(q);vec2 f=q-id-.5;float h1=hash(id);
 f+=(vec2(h1,hash(id+7.31))-.5)*.45;
 float br=clamp(dot(c,vec3(.33)),0.,1.);float r=.36+.16*br+.06*h1;
 float dm=1.-smoothstep(r-.17,r,length(f));
-c=mix(c*.8,c*(1.03+.1*h1),dm);
+c=mix(c*.94,c*(1.02+.04*h1),dm);
 c+=step(.988,hash(id+floor(time*4.)))*spec*.7;
 c+=(hash(gl_FragCoord.xy+fract(time)*91.)-.5)*.025;
 c=1.-exp(-c*1.6);c=clamp(mix(vec3(dot(c,vec3(.3,.55,.15))),c,1.18),0.,1.);o=vec4(c,1.);}`,
@@ -511,11 +517,11 @@ function updateTimeScale(dt){
   const target=Math.min(speed+boost*(.35+.5*Math.min(speed,2)),4);
   timeScale+=(target-timeScale)*Math.min(1,dt*(target>timeScale?5:1.1));   // quick to speed up, gentle to calm down
 }
-function stepVel(dt,amb){
+function stepVel(dt,amb,curlK,fine){
   const tx=[vel.r.tx,vel.r.ty];
-  let u=use('ambient',tx);gl.uniform1i(u.uVel,vel.r.bind(0));gl.uniform1f(u.t,simTime);gl.uniform1f(u.amp,amb==null?34:amb);gl.uniform1f(u.dt,dt);blit(vel.w);vel.swap();
+  let u=use('ambient',tx);gl.uniform1i(u.uVel,vel.r.bind(0));gl.uniform1f(u.t,simTime);gl.uniform1f(u.amp,amb==null?34:amb);gl.uniform1f(u.fine,fine==null?1:fine);gl.uniform1f(u.dt,dt);blit(vel.w);vel.swap();
   u=use('curl',tx);gl.uniform1i(u.uVel,vel.r.bind(0));blit(curlF);
-  u=use('vorticity',tx);gl.uniform1i(u.uVel,vel.r.bind(0));gl.uniform1i(u.uCurl,curlF.bind(1));gl.uniform1f(u.curl,15);gl.uniform1f(u.dt,dt);blit(vel.w);vel.swap();
+  u=use('vorticity',tx);gl.uniform1i(u.uVel,vel.r.bind(0));gl.uniform1i(u.uCurl,curlF.bind(1));gl.uniform1f(u.curl,curlK==null?15:curlK);gl.uniform1f(u.dt,dt);blit(vel.w);vel.swap();
   u=use('divergence',tx);gl.uniform1i(u.uVel,vel.r.bind(0));blit(div);
   u=use('scale',tx);gl.uniform1i(u.uT,pres.r.bind(0));gl.uniform1f(u.value,.8);blit(pres.w);pres.swap();
   u=use('pressure',tx);gl.uniform1i(u.uDiv,div.bind(1));
@@ -525,8 +531,8 @@ function stepVel(dt,amb){
   gl.uniform1i(u.uVel,vel.r.bind(0));blit(vel.w);vel.swap();
 }
 function step(dt){
-  stepVel(dt);let u;
-  u=use('maccormack',[dye.r.tx,dye.r.ty]);gl.uniform2f(u.simTexel,vel.r.tx,vel.r.ty);gl.uniform2f(u.srcTexel,dye.r.tx,dye.r.ty);gl.uniform1f(u.dt,dt);
+  stepVel(dt,34,5.5,.2);let u;                         // fewer tiny eddies → big flowing masses, small detail only where it belongs
+  u=use('maccormack',[dye.r.tx,dye.r.ty]);gl.uniform2f(u.simTexel,vel.r.tx,vel.r.ty);gl.uniform2f(u.srcTexel,dye.r.tx,dye.r.ty);gl.uniform1f(u.dt,dt);gl.uniform1f(u.sharp,.6);
   gl.uniform1i(u.uVel,vel.r.bind(0));gl.uniform1i(u.uSrc,dye.r.bind(1));gl.uniform4f(u.diss,.003,.003,.003,.03);blit(dye.w);dye.swap();
   gl.uniform2f(u.srcTexel,det.r.tx,det.r.ty);gl.uniform1i(u.uSrc,det.r.bind(1));gl.uniform4f(u.diss,0,0,0,0);blit(det.w);det.swap();
   detailPass(.006);
@@ -985,7 +991,7 @@ function frame(now){
   // ambient life: drifting color drops keep the canvas evolving
   ambientClock+=dt*flow*Math.max(timeScale,.15);
   if(ambientClock>.6){ambientClock=0;const x=Math.random(),y=Math.random(),a=Math.random()*6.28;
-    const big=Math.random()<.3, r=big?.012+Math.random()*.022:.0014+Math.random()*.0035;
+    const rr=Math.random(), big=rr<.55, r=big?.014+Math.random()*.026:(rr<.85?.005+Math.random()*.006:.0028+Math.random()*.002);
     splatDye(x,y,pickColor(Math.random()*6|0),r,big?.85:.75,big?1.1:.8);
     splatVel(x,y,Math.cos(a)*(big?650:380),Math.sin(a)*(big?650:380),big?r*1.4:.004);}
   if(Math.random()<dt*.15)colorTick++;

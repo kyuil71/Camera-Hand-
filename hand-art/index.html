@@ -87,7 +87,7 @@ body:not(.water) #floors{display:none}
       <button class="btn" id="install">앱 설치</button>
     </div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 20</p>
+    <p class="hint" id="ver">버전 21</p>
   </div>
 </div>
 
@@ -257,6 +257,7 @@ glowDown: H+`uniform sampler2D uT;uniform vec2 px;
 void main(){vec3 c=vec3(0.);float W=0.;for(int y=-3;y<=3;y++)for(int x=-3;x<=3;x++){float w=exp(-float(x*x+y*y)*.18);c+=texture(uT,vUv+vec2(x,y)*px).rgb*w;W+=w;}o=vec4(c/W,1.);}`,
 ribbons: H+`uniform sampler2D uVel;uniform vec2 simTexel,force;uniform vec3 pal[6];uniform float time,aspect,seed;
 vec2 h2(vec2 p){return vec2(hash(p),hash(p+19.19));}
+float fbm4(vec2 p){float s=0.,a=.5;for(int i=0;i<4;i++){s+=a*vn(p);p=p*2.07+13.7;a*=.5;}return s;}
 vec3 palC(float k){k=k-6.*floor(k/6.);int i=int(k);float f=k-float(i);i=i>5?5:i;return mix(pal[i],pal[i<5?i+1:0],smoothstep(.15,.85,f));}
 void main(){
  vec2 uv=vUv;float t=time;
@@ -269,51 +270,54 @@ void main(){
  // hands / touch / tilt bend the light
  vec2 vv=texture(uVel,uv).xy*simTexel*.30;float vl=length(vv);if(vl>.12)vv*=.12/vl;
  vec2 q=uv-vv-force*.035;
- vec3 lightSum=vec3(0.);
- for(int r=0;r<5;r++){
+ vec3 lightSum=vec3(0.),haze=vec3(0.);
+ for(int r=0;r<7;r++){
   float fi=float(r);
-  float P=26.+fi*6.7, ph=t/P+fi*.29+seed*.013;float cyc=floor(ph),fr=ph-cyc;
+  float P=24.+fi*4.3, ph=t/P+fi*.381+seed*.013;float cyc=floor(ph),fr=ph-cyc;
   float r1=hash(vec2(fi*3.1,cyc+seed)),r2=hash(vec2(fi+7.3,cyc+seed)),r3=hash(vec2(fi+13.7,cyc+seed));
-  float env=smoothstep(0.,.22,fr)*smoothstep(1.,.72,fr);                  // fades in … and out
+  float env=smoothstep(0.,.14,fr)*smoothstep(1.,.84,fr);                     // fades in … and out
   float dir=r3<.5?1.:-1.;
-  float xc=mix(-.55,1.55,dir>0.?fr:1.-fr);                                  // drifts across the screen
-  float xenv=exp(-pow((q.x-xc)/(.55+.35*r2),2.));
+  float xc=mix(-.35,1.35,dir>0.?fr:1.-fr);                                    // drifts across the screen
+  float xenv=exp(-pow((q.x-xc)/(1.0+.5*r2),2.));                              // wide: a ribbon spans most of the width
   if(env*xenv<.01)continue;
-  float y0=.14+.72*r1, near=1.-y0;
-  float A=.05+.10*near;
-  float c=y0+A*sin(q.x*(2.2+1.5*r2)-t*.25*dir+r1*6.28)+A*.35*sin(q.x*(4.5+2.*r3)+t*.33+r2*6.28);
-  float W=(.04+.10*near)*(.75+.30*sin(q.x*3.1+t*.2+r2*6.28));
+  float y0=.06+.88*(fi+.15+.7*r1)/7.;                                         // spread over the whole height
+  float near=clamp(1.-y0,0.,1.);
+  float A=.04+.13*near;
+  float c=y0+A*sin(q.x*(2.0+1.4*r2)-t*.25*dir+r1*6.28)+A*.35*sin(q.x*(4.2+2.*r3)+t*.33+r2*6.28);
+  float W=(.03+.10*near*near+.02*near)*(.78+.30*sin(q.x*3.1+t*.2+r2*6.28));
   float v=(q.y-c)/W;
-  float band=exp(-v*v*.75);
+  float band=exp(-v*v*.7);
+  float halo=exp(-v*v*.09);                                                   // wide soft glow around the ribbon
+  vec3 cc=palC(q.x*2.0+fi*1.37+v*.45+t*.04+r1*6.);
+  haze+=cc*halo*env*xenv*(.018+.03*near);
   if(band<.003)continue;
-  float N=8.+12.*near;
-  float s=v*N*.5+.06*sin(q.x*5.+t*.4+fi*2.);                             // fine parallel strands, gently braided
+  float N=9.+14.*near;
+  float s=v*N*.5+.06*sin(q.x*5.+t*.4+fi*2.);                                  // fine parallel strands
   float sf2=s-floor(s)-.5,sid=floor(s);
-  float th=.004+.004*near;
-  float L=exp(-sf2*sf2/th)+exp(-sf2*sf2/.05)*.15;
+  float th=.005+.005*near;
+  float L=exp(-sf2*sf2/th)+exp(-sf2*sf2/.06)*.12;
   float hs=hash(vec2(sid,fi+cyc));
-  float dxp=q.x*aspect*(26.+30.*hash(vec2(sid,fi+3.)))-t*dir*(1.2+1.8*hs);
+  float dxp=q.x*aspect*(30.+34.*hash(vec2(sid,fi+3.)))-t*dir*(1.2+1.8*hs);
   float dd=dxp-floor(dxp)-.5;
-  float dots=exp(-dd*dd/.006)*step(.45,hs)*exp(-sf2*sf2/(th*1.6));              // beads of light running along strands
-  float crest=.30+.95*smoothstep(-.6,1.1,v*dir);
-  float I=(L*crest*(.7+.5*hs)*1.4+dots*2.4)*band*env*xenv*(.6+.6*near);
-  vec3 cc=palC(q.x*2.2+fi*1.37+v*.35+t*.04+r1*6.);
-  lightSum+=cc*I;
-  // spray of sparks lifting off the crest
-  float vs=v*dir;
-  if(vs>.6&&vs<3.2){vec2 g=vec2(q.x*aspect*70.,vs*7.-t*1.2);vec2 gi=floor(g),gf=g-gi-.5;
-   float hh=hash(gi+fi*17.+cyc);float spk=step(.90,hh)*exp(-dot(gf,gf)*14.)*exp(-(vs-.6)*1.1);
-   lightSum+=palC(q.x*2.2+fi*1.37+1.5)*spk*1.6*env*xenv;}
+  float dots=exp(-dd*dd/.004)*step(.40,hs)*exp(-sf2*sf2/(th*1.4));            // tiny beads running along strands
+  float crest=.45+1.1*smoothstep(-.7,1.1,v*dir);
+  float I=(L*crest*(.8+.5*hs)*1.9+dots*3.)*band*env*xenv*(.7+.7*near);
+  float hot=smoothstep(.55,1.,band)*smoothstep(.2,1.,v*dir+.6);               // white-hot core / crest
+  lightSum+=mix(cc,vec3(1.,.97,.93),hot*.35)*I;
+  float vs=v*dir;                                                             // fine sparks lifting off the crest
+  if(vs>.6&&vs<3.4){vec2 g=vec2(q.x*aspect*90.,vs*8.-t*1.2);vec2 gi=floor(g),gf=g-gi-.5;
+   float hh=hash(gi+fi*17.+cyc);float spk=step(.88,hh)*exp(-dot(gf,gf)*30.)*exp(-(vs-.6)*1.0);
+   lightSum+=mix(cc,vec3(1.),.4)*spk*2.2*env*xenv;}
  }
- // soft bokeh orbs drifting slowly
- for(int b=0;b<2;b++){float sc=b==0?5.:8.;vec2 bq=vec2(uv.x*aspect,uv.y+t*.006*(1.+float(b)))*sc;vec2 bi=floor(bq),bf=bq-bi;
-  float hb=hash(bi+float(b)*31.+seed);if(hb>.80){vec2 cpos=.5+.25*(h2(bi)-.5);float rad=.07+.09*hash(bi+5.);
-   float d=length(bf-cpos)/rad;float orb=smoothstep(1.,.86,d)*(.55+.45*smoothstep(.45,.95,d));
-   lightSum+=palC(hb*30.+bi.x)*orb*(.14+.14*hash(bi+9.));}}
+ // faint light mist and micro sparkles between the ribbons (no round orbs)
+ haze+=avg*.015*fbm4(vec2(uv.x*aspect*2.,uv.y*3.)+t*.02);
+ vec2 mp=uv*vec2(aspect,1.)*160.;vec2 mi=floor(mp),mf=mp-mi-.5;float mh=hash(mi+seed*1.7);
+ lightSum+=palC(mh*40.+uv.x*3.)*step(.985,mh)*exp(-dot(mf,mf)*40.)*(.35+.35*sin(t*2.+mh*60.));
+ lightSum+=haze;
  col+=lightSum;
- col+=lightSum*lightSum*.25;                                                // bloom on the brightest beads
+ col+=lightSum*lightSum*.18;                                                // bloom on the brightest parts
  col=1.-exp(-col*1.3);
- col=clamp(mix(vec3(dot(col,vec3(.3,.55,.15))),col,1.25),0.,1.);
+ col=clamp(mix(vec3(dot(col,vec3(.3,.55,.15))),col,1.45),0.,1.);
  o=vec4(col,1.);}`,
 lightComp: H+`uniform sampler2D uT,uG;uniform vec3 pal[6];uniform float time,aspect;
 void main(){vec2 uv=vUv;vec3 avg=(pal[0]+pal[1]+pal[2]+pal[3]+pal[4]+pal[5])/6.;

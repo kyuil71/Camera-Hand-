@@ -127,7 +127,7 @@ body:not(.water) #plopRow,body:not(.water) #floors,body:not(.water) #dipRow,body
     <label class="mfx" id="mfxRow"><span><b>음악 인터랙션</b><small>Music Interaction</small></span>
       <input type="checkbox" id="mfxSw" role="switch" aria-label="음악 인터랙션 Music Interaction"><i aria-hidden="true"></i></label>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 59</p>
+    <p class="hint" id="ver">버전 60</p>
   </div>
 </div>
 
@@ -1162,7 +1162,7 @@ function waterFrame(dt){
     if(s.set&&!s.hand)continue;                            // touch strokes are handled as plop + wake now
     const main=s.set?s.set>.6:true;
     let sp=s.vx!=null?Math.hypot(s.vx*aspect,s.vy):Math.hypot(s.dx||0,s.dy||0)/2600;
-    if(s.hand){sp=Math.min(1.6,Math.max(0,sp-.12));if(sp<=0&&!s.vOnly)continue;}   // ignore camera-tracking jitter (a resting hand leaves the water calm), cap big arm swings
+    if(s.hand){sp=Math.min(1.6,Math.max(0,sp-.05));if(sp<=0&&!s.vOnly)continue;}   // ignore camera-tracking jitter (a resting hand leaves the water calm), cap big arm swings
     else sp=Math.max(sp,.3);                                // touch: a gentle stroke is just a little more visible than before
     // camera frames come ~2× less often than touch events → ×1.4, then ×1.15 so a gesture is just a little stronger than touch
     const hk=s.hand?(s.vOnly?.3:HAND_K):1;                       // hand gestures: just a little stronger than one finger on the glass
@@ -1170,7 +1170,7 @@ function waterFrame(dt){
   // pointing → wake travelling the way the finger points
   glideClock+=dt;
   if(dipMode)gliders.length=0;
-  for(const h of handInfo){const p=h.point;if(!p||!live||dipMode)continue;
+  for(const h of handInfo){const p=h.point;if(!p||!live||dipMode||oneFinger())continue;
     if(glideClock>.06){gliders.push({x:p.x,y:p.y,dx:p.dx,dy:p.dy,life:1.8});}}
   if(glideClock>.06)glideClock=0;
   for(let i=gliders.length-1;i>=0;i--){const g=gliders[i];g.life-=sdt;
@@ -1555,7 +1555,7 @@ const bgm=new Audio();bgm.loop=true;bgm.preload='auto';
 try{bgm.preservesPitch=true;bgm.mozPreservesPitch=true;bgm.webkitPreservesPitch=true;}catch(e){}
 let musicOn=true; try{musicOn=localStorage.getItem('hf-music')!=='off';}catch(e){}
 let musicReady=null, musicRate=1, musicVol=0, curTrack=null, trackBusy=false;
-const TRACKS={paint:'audio/where_the_stream_widens.mp3',water:'audio/glass_upon_the_lake.mp3',light:'audio/where_the_ocean_meets_sky.mp3',wave:'audio/where_the_ocean_meets_sky.mp3'};
+const TRACKS={paint:'audio/where_the_stream_widens.mp3',water:'audio/glass_upon_the_lake.mp3',light:'audio/where_the_ocean_meets_sky.mp3',wave:'audio/where_the_ocean_meets_sky.mp3',ink:'audio/silk_and_moonlight.mp3'};
 const trackURL={};
 function getTrack(path){ if(!trackURL[path])trackURL[path]=fetch(path).then(r=>r.blob()).then(b=>URL.createObjectURL(b)).catch(()=>null); return trackURL[path]; }
 function loadMusic(){ const path=TRACKS[mode]||TRACKS.paint;
@@ -1682,6 +1682,9 @@ let hands=null, handsReady=false, camOn=false, busy=false, lastSeen=0, fistSince
 const pinchState={}, pointState={}, handSize={};
 const d2=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 
+const oneFinger=()=>mode==='water'||mode==='ink';
+function handOpts(){if(hands)try{hands.setOptions(oneFinger()?{maxNumHands:1,modelComplexity:0,minDetectionConfidence:.5,minTrackingConfidence:.3,selfieMode:true}
+  :{maxNumHands:2,modelComplexity:0,minDetectionConfidence:.6,minTrackingConfidence:.5,selfieMode:true});}catch(e){}}
 function onHands(res){
   const now=performance.now();const q0=queue.length;
   const list=res.multiHandLandmarks||[];
@@ -1703,14 +1706,17 @@ function onHands(res){
     } else delete pointState[h];
     anyFist=anyFist||fist;
     const pts=[];
+    const one=oneFinger();                          // Ripple & Ink: only the index fingertip of one hand counts — followed tightly
     TIPS.forEach((ti,j)=>{
       const raw={x:lm[ti].x, y:1-lm[ti].y};       // selfieMode=true already mirrors
       const key=h+'-'+ti; const prev=tracks[key];
-      const sm=prev?{x:prev.x+(raw.x-prev.x)*.6,y:prev.y+(raw.y-prev.y)*.6,t:now}:{...raw,t:now};
+      const kf=one&&ti===8?.88:.6;
+      const sm=prev?{x:prev.x+(raw.x-prev.x)*kf,y:prev.y+(raw.y-prev.y)*kf,t:now}:{...raw,t:now};
       tracks[key]=sm; pts.push(sm);
       if(!prev||fist||(pointing&&ti!==8))return;
+      if(one&&(ti!==8||h>0))return;
       let dx=sm.x-prev.x, dy=sm.y-prev.y; const sp=Math.hypot(dx,dy);
-      if(sp>.25)return;                               // tracking jump
+      if(sp>(one?.45:.25))return;                     // tracking jump
       const isIndex=ti===8, strong=isIndex?1:.55;
       const dtR=Math.min(Math.max((now-prev.t)/1000,.016),.12);
       feelFinger(Math.hypot(dx*aspect,dy)/dtR*(isIndex?1:.8));
@@ -1718,7 +1724,7 @@ function onHands(res){
     });
     // pinch → vortex around pinch point
     const pk='p'+h, mid={x:(lm[4].x+lm[8].x)/2,y:1-(lm[4].y+lm[8].y)/2};
-    if(pinch){
+    if(pinch&&!one){
       if(!pinchState[pk]){ // burst on pinch start
         colorTick++;
         for(let i=0;i<8;i++){const a=i/8*Math.PI*2;queue.push({x:mid.x+Math.cos(a)*.02,y:mid.y+Math.sin(a)*.02,dx:Math.cos(a)*900,dy:Math.sin(a)*900,c:pickColor(i),r:.0024,s:1,t:.9});}
@@ -1756,7 +1762,7 @@ async function startCam(){
     status('AI 모델 불러오는 중…');camBtn.disabled=true;
     if(!hands){
       hands=new Hands({locateFile:f=>'mediapipe/'+f});
-      hands.setOptions({maxNumHands:2,modelComplexity:0,minDetectionConfidence:.6,minTrackingConfidence:.5,selfieMode:true});
+      handOpts();
       hands.onResults(onHands);
       await hands.initialize();
     }
@@ -1856,17 +1862,18 @@ plopEl.value=plopVal;applyPlop(plopVal);plopEl.addEventListener('input',e=>apply
 const seedBtn=document.getElementById('seedBtn'),hintTxt=document.getElementById('hintTxt');
 const HINTS={paint:hintTxt.innerHTML,
   dip:'<b>손 담그기</b> · 터치: 오래 누를수록 깊게, 톡 누르면 살짝<br>손: 손바닥을 화면 쪽으로 내밀어 오래 둘수록 깊게, 떼면 물이 되솟음',
-  ink:'<b>랜덤</b> 붓이 스스로 그림 — 언제든 함께 그리기<br><b>터치·손가락</b> 움직이면 먹물이 스며듦 · 겹칠수록 짙어짐<br><b>엄지+검지 집기</b> 먹 한 방울 · <b>주먹</b> 멈춤<br>먹물은 천천히 옅어져 사라짐 · <b>흔들기 켜면</b> 기울인 쪽으로 번짐',
+  ink:'<b>랜덤</b> 붓이 스스로 그림 — 언제든 함께 그리기<br><b>터치·검지 손끝</b> 움직이면 먹물이 스며듦 (손가락 하나만 인식) · 겹칠수록 짙어짐<br><b>주먹</b> 멈춤<br>먹물은 천천히 옅어져 사라짐 · <b>흔들기 켜면</b> 기울인 쪽으로 번짐',
   cloud:'<b>검지</b> 지나간 구름이 부드럽게 갈라짐 · 빠르게 움직이면 흩어짐<br><b>집기</b> 회전 흐름 · <b>손 펼치기</b> 넓게 확산 · <b>주먹</b> 천천히 안정',
   silk:'<b>검지</b> 실크가 따라 흐름 · 빠르게 움직이면 넓게 펼쳐짐<br><b>집기</b> 부드러운 소용돌이 · <b>손 펼치기</b> 활짝 펼침 · <b>주먹</b> 서서히 멈춤',
   light:'<b>손가락</b> 빛의 흐름 밀기 · <b>검지만 펴기</b> 가리킨 방향으로 빛줄기<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 멈춤',
   wave:'<b>폰 기울이기</b> 물이 쏠려 벽에 부딪힘 · <b>흔들기</b> 출렁임<br><b>터치·손</b> 물 밀기 · <b>톡</b> 물결 · <b>주먹</b> 멈춤',
-  water:'<b>톡 터치</b> 퐁당 · <b>끌기</b> 물결<br><b>손가락</b> 움직여 물결 · <b>검지만 펴기</b> 가리킨 방향으로 물길<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 물 멈춤'};
+  water:'<b>톡 터치</b> 퐁당 · <b>끌기</b> 물결<br><b>검지 손끝</b> 따라 물결 (손가락 하나만 인식)<br><b>주먹</b> 물 멈춤'};
 function setMode(m){mode=m;document.body.classList.toggle('water',m==='water');document.body.classList.toggle('wave',m==='wave');document.body.classList.toggle('light',m==='light');document.body.classList.toggle('silk',m==='silk');document.body.classList.toggle('cloud',m==='cloud');document.body.classList.toggle('ink',m==='ink');
   if(m==='cloud'&&vel){const u=use('waterClear',[0,0]);blit(vel.w);vel.swap();blit(vel.w);vel.swap();}   // start calm: no leftover swirls from other modes
   document.querySelectorAll('#modeSeg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.m===m));
   seedBtn.textContent=(m==='water'||m==='wave')?'잔잔하게':m==='ink'?'새 한지':'새 캔버스';hintTxt.innerHTML=(m==='water'&&dipMode)?HINTS.dip:HINTS[m];
   gliders.length=0;queue.length=0;drops.length=0;try{localStorage.setItem('hf-mode',m);}catch(e){}
+  if(typeof hands!=='undefined'&&hands)handOpts();
   if(m==='wave'&&!gyroOn)setGyro(true);                 // the aquarium lives on tilt and shake
   if(curTrack)switchTrack();}
 document.querySelectorAll('#modeSeg button').forEach(b=>b.onclick=()=>setMode(b.dataset.m));

@@ -109,7 +109,7 @@ body:not(.water) #floors,body:not(.water) #dipRow,body:not(.water) #rainRow{disp
     <label class="mfx" id="mfxRow"><span><b>음악 인터랙션</b><small>Music Interaction</small></span>
       <input type="checkbox" id="mfxSw" role="switch" aria-label="음악 인터랙션 Music Interaction"><i aria-hidden="true"></i></label>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 53</p>
+    <p class="hint" id="ver">버전 54</p>
   </div>
 </div>
 
@@ -343,7 +343,7 @@ void main(){vec2 uv=vUv;vec2 p=vec2(uv.x*aspect,uv.y);
  ab+=hue*veins*edge*max(.35,halo*.9);
  ab*=mix(1.,.72+.56*vn(p*430.),.55);                                 /* pigment caught in the paper's grain */
  ab*=1.+.55*smoothstep(.05,.6,d)*(fbm(p*9.+fbm(p*3.)*2.)-.5)+.25*(fbm(p*31.)-.5);   /* mottled clouds inside the stain */
- ab=5.*(1.-exp(-ab/5.));                                              /* deep cores can go almost black */
+ ab=3.2*(1.-exp(-ab/3.2));
  float cr;vec3 pap=hanji(p,cr);
  ab*=1.+.18*cr*smoothstep(.02,.2,d);                                   /* ink pools a little in the deep creases */
  vec3 col=pap*exp(-ab);
@@ -1377,10 +1377,10 @@ function inkClear(){if(!inkA)return;const u=use('inkClear',[0,0]);for(const t of
 function inkSplat(x,y,r,water,a,k){if(inkSplats++>36)return;               // a few dozen per frame at most
   const u=use('inkSplat',[inkA.r.tx,inkA.r.ty]);gl.uniform1i(u.uT,inkA.r.bind(0));gl.uniform2f(u.point,x,y);gl.uniform1f(u.aspect,aspect);
   gl.uniform1f(u.radius,r*(aspect>1?aspect:1));gl.uniform1f(u.water,water);gl.uniform3f(u.pig,a[0]*k,a[1]*k,a[2]*k);blit(inkA.w);inkA.swap();}
-function inkDrop(x,y,ci,k){inkSplat(x,y,.0009*(.7+.6*k),1.2*k,inkAbs(ci),1.1*k);}
+function inkDrop(x,y,ci,k){inkSplat(x,y,.0009*(.7+.6*k),1.2*k,inkAbs(ci),.42*k);}
 function inkStroke(x0,y0,x1,y1,ci,k,rw){rw=rw||1;const d=Math.hypot((x1-x0)*aspect,y1-y0);if(d<1e-4||d>.3)return;
   const n=Math.min(8,Math.ceil(d/.012)),a=inkAbs(ci),kk=k*Math.min(1,d/.012/n*1.1+.25);
-  for(let i=1;i<=n;i++){const t=i/n;inkSplat(x0+(x1-x0)*t,y0+(y1-y0)*t,.00045*rw,.55*kk*Math.sqrt(rw),a,.25*kk);}}
+  for(let i=1;i<=n;i++){const t=i/n;inkSplat(x0+(x1-x0)*t,y0+(y1-y0)*t,.00045*rw,.55*kk*Math.sqrt(rw),a,.09*kk);}}
 const inkTips={};
 function inkFrame(dt){
   if(!inkA)inkAlloc();
@@ -1394,13 +1394,13 @@ function inkFrame(dt){
   // now and then a drop falls by itself
   if(inkName==='랜덤'&&sdt>0)inkBotStep(sdt);
   else{inkAmb-=sdt;}if(inkName!=='랜덤'&&inkAmb<0){inkAmb=7+Math.random()*7;inkDrop(.15+.7*Math.random(),.12+.76*Math.random(),inkNext++,.45+.3*Math.random());}
-  if(sdt>0){const it=Math.max(1,Math.min(40,Math.round(sdt*2200))),h=sdt/it,fade=Math.exp(-h/48);
+  if(sdt>0){const it=Math.max(1,Math.min(40,Math.round(sdt*2200))),h=sdt/it,fade=Math.exp(-h/2);
     let tx=0,ty=0;if(gyroOn){tx=viewTilt[0]*2.4;ty=viewTilt[1]*2.4;const m=Math.hypot(tx,ty);if(m>1){tx/=m;ty/=m;}}
     for(let k=0;k<it;k++){
       let u=use('inkSettle',[inkS.r.tx,inkS.r.ty]);gl.uniform1i(u.uA,inkA.r.bind(0));gl.uniform1i(u.uS,inkS.r.bind(1));
       gl.uniform1f(u.fade,fade);gl.uniform1f(u.dep0,.0008);gl.uniform1f(u.dep1,.012);blit(inkS.w);inkS.swap();
       u=use('inkStep',[inkA.r.tx,inkA.r.ty]);gl.uniform1i(u.uA,inkA.r.bind(0));gl.uniform1i(u.uK,inkK.bind(1));gl.uniform2f(u.tilt,tx,ty);
-      gl.uniform1f(u.dw,.12);gl.uniform1f(u.gt,.08);gl.uniform1f(u.pk,.62);gl.uniform1f(u.dp,.025);gl.uniform1f(u.ev0,.00009);gl.uniform1f(u.ev1,.00036);
+      gl.uniform1f(u.dw,.12);gl.uniform1f(u.gt,.08);gl.uniform1f(u.pk,.80);gl.uniform1f(u.dp,.025);gl.uniform1f(u.ev0,.00009);gl.uniform1f(u.ev1,.00036);
       gl.uniform1f(u.dep0,.0008);gl.uniform1f(u.dep1,.012);blit(inkA.w);inkA.swap();}}
   const u=use('inkShow',[0,0]);gl.uniform1i(u.uS,inkS.r.bind(0));gl.uniform1i(u.uA,inkA.r.bind(1));gl.uniform1f(u.aspect,aspect);
   gl.uniform2f(u.simTexel,inkS.r.tx,inkS.r.ty);blit(null);

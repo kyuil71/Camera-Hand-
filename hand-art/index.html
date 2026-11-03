@@ -55,6 +55,8 @@ body.menu .dock{transform:translate(-50%,0)}
 .seg button[aria-pressed=true]{background:var(--ink);color:#101826}
 body.water #palettes,body.wave #palettes,body.light #palettes,body.silk #palettes,body.cloud #palettes{display:none}
 body:not(.cloud) #clouds{display:none}
+body:not(.ink) #inks{display:none}
+body.ink #palettes{display:none}
 body:not(.silk) #silks{display:none}
 body:not(.light) #lights{display:none}
 body:not(.water) #floors,body:not(.water) #dipRow,body:not(.water) #rainRow{display:none}
@@ -83,12 +85,13 @@ body:not(.water) #floors,body:not(.water) #dipRow,body:not(.water) #rainRow{disp
 <div class="dock" id="sheet">
   <div class="panel">
     <div class="head" id="sheetHead"><span class="bar"></span><div id="status">손 인식 꺼짐 · 화면을 문질러 보세요</div></div>
-    <div class="row seg" id="modeSeg"><button data-m="paint">Pigment</button><button data-m="water">Ripple</button><button data-m="wave">Wave</button><button data-m="light">Aurora</button><button data-m="silk">Silk</button><button data-m="cloud">Cloud</button></div>
+    <div class="row seg" id="modeSeg"><button data-m="paint">Pigment</button><button data-m="water">Ripple</button><button data-m="wave">Wave</button><button data-m="light">Aurora</button><button data-m="silk">Silk</button><button data-m="cloud">Cloud</button><button data-m="ink">Ink</button></div>
     <div class="speed"><span>흐름 속도</span><input type="range" id="speed" min="0" max="100" step="1"><b id="speedVal"></b></div>
     <div class="row chips" id="palettes"></div>
     <div class="row chips" id="lights"></div>
     <div class="row chips" id="silks"></div>
     <div class="row chips" id="clouds"></div>
+    <div class="row chips" id="inks"></div>
     <div class="row chips" id="rainRow"><button class="chip" data-r="0">비 없음</button><button class="chip" data-r="1">이슬비</button><button class="chip" data-r="2">비</button><button class="chip" data-r="3">소나기</button></div>
     <div class="row" id="dipRow"><button class="btn" id="dipBtn">손 담그기 켜기</button></div>
     <div class="row chips" id="floors"><button class="chip" data-f="2"><i class="sw" style="background:linear-gradient(135deg,#000,#1b1d20 50%,#000)"></i>검은 유리</button><button class="chip" data-f="1"><i class="sw" style="background:linear-gradient(135deg,#1c2328,#3a464e 50%,#11171b)"></i>다크 그레이</button><button class="chip" data-f="3"><i class="sw" style="background:#1d2024;background-image:linear-gradient(#5a5f66 1.5px,transparent 1.5px),linear-gradient(90deg,#5a5f66 1.5px,transparent 1.5px);background-size:8px 8px"></i>그레이 타일</button><button class="chip" data-f="0"><i class="sw" style="background:linear-gradient(135deg,#8c8270,#c9bda4 45%,#6e675c)"></i>자갈</button></div>
@@ -106,7 +109,7 @@ body:not(.water) #floors,body:not(.water) #dipRow,body:not(.water) #rainRow{disp
     <label class="mfx" id="mfxRow"><span><b>음악 인터랙션</b><small>Music Interaction</small></span>
       <input type="checkbox" id="mfxSw" role="switch" aria-label="음악 인터랙션 Music Interaction"><i aria-hidden="true"></i></label>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 49</p>
+    <p class="hint" id="ver">버전 50</p>
   </div>
 </div>
 
@@ -256,6 +259,75 @@ c.a=min(c.a+max(imp-50.,0.)*dt*.016,3.2);
 c.a-=max(c.a-1.,0.)*dt*.9*band;                 // the surge slides back down the wall
 o=c;}`,
 waterClear: H+`void main(){o=vec4(0.,0.,0.,1.);}`,
+inkClear: H+`void main(){o=vec4(0.);}`,
+inkPerm: H+`uniform float aspect,seed;
+float fib(vec2 p,float a){mat2 r=mat2(cos(a),sin(a),-sin(a),cos(a));vec2 q=r*p;return vn(vec2(q.x*3.,q.y*85.));}
+void main(){vec2 p=vec2(vUv.x*aspect,vUv.y)*6.+seed;
+ float f=max(smoothstep(.55,.9,fib(p,.3)),max(smoothstep(.55,.9,fib(p*1.3+7.,1.4)),smoothstep(.55,.9,fib(p*.8+3.,2.4))));
+ float fl=.5*vn(p*1.5)+.3*vn(p*4.3)+.2*vn(p*11.);
+ float k=(.06+.72*smoothstep(.22,.78,fl)+.42*f)*(.68+.62*vn(p*23.))*.6;   /* very uneven paper → lobed, cauliflower edges */                  /* long kozo fibres carry water fastest; flocs and pores slow it */
+ o=vec4(k,0.,0.,1.);}`,
+inkSplat: H+`uniform sampler2D uT;uniform vec2 point;uniform float aspect,radius,water;uniform vec3 pig;
+void main(){vec4 s=texture(uT,vUv);vec2 d=vUv-point;d.x*=aspect;float g=exp(-dot(d,d)/radius);
+ o=vec4(s.rgb+pig*g,min(1.3,s.a+water*g));}`,
+inkSettle: H+`uniform sampler2D uA,uS;uniform float fade,dep0,dep1;
+void main(){vec4 c=texture(uA,vUv);float w=c.a;float thin=1.-smoothstep(.03,.35,w);float dr=w<.015?1.:clamp(dep0+dep1*thin,0.,1.);
+ o=vec4(texture(uS,vUv).rgb*fade+c.rgb*dr,1.);}`,
+inkStep: H+`uniform sampler2D uA,uK;uniform vec2 tilt,texel;uniform float dw,gt,pk,dp,ev0,ev1,dep0,dep1;
+vec4 F(vec4 n,float kn,vec2 d,vec4 c,float k){                       // flux from neighbour n into this cell: (pigment, water)
+ float kf=sqrt(k*kn),w=c.a,wn=n.a,wm=.5*(w+wn);
+ float fw=dw*kf*wm*(wn-w);                                          /* wet paper pulls water on: a sharp, creeping front */
+ float g=dot(tilt,-d);fw+=gt*kf*(g>0.?g*wn:g*w);                    /* tilted phone: water runs downhill */
+ vec3 cn=n.rgb/max(wn,.03),cc=c.rgb/max(w,.03);
+ vec3 fp=(fw>0.?fw*cn:fw*cc)*pk+dp*kf*min(1.,wm*3.)*(n.rgb-c.rgb);  /* ink rides the water, lagging a little behind it */
+ return vec4(fp,fw);}
+void main(){vec4 c=texture(uA,vUv);float k=texture(uK,vUv).r;
+ vec4 s=F(texture(uA,vL),texture(uK,vL).r,vec2(-1.,0.),c,k)+F(texture(uA,vR),texture(uK,vR).r,vec2(1.,0.),c,k)
+       +F(texture(uA,vT),texture(uK,vT).r,vec2(0.,1.),c,k)+F(texture(uA,vB),texture(uK,vB).r,vec2(0.,-1.),c,k);
+ vec2 e1=texel,e2=vec2(texel.x,-texel.y);                                /* diagonals too: round stains, not octagons */
+ s+=.5*(F(texture(uA,vUv+e1),texture(uK,vUv+e1).r,vec2(.7071,.7071),c,k)+F(texture(uA,vUv-e1),texture(uK,vUv-e1).r,vec2(-.7071,-.7071),c,k)
+       +F(texture(uA,vUv+e2),texture(uK,vUv+e2).r,vec2(.7071,-.7071),c,k)+F(texture(uA,vUv-e2),texture(uK,vUv-e2).r,vec2(-.7071,.7071),c,k));
+ float w=c.a,thin=1.-smoothstep(.03,.35,w),dr=w<.015?1.:clamp(dep0+dep1*thin,0.,1.);   /* ink settles fastest where the water thins: dark rims */
+ o=vec4(max(c.rgb+s.rgb-c.rgb*dr,0.),max(w+s.a-(ev0+ev1*w),0.));}`,
+inkShow: H+`uniform sampler2D uS,uA;uniform float aspect;uniform vec2 simTexel;
+float fbm(vec2 p){float s=0.,a=.5;for(int i=0;i<4;i++){s+=a*vn(p);p=p*2.03+17.1;a*=.5;}return s;}
+float fib(vec2 p,float a){mat2 r=mat2(cos(a),sin(a),-sin(a),cos(a));vec2 q=r*p;return vn(vec2(q.x*2.,q.y*70.));}
+vec3 hanji(vec2 p){
+ vec3 c=vec3(.93,.89,.80);
+ c*=.97+.045*fbm(p*2.2+3.);
+ float r1=1.-abs(2.*fbm(p*3.3+5.)-1.),r2=1.-abs(2.*fbm(p*3.3+5.+vec2(.003,.004))-1.);   /* soft crumples, lit from the upper left */
+ c*=1.+clamp((r1-r2)*7.,-.025,.025);c-=pow(r1,40.)*.035;c+=pow(r2,40.)*.015;   /* fine creases */
+ float r3=1.-abs(2.*fbm(p*8.+11.)-1.);c-=pow(r3,60.)*.03;
+ float f1=smoothstep(.72,.96,fib(p*4.,.4)),f2=smoothstep(.72,.96,fib(p*5.3+3.,1.9)),f3=smoothstep(.74,.97,fib(p*6.1+9.,2.8));
+ c+=vec3(.030,.027,.020)*max(f1,f2)-vec3(.022,.022,.02)*f3;            /* long mulberry fibres */
+ c*=.965+.06*vn(p*650.);c*=.985+.03*vn(p*180.);
+ return c;}
+float dens(vec2 uv){return dot(texture(uS,uv).rgb,vec3(.3333));}
+void main(){vec2 uv=vUv;vec2 p=vec2(uv.x*aspect,uv.y);
+ vec2 wv=(vec2(vn(p*70.),vn(p*70.+7.3))-.5)*simTexel*3.2;            /* the fibres fray every edge */
+ vec3 S=texture(uS,uv+wv).rgb;vec4 A=texture(uA,uv+wv);
+ vec3 ab=S+A.rgb*.8;float d=dot(ab,vec3(.3333));
+ // fine dendrites where a stain ends: ink pulled along single fibres
+ float gx=dens(uv+wv+vec2(simTexel.x,0.))-dens(uv+wv-vec2(simTexel.x,0.)),gy=dens(uv+wv+vec2(0.,simTexel.y))-dens(uv+wv-vec2(0.,simTexel.y));
+ float halo=.25*(dens(uv+wv+vec2(4.*simTexel.x,0.))+dens(uv+wv-vec2(4.*simTexel.x,0.))+dens(uv+wv+vec2(0.,4.*simTexel.y))+dens(uv+wv-vec2(0.,4.*simTexel.y)));
+ float edge=max(smoothstep(.02,.10,length(vec2(gx,gy)))*smoothstep(.03,.18,d),smoothstep(.02,.12,halo)*(1.-smoothstep(.02,.12,d)))*(1.-smoothstep(.9,2.2,d));
+ vec2 q=p*38.+vec2(fbm(p*7.),fbm(p*7.+4.))*2.5;
+ float v1=1.-abs(2.*fbm(q)-1.),v2=1.-abs(2.*fbm(q*2.3+9.)-1.);
+ float veins=max(smoothstep(.93,.99,v1),smoothstep(.95,.995,v2)*.7)*smoothstep(.35,.7,fbm(p*5.+2.));   /* only here and there */
+ vec3 hue=ab/max(d,1e-4);
+ float crisp=smoothstep(.006,.03,d+(vn(p*150.)-.5)*.02);              /* stains end in a crisp, frayed line, not a blur */
+ ab*=crisp;
+ float lv=d*2.6+(fbm(p*14.)-.5)*.5,fr=fract(lv);                       /* each wash dried with its own faint rim */
+ ab+=hue*smoothstep(.0,.05,fr)*(1.-smoothstep(.05,.16,fr))*smoothstep(.05,.2,d)*(1.-smoothstep(1.2,2.,d))*.10;
+ ab+=hue*veins*edge*max(.5,halo*1.2);
+ ab*=mix(1.,.72+.56*vn(p*430.),.55);                                 /* pigment caught in the paper's grain */
+ ab*=1.+.55*smoothstep(.05,.6,d)*(fbm(p*9.+fbm(p*3.)*2.)-.5)+.25*(fbm(p*31.)-.5);   /* mottled clouds inside the stain */
+ ab=3.2*(1.-exp(-ab/3.2));
+ vec3 col=hanji(p)*exp(-ab);
+ col*=1.-.05*smoothstep(.05,.6,A.a);                                 /* still-wet paper looks a touch darker */
+ col*=1.-.07*pow(length(uv-.5)*1.3,2.);
+ o=vec4(col,1.);}`,
+
 cloudDisp: H+`uniform sampler2D uD,uVel;uniform vec2 simTexel;uniform float dt,relax,clearK;
 // displacement (RG) + thinning (B) left behind by the hands; advected, then slowly healing → clouds part and drift back together
 void main(){vec2 v=texture(uVel,vUv).xy*simTexel;
@@ -716,7 +788,7 @@ function resize(){dpr=Math.min(window.devicePixelRatio||1,2);
   canvas.width=w;canvas.height=h;fx.width=w;fx.height=h;aspect=w/h;
   const [sw,sh]=res(SIM_RES),[dw,dh]=res(DYE_RES);
   vel=dfbo(sw,sh);dye=dfbo(dw,dh);det=dfbo(dw,dh);div=fbo(sw,sh);curlF=fbo(sw,sh);pres=dfbo(sw,sh);
-  const [ww,wh]=res(WATER_RES);wat=dfbo(ww,wh);lightAlloc();cloudAlloc();wgrad=fbo(ww,wh);waterClear();
+  const [ww,wh]=res(WATER_RES);wat=dfbo(ww,wh);lightAlloc();cloudAlloc();inkA=null;inkAlloc();wgrad=fbo(ww,wh);waterClear();
   seed();}
 function seed(){const u=use('init',[dye.w.tx,dye.w.ty]);
   gl.uniform3fv(u.pal,palFlat);gl.uniform1f(u.seed,Math.random()*100);gl.uniform1f(u.aspect,aspect);
@@ -975,7 +1047,7 @@ function cloudFrame(dt){
 }
 
 /* ================= Water mode (lake) ================= */
-let mode='paint'; try{const m=localStorage.getItem('hf-mode');if(m==='water'||m==='wave'||m==='light'||m==='silk'||m==='cloud')mode=m;}catch(e){}
+let mode='paint'; try{const m=localStorage.getItem('hf-mode');if(m==='water'||m==='wave'||m==='light'||m==='silk'||m==='cloud'||m==='ink')mode=m;}catch(e){}
 let waterTime=0, wAcc=0, dropClock=0, glideClock=0; const gliders=[];
 const W_C=250, W_H=1/540, W_NK=.24, SUN=(()=>{const v=[.12,.82,.56],l=Math.hypot(...v);return v.map(x=>x/l);})();
 // strength budget: however hard and often the water is struck, it never gets rougher than ~3 plops at once
@@ -1240,6 +1312,50 @@ function waveFrame(dt){
   {const tx=Math.max(-.6,Math.min(.6,viewTilt[0])),ty=Math.max(-.6,Math.min(.6,viewTilt[1]));gl.uniform2f(u.viewT,tx,ty);
    const sx=SUN[0]-tx*.55,sy=SUN[1]-ty*.55,sz=SUN[2],l=Math.hypot(sx,sy,sz);gl.uniform3f(u.sunDir,sx/l,sy/l,sz/l);}
   blit(null);drawSpray();
+}
+/* ================= Ink mode: ink soaking into hanji ================= */
+// water spreads through the paper's fibres (porous flow, faster along fibres), carries the ink and drops it where it thins;
+// settled ink builds up where strokes overlap and slowly fades away
+const INKS={'먹':['#141416'],'선명':['#d81b3c','#1f4fd8','#00995a','#f29900','#7a1fc2','#008fa6'],
+  '차분':['#9a6a6e','#5b6b86','#6f8a72','#a68a5a','#7a647e','#6d7b7e'],'파스텔':['#f7b2c1','#a9c8f5','#b5e8c9','#fbd9a2','#d5c2f2','#a8e3e6']};
+const INK_STR={'먹':2.6,'선명':2.6,'차분':1.9,'파스텔':.95};
+let inkName='먹';try{const v=localStorage.getItem('hf-ink');if(INKS[v])inkName=v;}catch(e){}
+let inkA,inkS,inkK,inkSeed=Math.random()*50,inkTime=0,inkCycle=0,inkCyc=0,inkAmb=3,inkNext=0,inkSplats=0;
+const INK_RES=150;
+function inkAbs(i){const hex=INKS[inkName][((i%INKS[inkName].length)+INKS[inkName].length)%INKS[inkName].length],c=hex2rgb(hex);
+  const a=c.map(v=>-Math.log(Math.max(v,.04))),m=Math.max(...a,.01);return a.map(v=>v/m*INK_STR[inkName]);}
+function inkAlloc(){const [w,h]=res(INK_RES);inkA=dfbo(w,h);inkS=dfbo(w,h);inkK=fbo(w,h);inkClear();}
+function inkClear(){if(!inkA)return;const u=use('inkClear',[0,0]);for(const t of [inkA,inkS]){blit(t.w);t.swap();blit(t.w);t.swap();}
+  const p=use('inkPerm',[inkK.tx,inkK.ty]);gl.uniform1f(p.aspect,aspect);gl.uniform1f(p.seed,inkSeed);blit(inkK);}
+function inkSplat(x,y,r,water,a,k){if(inkSplats++>36)return;               // a few dozen per frame at most
+  const u=use('inkSplat',[inkA.r.tx,inkA.r.ty]);gl.uniform1i(u.uT,inkA.r.bind(0));gl.uniform2f(u.point,x,y);gl.uniform1f(u.aspect,aspect);
+  gl.uniform1f(u.radius,r*(aspect>1?aspect:1));gl.uniform1f(u.water,water);gl.uniform3f(u.pig,a[0]*k,a[1]*k,a[2]*k);blit(inkA.w);inkA.swap();}
+function inkDrop(x,y,ci,k){inkSplat(x,y,.0009*(.7+.6*k),1.2*k,inkAbs(ci),.42*k);}
+function inkStroke(x0,y0,x1,y1,ci,k){const d=Math.hypot((x1-x0)*aspect,y1-y0);if(d<1e-4||d>.3)return;
+  const n=Math.min(8,Math.ceil(d/.012)),a=inkAbs(ci),kk=k*Math.min(1,d/.012/n*1.1+.25);
+  for(let i=1;i<=n;i++){const t=i/n;inkSplat(x0+(x1-x0)*t,y0+(y1-y0)*t,.00045,.55*kk,a,.09*kk);}}
+const inkTips={};
+function inkFrame(dt){
+  if(!inkA)inkAlloc();
+  inkSplats=0;const sdt=Math.min(dt,1/30)*flow;inkTime+=sdt;
+  inkCyc+=dt;if(inkCyc>6){inkCyc=0;inkCycle++;}
+  // hands: every moving fingertip draws with its own ink
+  for(const s of queue.splice(0)){if(flow<.3||s.vOnly||!s.hand||s.vx==null)continue;
+    const key='f'+(s.fi||0),pv=inkTips[key],now=performance.now();
+    if(pv&&now-pv.t<160)inkStroke(pv.x,pv.y,s.x,s.y,(s.fi||0)+inkCycle,s.set>.6?1:.55);
+    inkTips[key]={x:s.x,y:s.y,t:now};}
+  // now and then a drop falls by itself
+  inkAmb-=sdt;if(inkAmb<0){inkAmb=7+Math.random()*7;inkDrop(.15+.7*Math.random(),.12+.76*Math.random(),inkNext++,.45+.3*Math.random());}
+  if(sdt>0){const it=Math.max(1,Math.min(40,Math.round(sdt*2200))),h=sdt/it,fade=Math.exp(-h/12);
+    let tx=0,ty=0;if(gyroOn){tx=viewTilt[0]*2.4;ty=viewTilt[1]*2.4;const m=Math.hypot(tx,ty);if(m>1){tx/=m;ty/=m;}}
+    for(let k=0;k<it;k++){
+      let u=use('inkSettle',[inkS.r.tx,inkS.r.ty]);gl.uniform1i(u.uA,inkA.r.bind(0));gl.uniform1i(u.uS,inkS.r.bind(1));
+      gl.uniform1f(u.fade,fade);gl.uniform1f(u.dep0,.0008);gl.uniform1f(u.dep1,.012);blit(inkS.w);inkS.swap();
+      u=use('inkStep',[inkA.r.tx,inkA.r.ty]);gl.uniform1i(u.uA,inkA.r.bind(0));gl.uniform1i(u.uK,inkK.bind(1));gl.uniform2f(u.tilt,tx,ty);
+      gl.uniform1f(u.dw,.12);gl.uniform1f(u.gt,.08);gl.uniform1f(u.pk,.80);gl.uniform1f(u.dp,.025);gl.uniform1f(u.ev0,.00009);gl.uniform1f(u.ev1,.00036);
+      gl.uniform1f(u.dep0,.0008);gl.uniform1f(u.dep1,.012);blit(inkA.w);inkA.swap();}}
+  const u=use('inkShow',[0,0]);gl.uniform1i(u.uS,inkS.r.bind(0));gl.uniform1i(u.uA,inkA.r.bind(1));gl.uniform1f(u.aspect,aspect);
+  gl.uniform2f(u.simTexel,inkS.r.tx,inkS.r.ty);blit(null);
 }
 let WATER_AMP=1, HAND_K=.75;
 /* ---- 비: raindrops on the lake ---- */
@@ -1510,10 +1626,12 @@ const pointers=new Map();
 canvas.addEventListener('pointerdown',e=>{if(document.body.classList.contains('menu')){openMenu(false);return;}pointers.set(e.pointerId,{x:e.clientX/innerWidth,y:1-e.clientY/innerHeight,t:e.timeStamp,c:pickColor(pointers.size+(Math.random()*6|0))});wake();
   if(mode==='water'&&dipMode)dipStart('t'+e.pointerId,e.clientX/innerWidth,1-e.clientY/innerHeight,.005);
   else if(mode==='water'){addPlop(e.clientX/innerWidth,1-e.clientY/innerHeight,1);wakeEnd('t'+e.pointerId);}
-  else if(mode==='wave'&&wvH&&flow>.3)wavePoke(e.clientX/innerWidth,1-e.clientY/innerHeight,.5);});   // each finger that lands = one 퐁당
+  else if(mode==='wave'&&wvH&&flow>.3)wavePoke(e.clientX/innerWidth,1-e.clientY/innerHeight,.5);
+  else if(mode==='ink'&&flow>.3){const p=pointers.get(e.pointerId);p.ink=inkNext++;if(inkA)inkDrop(p.x,p.y,p.ink,1);}});   // each finger that lands = one 퐁당
 canvas.addEventListener('pointermove',e=>{const p=pointers.get(e.pointerId);if(!p)return;
   const x=e.clientX/innerWidth,y=1-e.clientY/innerHeight;const dtR=Math.min(Math.max((e.timeStamp-p.t)/1000,.008),.1);feelFinger(Math.hypot((x-p.x)*aspect,y-p.y)/dtR);
-  if(mode==='water'&&!dipMode)wakeStep('t'+e.pointerId,x,y,Math.hypot((x-p.x)*aspect,y-p.y)/dtR);
+  if(mode==='ink'){if(inkA&&flow>.3)inkStroke(p.x,p.y,x,y,p.ink||0,1);}
+  else if(mode==='water'&&!dipMode)wakeStep('t'+e.pointerId,x,y,Math.hypot((x-p.x)*aspect,y-p.y)/dtR);
   else queue.push({x,y,vx:(x-p.x)/dtR,vy:(y-p.y)/dtR,set:.85,c:p.c,r:.0032,s:.9});p.x=x;p.y=y;p.t=e.timeStamp;
   if(dipMode)dipMove('t'+e.pointerId,x,y);});
 ['pointerup','pointercancel','pointerleave'].forEach(t=>canvas.addEventListener(t,e=>{pointers.delete(e.pointerId);dipEnd('t'+e.pointerId);wakeEnd('t'+e.pointerId);}));
@@ -1557,7 +1675,7 @@ function onHands(res){
       const isIndex=ti===8, strong=isIndex?1:.55;
       const dtR=Math.min(Math.max((now-prev.t)/1000,.016),.12);
       feelFinger(Math.hypot(dx*aspect,dy)/dtR*(isIndex?1:.8));
-      queue.push({x:sm.x,y:sm.y,vx:dx/dtR,vy:dy/dtR,set:isIndex?.85:.45,c:pickColor(j+h*2),r:isIndex?.0034:.0019,s:Math.min(1,.12+sp*40)*strong,t:isIndex?.7:.4});
+      queue.push({x:sm.x,y:sm.y,vx:dx/dtR,vy:dy/dtR,fi:h*5+j,set:isIndex?.85:.45,c:pickColor(j+h*2),r:isIndex?.0034:.0019,s:Math.min(1,.12+sp*40)*strong,t:isIndex?.7:.4});
     });
     // pinch → vortex around pinch point
     const pk='p'+h, mid={x:(lm[4].x+lm[8].x)/2,y:1-(lm[4].y+lm[8].y)/2};
@@ -1647,7 +1765,7 @@ function frame(now){
   resize();
   flow+=(flowTarget-flow)*Math.min(1,dt*(flowTarget>flow?2.5:6));
   updateGyro(dt);updateTimeScale(dt);
-  if(mode==='water'){ waterFrame(dt); } else if(mode==='wave'){ waveFrame(dt); } else if(mode==='light'){ lightFrame(dt); } else if(mode==='silk'){ queue.length=0; silkFrame(dt); } else if(mode==='cloud'){ cloudFrame(dt); } else {
+  if(mode==='water'){ waterFrame(dt); } else if(mode==='wave'){ waveFrame(dt); } else if(mode==='light'){ lightFrame(dt); } else if(mode==='silk'){ queue.length=0; silkFrame(dt); } else if(mode==='cloud'){ cloudFrame(dt); } else if(mode==='ink'){ inkFrame(dt); } else {
   // ambient life: drifting color drops keep the canvas evolving
   ambientClock+=dt*flow*Math.max(timeScale,.15);
   if(ambientClock>.6){ambientClock=0;const x=Math.random(),y=Math.random(),a=Math.random()*6.28;
@@ -1696,21 +1814,22 @@ speedEl.value=speedVal;applySpeed(speedVal);speedEl.addEventListener('input',e=>
 const seedBtn=document.getElementById('seedBtn'),hintTxt=document.getElementById('hintTxt');
 const HINTS={paint:hintTxt.innerHTML,
   dip:'<b>손 담그기</b> · 터치: 오래 누를수록 깊게, 톡 누르면 살짝<br>손: 손바닥을 화면 쪽으로 내밀어 오래 둘수록 깊게, 떼면 물이 되솟음',
+  ink:'<b>터치·손가락</b> 한지에 먹물이 스며듦 · 겹칠수록 짙어짐<br>먹물은 천천히 옅어져 사라짐 · <b>흔들기 켜면</b> 기울인 쪽으로 번짐',
   cloud:'<b>검지</b> 지나간 구름이 부드럽게 갈라짐 · 빠르게 움직이면 흩어짐<br><b>집기</b> 회전 흐름 · <b>손 펼치기</b> 넓게 확산 · <b>주먹</b> 천천히 안정',
   silk:'<b>검지</b> 실크가 따라 흐름 · 빠르게 움직이면 넓게 펼쳐짐<br><b>집기</b> 부드러운 소용돌이 · <b>손 펼치기</b> 활짝 펼침 · <b>주먹</b> 서서히 멈춤',
   light:'<b>손가락</b> 빛의 흐름 밀기 · <b>검지만 펴기</b> 가리킨 방향으로 빛줄기<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 멈춤',
   wave:'<b>폰 기울이기</b> 물이 쏠려 벽에 부딪힘 · <b>흔들기</b> 출렁임<br><b>터치·손</b> 물 밀기 · <b>톡</b> 물결 · <b>주먹</b> 멈춤',
   water:'<b>톡 터치</b> 퐁당 · <b>손가락 구부리기</b> 구부린 손끝마다 퐁당<br><b>검지 하나</b> 손끝을 물에 대고 움직이기<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹 쥐고 있기</b> 물 멈춤'};
-function setMode(m){mode=m;document.body.classList.toggle('water',m==='water');document.body.classList.toggle('wave',m==='wave');document.body.classList.toggle('light',m==='light');document.body.classList.toggle('silk',m==='silk');document.body.classList.toggle('cloud',m==='cloud');
+function setMode(m){mode=m;document.body.classList.toggle('water',m==='water');document.body.classList.toggle('wave',m==='wave');document.body.classList.toggle('light',m==='light');document.body.classList.toggle('silk',m==='silk');document.body.classList.toggle('cloud',m==='cloud');document.body.classList.toggle('ink',m==='ink');
   if(m==='cloud'&&vel){const u=use('waterClear',[0,0]);blit(vel.w);vel.swap();blit(vel.w);vel.swap();}   // start calm: no leftover swirls from other modes
   document.querySelectorAll('#modeSeg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.m===m));
-  seedBtn.textContent=(m==='water'||m==='wave')?'잔잔하게':'새 캔버스';hintTxt.innerHTML=(m==='water'&&dipMode)?HINTS.dip:HINTS[m];
+  seedBtn.textContent=(m==='water'||m==='wave')?'잔잔하게':m==='ink'?'새 한지':'새 캔버스';hintTxt.innerHTML=(m==='water'&&dipMode)?HINTS.dip:HINTS[m];
   gliders.length=0;queue.length=0;drops.length=0;try{localStorage.setItem('hf-mode',m);}catch(e){}
   if(m==='wave'&&!gyroOn)setGyro(true);                 // the aquarium lives on tilt and shake
   if(curTrack)switchTrack();}
 document.querySelectorAll('#modeSeg button').forEach(b=>b.onclick=()=>setMode(b.dataset.m));
 setMode(mode);
-seedBtn.onclick=()=>{if(mode==='wave'){waveInit();}else if(mode==='water'){waterClear();gliders.length=0;}else if(mode==='light'){lightSeedAll();}else if(mode==='silk'){silkInit();}else if(mode==='cloud'){cloudReset();}else seed();drops.length=0;};
+seedBtn.onclick=()=>{if(mode==='ink'){inkSeed=Math.random()*50;inkClear();}else if(mode==='wave'){waveInit();}else if(mode==='water'){waterClear();gliders.length=0;}else if(mode==='light'){lightSeedAll();}else if(mode==='silk'){silkInit();}else if(mode==='cloud'){cloudReset();}else seed();drops.length=0;};
 const lightWrap=document.getElementById('lights');
 function renderLights(){lightWrap.innerHTML='';for(const name in LIGHTS){const b=document.createElement('button');b.className='chip';
   b.setAttribute('aria-pressed',name===lightName);b.innerHTML='<i>'+LIGHTS[name].map(c=>`<span style="background:${c}"></span>`).join('')+'</i>'+name;
@@ -1727,6 +1846,12 @@ function renderClouds(){cloudWrap.innerHTML='';for(const name in CLOUDS){const s
   b.setAttribute('aria-pressed',name===cloudName);b.innerHTML='<i>'+[st.top,st.shd,st.lit,st.bot].map(c=>`<span style="background:${c}"></span>`).join('')+'</i>'+name;
   b.onclick=()=>{cloudName=name;try{localStorage.setItem('hf-cloud',name);}catch(e){}renderClouds();};cloudWrap.appendChild(b);}}
 renderClouds();
+const inkWrap=document.getElementById('inks');
+function renderInks(){inkWrap.innerHTML='';for(const name in INKS){const b=document.createElement('button');b.className='chip';
+  b.setAttribute('aria-pressed',name===inkName);const cs=INKS[name].length>1?INKS[name].slice(0,4):['#141416','#55565a','#9a9b9e','#d0cfca'];
+  b.innerHTML='<i>'+cs.map(c=>`<span style="background:${c}"></span>`).join('')+'</i>'+name;
+  b.onclick=()=>{inkName=name;try{localStorage.setItem('hf-ink',name);}catch(e){}renderInks();};inkWrap.appendChild(b);}}
+renderInks();
 const dipBtn=document.getElementById('dipBtn');
 function setDip(on){dipMode=on;dipBtn.textContent=on?'손 담그기 끄기':'손 담그기 켜기';dipBtn.classList.toggle('on',on);
   for(const id of dips.keys())dipEnd(id);try{localStorage.setItem('hf-dip',on?'1':'0');}catch(e){}

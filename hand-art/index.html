@@ -109,7 +109,7 @@ body:not(.water) #floors,body:not(.water) #dipRow,body:not(.water) #rainRow{disp
     <label class="mfx" id="mfxRow"><span><b>음악 인터랙션</b><small>Music Interaction</small></span>
       <input type="checkbox" id="mfxSw" role="switch" aria-label="음악 인터랙션 Music Interaction"><i aria-hidden="true"></i></label>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 51</p>
+    <p class="hint" id="ver">버전 52</p>
   </div>
 </div>
 
@@ -340,10 +340,10 @@ void main(){vec2 uv=vUv;vec2 p=vec2(uv.x*aspect,uv.y);
  ab*=crisp;
  float lv=d*2.6+(fbm(p*14.)-.5)*.5,fr=fract(lv);                       /* each wash dried with its own faint rim */
  ab+=hue*smoothstep(.0,.05,fr)*(1.-smoothstep(.05,.16,fr))*smoothstep(.05,.2,d)*(1.-smoothstep(1.2,2.,d))*.10;
- ab+=hue*veins*edge*max(.5,halo*1.2);
+ ab+=hue*veins*edge*max(.35,halo*.9);
  ab*=mix(1.,.72+.56*vn(p*430.),.55);                                 /* pigment caught in the paper's grain */
  ab*=1.+.55*smoothstep(.05,.6,d)*(fbm(p*9.+fbm(p*3.)*2.)-.5)+.25*(fbm(p*31.)-.5);   /* mottled clouds inside the stain */
- ab=3.2*(1.-exp(-ab/3.2));
+ ab=5.*(1.-exp(-ab/5.));                                              /* deep cores can go almost black */
  float cr;vec3 pap=hanji(p,cr);
  ab*=1.+.18*cr*smoothstep(.02,.2,d);                                   /* ink pools a little in the deep creases */
  vec3 col=pap*exp(-ab);
@@ -1342,21 +1342,41 @@ function waveFrame(dt){
 const INKS={'먹':['#141416'],'선명':['#d81b3c','#1f4fd8','#00995a','#f29900','#7a1fc2','#008fa6'],
   '차분':['#9a6a6e','#5b6b86','#6f8a72','#a68a5a','#7a647e','#6d7b7e'],'파스텔':['#f7b2c1','#a9c8f5','#b5e8c9','#fbd9a2','#d5c2f2','#a8e3e6']};
 const INK_STR={'먹':2.6,'선명':2.6,'차분':1.9,'파스텔':.95};
-let inkName='먹';try{const v=localStorage.getItem('hf-ink');if(INKS[v])inkName=v;}catch(e){}
+let inkName='랜덤';try{const v=localStorage.getItem('hf-ink');if(INKS[v]||v==='랜덤')inkName=v;}catch(e){}
+// 랜덤: the computer paints on its own (a wandering brush, now and then a drop), changing ink every so often — join in any time
+let inkRandPal='먹',inkRandT=0;
+const inkPal=()=>inkName==='랜덤'?inkRandPal:inkName;
+const inkBot={x:.5,y:.5,a:0,down:false,t:1.2,ci:0,k:1,rw:1,ph:Math.random()*9,lx:.5,ly:.5};
+function inkBotStep(dt){const b=inkBot;b.t-=dt;b.ph+=dt;
+  inkRandT-=dt;if(inkRandT<0){inkRandT=28+Math.random()*24;const r=Math.random();inkRandPal=r<.45?'먹':r<.65?'선명':r<.85?'차분':'파스텔';}
+  if(b.down){
+    const spd=(.10+.16*(.5+.5*Math.sin(b.ph*1.3)))*(.7+.3*Math.sin(b.ph*3.1));
+    b.a+=(Math.sin(b.ph*.9)*1.4+Math.sin(b.ph*2.3+1.)*.8+(Math.random()-.5)*1.5)*dt;   // a calm, wandering hand
+    const m=.14,cx=b.x*aspect,cy=b.y;                                                   // turn back before the edge of the paper
+    if(cx<m*aspect||cx>(1-m)*aspect||cy<m||cy>1-m){const ta=Math.atan2(.5-cy,(.5-b.x)*aspect);let da=ta-b.a;da=Math.atan2(Math.sin(da),Math.cos(da));b.a+=da*Math.min(1,dt*4);}
+    const nx=b.x+Math.cos(b.a)*spd*dt/aspect,ny=b.y+Math.sin(b.a)*spd*dt;
+    inkStroke(b.x,b.y,nx,ny,b.ci,b.k*(.75+.35*Math.sin(b.ph*2.)),b.rw*(.8+.4*Math.sin(b.ph*1.7+2.)));
+    b.lx=b.x;b.ly=b.y;b.x=nx;b.y=ny;
+    if(b.t<0){b.down=false;b.t=.8+Math.random()*2.2;}}
+  else if(b.t<0){                                                                      // put the brush down again: often back into the ink, to deepen it
+    if(Math.random()<.55){b.x=Math.min(.88,Math.max(.12,b.lx+(Math.random()-.5)*.25));b.y=Math.min(.88,Math.max(.12,b.ly+(Math.random()-.5)*.2));}
+    else{b.x=.15+.7*Math.random();b.y=.12+.76*Math.random();}
+    b.a=Math.random()*6.283;b.down=true;b.t=1.5+Math.random()*3.5;b.ci=inkNext++;b.k=.7+.5*Math.random();b.rw=.7+.9*Math.random();
+    if(Math.random()<.45)inkDrop(b.x,b.y,b.ci,.6+.5*Math.random());}}
 let inkA,inkS,inkK,inkSeed=Math.random()*50,inkTime=0,inkCycle=0,inkCyc=0,inkAmb=3,inkNext=0,inkSplats=0;
 const INK_RES=150;
-function inkAbs(i){const hex=INKS[inkName][((i%INKS[inkName].length)+INKS[inkName].length)%INKS[inkName].length],c=hex2rgb(hex);
-  const a=c.map(v=>-Math.log(Math.max(v,.04))),m=Math.max(...a,.01);return a.map(v=>v/m*INK_STR[inkName]);}
+function inkAbs(i){const P=inkPal(),L=INKS[P],hex=L[((i%L.length)+L.length)%L.length],c=hex2rgb(hex);
+  const a=c.map(v=>-Math.log(Math.max(v,.04))),m=Math.max(...a,.01);return a.map(v=>v/m*INK_STR[P]);}
 function inkAlloc(){const [w,h]=res(INK_RES);inkA=dfbo(w,h);inkS=dfbo(w,h);inkK=fbo(w,h);inkClear();}
 function inkClear(){if(!inkA)return;const u=use('inkClear',[0,0]);for(const t of [inkA,inkS]){blit(t.w);t.swap();blit(t.w);t.swap();}
   const p=use('inkPerm',[inkK.tx,inkK.ty]);gl.uniform1f(p.aspect,aspect);gl.uniform1f(p.seed,inkSeed);blit(inkK);}
 function inkSplat(x,y,r,water,a,k){if(inkSplats++>36)return;               // a few dozen per frame at most
   const u=use('inkSplat',[inkA.r.tx,inkA.r.ty]);gl.uniform1i(u.uT,inkA.r.bind(0));gl.uniform2f(u.point,x,y);gl.uniform1f(u.aspect,aspect);
   gl.uniform1f(u.radius,r*(aspect>1?aspect:1));gl.uniform1f(u.water,water);gl.uniform3f(u.pig,a[0]*k,a[1]*k,a[2]*k);blit(inkA.w);inkA.swap();}
-function inkDrop(x,y,ci,k){inkSplat(x,y,.0009*(.7+.6*k),1.2*k,inkAbs(ci),.42*k);}
-function inkStroke(x0,y0,x1,y1,ci,k){const d=Math.hypot((x1-x0)*aspect,y1-y0);if(d<1e-4||d>.3)return;
+function inkDrop(x,y,ci,k){inkSplat(x,y,.0009*(.7+.6*k),1.2*k,inkAbs(ci),1.1*k);}
+function inkStroke(x0,y0,x1,y1,ci,k,rw){rw=rw||1;const d=Math.hypot((x1-x0)*aspect,y1-y0);if(d<1e-4||d>.3)return;
   const n=Math.min(8,Math.ceil(d/.012)),a=inkAbs(ci),kk=k*Math.min(1,d/.012/n*1.1+.25);
-  for(let i=1;i<=n;i++){const t=i/n;inkSplat(x0+(x1-x0)*t,y0+(y1-y0)*t,.00045,.55*kk,a,.09*kk);}}
+  for(let i=1;i<=n;i++){const t=i/n;inkSplat(x0+(x1-x0)*t,y0+(y1-y0)*t,.00045*rw,.55*kk*Math.sqrt(rw),a,.25*kk);}}
 const inkTips={};
 function inkFrame(dt){
   if(!inkA)inkAlloc();
@@ -1368,14 +1388,15 @@ function inkFrame(dt){
     if(pv&&now-pv.t<160)inkStroke(pv.x,pv.y,s.x,s.y,(s.fi||0)+inkCycle,s.set>.6?1:.55);
     inkTips[key]={x:s.x,y:s.y,t:now};}
   // now and then a drop falls by itself
-  inkAmb-=sdt;if(inkAmb<0){inkAmb=7+Math.random()*7;inkDrop(.15+.7*Math.random(),.12+.76*Math.random(),inkNext++,.45+.3*Math.random());}
-  if(sdt>0){const it=Math.max(1,Math.min(40,Math.round(sdt*2200))),h=sdt/it,fade=Math.exp(-h/24);
+  if(inkName==='랜덤'&&sdt>0)inkBotStep(sdt);
+  else{inkAmb-=sdt;}if(inkName!=='랜덤'&&inkAmb<0){inkAmb=7+Math.random()*7;inkDrop(.15+.7*Math.random(),.12+.76*Math.random(),inkNext++,.45+.3*Math.random());}
+  if(sdt>0){const it=Math.max(1,Math.min(40,Math.round(sdt*2200))),h=sdt/it,fade=Math.exp(-h/48);
     let tx=0,ty=0;if(gyroOn){tx=viewTilt[0]*2.4;ty=viewTilt[1]*2.4;const m=Math.hypot(tx,ty);if(m>1){tx/=m;ty/=m;}}
     for(let k=0;k<it;k++){
       let u=use('inkSettle',[inkS.r.tx,inkS.r.ty]);gl.uniform1i(u.uA,inkA.r.bind(0));gl.uniform1i(u.uS,inkS.r.bind(1));
       gl.uniform1f(u.fade,fade);gl.uniform1f(u.dep0,.0008);gl.uniform1f(u.dep1,.012);blit(inkS.w);inkS.swap();
       u=use('inkStep',[inkA.r.tx,inkA.r.ty]);gl.uniform1i(u.uA,inkA.r.bind(0));gl.uniform1i(u.uK,inkK.bind(1));gl.uniform2f(u.tilt,tx,ty);
-      gl.uniform1f(u.dw,.12);gl.uniform1f(u.gt,.08);gl.uniform1f(u.pk,.80);gl.uniform1f(u.dp,.025);gl.uniform1f(u.ev0,.00009);gl.uniform1f(u.ev1,.00036);
+      gl.uniform1f(u.dw,.12);gl.uniform1f(u.gt,.08);gl.uniform1f(u.pk,.62);gl.uniform1f(u.dp,.025);gl.uniform1f(u.ev0,.00009);gl.uniform1f(u.ev1,.00036);
       gl.uniform1f(u.dep0,.0008);gl.uniform1f(u.dep1,.012);blit(inkA.w);inkA.swap();}}
   const u=use('inkShow',[0,0]);gl.uniform1i(u.uS,inkS.r.bind(0));gl.uniform1i(u.uA,inkA.r.bind(1));gl.uniform1f(u.aspect,aspect);
   gl.uniform2f(u.simTexel,inkS.r.tx,inkS.r.ty);blit(null);
@@ -1837,7 +1858,7 @@ speedEl.value=speedVal;applySpeed(speedVal);speedEl.addEventListener('input',e=>
 const seedBtn=document.getElementById('seedBtn'),hintTxt=document.getElementById('hintTxt');
 const HINTS={paint:hintTxt.innerHTML,
   dip:'<b>손 담그기</b> · 터치: 오래 누를수록 깊게, 톡 누르면 살짝<br>손: 손바닥을 화면 쪽으로 내밀어 오래 둘수록 깊게, 떼면 물이 되솟음',
-  ink:'<b>터치·손가락</b> 한지에 먹물이 스며듦 · 겹칠수록 짙어짐<br>먹물은 천천히 옅어져 사라짐 · <b>흔들기 켜면</b> 기울인 쪽으로 번짐',
+  ink:'<b>랜덤</b> 붓이 스스로 그림 — 언제든 함께 그리기<br><b>터치·손가락</b> 한지에 먹물이 스며듦 · 겹칠수록 짙어짐<br>먹물은 천천히 옅어져 사라짐 · <b>흔들기 켜면</b> 기울인 쪽으로 번짐',
   cloud:'<b>검지</b> 지나간 구름이 부드럽게 갈라짐 · 빠르게 움직이면 흩어짐<br><b>집기</b> 회전 흐름 · <b>손 펼치기</b> 넓게 확산 · <b>주먹</b> 천천히 안정',
   silk:'<b>검지</b> 실크가 따라 흐름 · 빠르게 움직이면 넓게 펼쳐짐<br><b>집기</b> 부드러운 소용돌이 · <b>손 펼치기</b> 활짝 펼침 · <b>주먹</b> 서서히 멈춤',
   light:'<b>손가락</b> 빛의 흐름 밀기 · <b>검지만 펴기</b> 가리킨 방향으로 빛줄기<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 멈춤',
@@ -1870,8 +1891,8 @@ function renderClouds(){cloudWrap.innerHTML='';for(const name in CLOUDS){const s
   b.onclick=()=>{cloudName=name;try{localStorage.setItem('hf-cloud',name);}catch(e){}renderClouds();};cloudWrap.appendChild(b);}}
 renderClouds();
 const inkWrap=document.getElementById('inks');
-function renderInks(){inkWrap.innerHTML='';for(const name in INKS){const b=document.createElement('button');b.className='chip';
-  b.setAttribute('aria-pressed',name===inkName);const cs=INKS[name].length>1?INKS[name].slice(0,4):['#141416','#55565a','#9a9b9e','#d0cfca'];
+function renderInks(){inkWrap.innerHTML='';for(const name of ['랜덤',...Object.keys(INKS)]){const b=document.createElement('button');b.className='chip';
+  b.setAttribute('aria-pressed',name===inkName);const cs=name==='랜덤'?['#141416','#d81b3c','#5b6b86','#a9c8f5']:INKS[name].length>1?INKS[name].slice(0,4):['#141416','#55565a','#9a9b9e','#d0cfca'];
   b.innerHTML='<i>'+cs.map(c=>`<span style="background:${c}"></span>`).join('')+'</i>'+name;
   b.onclick=()=>{inkName=name;try{localStorage.setItem('hf-ink',name);}catch(e){}renderInks();};inkWrap.appendChild(b);}}
 renderInks();

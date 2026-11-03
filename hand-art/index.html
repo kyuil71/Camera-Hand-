@@ -53,7 +53,7 @@ body.menu .dock{transform:translate(-50%,0)}
 .seg::-webkit-scrollbar{display:none}
 .seg button{flex:1 0 auto;padding:0 10px;min-height:42px;border:0;border-radius:11px;background:transparent;color:var(--mute);font:inherit;font-size:16px;font-weight:600}
 .seg button[aria-pressed=true]{background:var(--ink);color:#101826}
-body.water #palettes,body.light #palettes,body.silk #palettes,body.cloud #palettes{display:none}
+body.water #palettes,body.wave #palettes,body.light #palettes,body.silk #palettes,body.cloud #palettes{display:none}
 body:not(.cloud) #clouds{display:none}
 body:not(.silk) #silks{display:none}
 body:not(.light) #lights{display:none}
@@ -83,7 +83,7 @@ body:not(.water) #floors,body:not(.water) #dipRow,body:not(.water) #rainRow{disp
 <div class="dock" id="sheet">
   <div class="panel">
     <div class="head" id="sheetHead"><span class="bar"></span><div id="status">손 인식 꺼짐 · 화면을 문질러 보세요</div></div>
-    <div class="row seg" id="modeSeg"><button data-m="paint">Pigment</button><button data-m="water">Ripple</button><button data-m="light">Aurora</button><button data-m="silk">Silk</button><button data-m="cloud">Cloud</button></div>
+    <div class="row seg" id="modeSeg"><button data-m="paint">Pigment</button><button data-m="water">Ripple</button><button data-m="wave">Wave</button><button data-m="light">Aurora</button><button data-m="silk">Silk</button><button data-m="cloud">Cloud</button></div>
     <div class="speed"><span>흐름 속도</span><input type="range" id="speed" min="0" max="100" step="1"><b id="speedVal"></b></div>
     <div class="row chips" id="palettes"></div>
     <div class="row chips" id="lights"></div>
@@ -106,7 +106,7 @@ body:not(.water) #floors,body:not(.water) #dipRow,body:not(.water) #rainRow{disp
     <label class="mfx" id="mfxRow"><span><b>음악 인터랙션</b><small>Music Interaction</small></span>
       <input type="checkbox" id="mfxSw" role="switch" aria-label="음악 인터랙션 Music Interaction"><i aria-hidden="true"></i></label>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 45</p>
+    <p class="hint" id="ver">버전 46</p>
   </div>
 </div>
 
@@ -371,6 +371,7 @@ waterStep: H+`uniform sampler2D uT;uniform float c2,damp,w2,hs,aspect;uniform ve
 void main(){vec4 s=texture(uT,vUv);float hC=s.x,v=s.y;
 float lap=texture(uT,vL).x+texture(uT,vR).x+texture(uT,vT).x+texture(uT,vB).x-4.*hC;
 v+=(c2*lap-w2*hC+tilt.x*(vUv.x-.5)*aspect+tilt.y*(vUv.y-.5))*hs;
+v+=.025*(texture(uT,vL).y+texture(uT,vR).y+texture(uT,vT).y+texture(uT,vB).y-4.*v);   /* grid-scale noise dies out, real waves stay */
 v*=damp;hC+=v*hs;
 o=vec4(hC,v,0.,1.);}`,
 waterPress: H+`uniform sampler2D uT;uniform float aspect,radius,depth,k;uniform vec2 point;
@@ -465,6 +466,7 @@ vec3 sky(vec3 R,float t){
 void main(){
  vec2 uv=vUv;vec2 p=vec2(uv.x*aspect,uv.y);float t=time;
  vec2 gs=texture(uH,uv).xy/simTexel.y*nk;
+ {float m=length(gs);if(m>.6)gs*=(.6+.45*tanh((m-.6)/.45))/m;}      /* slopes never steeper than ~1: the floor always shows through */
  float gk=min(1.,gustK(p,t)+rough),e=.0015;              /* rain roughens the whole surface */
  float s0=swellH(p,t)+ripH(p,t,gk);
  vec2 ga=vec2(swellH(p+vec2(e,0.),t)+ripH(p+vec2(e,0.),t,gk)-s0,swellH(p+vec2(0.,e),t)+ripH(p+vec2(0.,e),t,gk)-s0)/e;
@@ -482,14 +484,14 @@ void main(){
  else if(floorType<1.5)bc=vec3(.075,.088,.098)*(.9+.2*vn(hit*2.5));     // dark smoked glass
  else if(floorType>2.5)bc=tiles(hit);                                    // dark gray tiles
  else bc=vec3(.030,.034,.038)*(.85+.3*vn(hit*2.5));                    // black glass (faint pattern shows through)
- vec2 lq=hit-sunDir.xy/sunDir.z*depth*.6+g*depth*1.2;
+ vec2 lq=hit-sunDir.xy/sunDir.z*depth*.6+g*min(1.,.35/max(length(g),1e-4))*depth*1.2;   /* rough water bends the light web, never scrambles it */
  mat2 r1=mat2(.80,.60,-.60,.80),r2=mat2(.34,-.94,.94,.34);
  float c1=caus(r1*lq*8.,t*.8),c2=caus(r2*lq*12.5+vec2(3.1,1.7),t*1.0);
  float cs=(c1+c2)*.5;cs=cs*cs*1.9+cs*.18;
  if(floorType>1.5)cs*=floorType<2.5?.5:.45;                             // black glass / tiles: caustics softer                                                // black glass: caustics 50% weaker
  vec2 huv=vec2(hit.x/aspect,hit.y);
  float lap2=texture(uH,huv).z;
- cs*=1.+clamp(-lap2*nk*900.,-.85,3.);
+ cs*=1.+clamp(-lap2*nk*900.,-.55,2.);
  vec3 lit=bc*sh*(.52+2.6*cs);
  vec3 absorb=vec3(1.05,.26,.19);float path=tt+depth*1.1;
  if(floorType>.5){
@@ -506,10 +508,85 @@ void main(){
  // whitecaps only where a wave is steep AND still rising (e.g. where it piles against a wall) — no fixed strip
  float fn=vn(p*90.+vec2(t*2.,-t*1.3))*.55+vn(p*260.-t*3.)*.45;
  float rise=texture(uS,uv).y;
- float foam=smoothstep(.28,.6,length(gs))*smoothstep(.05,.3,rise)*smoothstep(.35,.75,fn);
+ float foam=smoothstep(.45,.85,length(gs))*smoothstep(.05,.3,rise)*smoothstep(.35,.75,fn);
  col=mix(col,vec3(.96,.98,1.),clamp(foam,0.,1.)*.8);
  col+=vec3(.92,.97,1.)*min(spark,1.)*.55;
- o=vec4(clamp(col,0.,1.),1.);}`
+ o=vec4(clamp(col,0.,1.),1.);}`,
+waveRender: H+`uniform sampler2D uW;uniform vec2 simTexel;uniform float aspect,time;uniform vec3 sunDir;uniform vec2 viewT;
+vec2 h2(vec2 p){return vec2(hash(p),hash(p+19.19));}
+float fbm4(vec2 p){float s=0.,a=.5;for(int i=0;i<4;i++){s+=a*vn(p);p=p*2.07+13.7;a*=.5;}return s;}
+float caus(vec2 q,float t){
+ q+=.55*vec2(vn(q*.55+t*.11),vn(q*.55+5.2-t*.09))+.18*vec2(vn(q*1.7-t*.2),vn(q*1.7+9.1+t*.17));
+ vec2 ip=floor(q),fp=q-ip;float d1=8.,d2=8.;
+ for(int y=-1;y<=1;y++)for(int x=-1;x<=1;x++){vec2 o2=vec2(x,y);vec2 h=h2(ip+o2);
+  vec2 r=o2+.5+.2*sin(t*.7+6.2831*h)-fp;float d=dot(r,r);if(d<d1){d2=d1;d1=d;}else if(d<d2)d2=d;}
+ float e=sqrt(d2)-sqrt(d1);float w=.30+.25*vn(q*.9+3.3);return pow(1.-smoothstep(0.,w,e),2.4)*(.55+.7*vn(q*.6-t*.07));}
+vec3 sky(vec3 R,float t){
+ float h=clamp(R.z,0.,1.);
+ vec3 c=mix(vec3(.80,.89,.96),vec3(.20,.47,.82),pow(h,.6));
+ vec2 cp=R.xy/(R.z+.25)+vec2(t*.012,t*.004);
+ float cl=smoothstep(.5,.85,fbm4(cp*.8));
+ c=mix(c,vec3(.97,.98,.99),cl*.8);
+ float sd=max(dot(R,sunDir),0.);
+ c+=vec3(1.,.95,.84)*(pow(sd,900.)*40.+pow(sd,60.)*.3)*(1.-cl*.8);
+ return c;}
+float Hh(vec2 uv){return texture(uW,uv).x;}
+float rip(vec2 p,float t){return .00030*(sin(dot(p,vec2(.93,.37))*71.-t*3.1)+sin(dot(p,vec2(-.41,.91))*83.-t*3.4+1.7)
+ +.8*sin(dot(p,vec2(.12,-.99))*97.-t*3.8+4.1)+.6*sin(dot(p,vec2(-.85,-.53))*121.-t*4.2+2.6));}
+vec3 sandCol(vec2 q,float wet){                     // beach sand: warm grains, wind ripple marks, darker when wet
+ float n=fbm4(q*2.6);
+ vec3 c=mix(vec3(.93,.85,.69),vec3(.85,.75,.58),smoothstep(.3,.7,vn(q*5.+3.)));
+ float ph=dot(q,vec2(.28,.96))*88.+n*10.;
+ c*=.95+.065*cos(ph)*smoothstep(.2,.6,vn(q*3.1+7.));
+ float g=vn(q*700.);c*=.90+.18*g;
+ vec2 gc=floor(q*1100.);
+ c=mix(c,vec3(.50,.42,.34),step(.955,hash(gc))*.65);              /* dark grains */
+ c=mix(c,vec3(1.,.99,.96),step(.986,hash(gc+3.1))*.55);           /* bright quartz grains */
+ return mix(c,c*vec3(.60,.565,.52),wet);}
+void main(){
+ vec2 uv=vUv;vec2 p=vec2(uv.x*aspect,uv.y);float t=time;
+ vec4 W=texture(uW,uv);float h=max(W.x,0.),foam=W.y,wet=W.z,spd=W.w;
+ vec2 dx=vec2(simTexel.x,0.),dy=vec2(0.,simTexel.y);
+ float hl=Hh(uv-dx),hr=Hh(uv+dx),hb=Hh(uv-dy),ht=Hh(uv+dy);
+ vec2 g=vec2((hr-hl)/(2.*simTexel.x*aspect),(ht-hb)/(2.*simTexel.y));
+ float steep=length(g);                                             /* a wall of water: a bore / breaking front */
+ g*=1.9/(1.+steep*.9);                                              /* exaggerate gentle swells, tame razor fronts */
+ float lap=hl+hr+hb+ht-4.*W.x;
+ float wm=smoothstep(.0012,.006,h);
+ float rk=wm*(.35+1.3*min(spd,1.)),e=.0012,r0=rip(p,t);
+ g+=rk*vec2(rip(p+vec2(e,0.),t)-r0,rip(p+vec2(0.,e),t)-r0)/e;
+ vec3 N=normalize(vec3(-g,1.));
+ vec3 cam=vec3(.5*aspect+viewT.x*aspect*.8,.30+viewT.y*.9,1.5);vec3 V=normalize(cam-vec3(p,h));
+ float F=.02+.98*pow(1.-clamp(dot(N,V),0.,1.),5.);
+ vec3 rd=refract(-V,N,1./1.333);
+ vec2 hit=p+rd.xy*(h/max(-rd.z,.25));
+ vec3 sd=sandCol(hit,max(wet,wm));
+ vec2 lq=hit+g*h*1.4;
+ mat2 r1=mat2(.80,.60,-.60,.80),r2=mat2(.34,-.94,.94,.34);
+ float cs=(caus(r1*lq*13.,t*1.1)+caus(r2*lq*19.+vec2(3.1,1.7),t*1.3))*.5;cs=cs*cs*.9+cs*.08;
+ cs*=smoothstep(.002,.03,h)*(1.+clamp(-lap*90.,-.8,2.5));            /* light focuses under crests */
+ vec3 lit=sd*(.80+1.5*cs);
+ float path=h*(1.+1./max(-rd.z,.25))*8.;                           /* shallow = clear over sand, deep = turquoise */
+ vec3 under=lit*exp(-vec3(1.15,.30,.24)*path)+vec3(.01,.16,.20)*(1.-exp(-1.2*path));
+ vec3 R=reflect(-V,N);R.z=abs(R.z);
+ float sun=pow(max(dot(R,sunDir),0.),1400.)*3.5;                     /* small sparkles, not white blobs */
+ vec3 col=mix(sd*(.88+.10*wet),mix(under,sky(R,t),F)+vec3(1.,.96,.88)*sun,wm);
+ // white water: bubbly lace that turns solid where the foam is thick
+ vec2 fp=p+g*.004;
+ float fn=fbm4(fp*21.+vec2(t*.15,-t*.11)),lace=caus(fp*52.+fn*2.3,t*1.3),lace2=vn(fp*90.+t*.7);
+ float bore=smoothstep(.6,1.6,steep)*smoothstep(.01,.04,h);
+ float fa=clamp(max(foam,bore*(.45+.4*fn)),0.,1.6)*mix(.35,1.,smoothstep(.0005,.005,h));   /* on bare sand only a thin residue */
+ fa=1.-exp(-fa*1.3);
+ float dens=fa*(1.05+(fn-.5)*1.9+lace*.45);                             /* organic patches with bubbly holes and lacy rims */
+ float cover=smoothstep(.32,.78,dens)*(.80+.20*lace2);
+ col=mix(col,vec3(1.06,1.08,1.08)*(.86+.10*lace+.06*lace2),cover);
+ float edge=smoothstep(.0008,.003,h)*smoothstep(.012,.004,h);       /* swash line on the sand */
+ col=mix(col,vec3(.96),edge*min(1.,spd*2.5)*(.4+.6*lace)*.8);
+ float dw=min(min(p.x,aspect-p.x),min(p.y,1.-p.y));
+ col+=vec3(.75,.9,1.)*exp(-dw/.0035)*wm*.28;                         /* glass wall: bright meniscus */
+ col*=1.-.12*pow(length(uv-.5)*1.25,2.);
+ col=(col*(2.51*col+.03))/(col*(2.43*col+.59)+.14);
+ o=vec4(clamp(col,0.,1.),1.);}`,
 };
 
 function compile(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);
@@ -586,6 +663,20 @@ gl.bindVertexArray(silkVAO);gl.bindBuffer(gl.ARRAY_BUFFER,silkVBO);gl.bufferData
 gl.enableVertexAttribArray(0);gl.vertexAttribPointer(0,2,gl.FLOAT,false,32,0);
 gl.enableVertexAttribArray(1);gl.vertexAttribPointer(1,4,gl.FLOAT,false,32,8);
 gl.enableVertexAttribArray(2);gl.vertexAttribPointer(2,2,gl.FLOAT,false,32,24);
+gl.bindVertexArray(null);
+const SPRAY_VS=`#version 300 es
+in vec4 aP;out float vA;
+void main(){gl_Position=vec4(aP.x*2.-1.,aP.y*2.-1.,0.,1.);gl_PointSize=aP.z;vA=aP.w;}`;
+const SPRAY_FS=`#version 300 es
+precision mediump float;in float vA;out vec4 o;
+void main(){vec2 q=gl_PointCoord-.5;float d=length(q)*2.;if(d>1.)discard;
+ float a=smoothstep(1.,.4,d)*vA;vec3 c=mix(vec3(.80,.90,.96),vec3(1.),smoothstep(.8,.1,length(q+vec2(.15,-.15))*2.));
+ o=vec4(c*a,a);}`;
+const SPRAYP=(()=>{const p=gl.createProgram();gl.attachShader(p,compile(gl.VERTEX_SHADER,SPRAY_VS));gl.attachShader(p,compile(gl.FRAGMENT_SHADER,SPRAY_FS));
+  gl.bindAttribLocation(p,0,'aP');gl.linkProgram(p);if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(p));return p;})();
+const SPRAY_MAX=900, sprayVAO=gl.createVertexArray(), sprayVBO=gl.createBuffer(), sprayData=new Float32Array(SPRAY_MAX*4);
+gl.bindVertexArray(sprayVAO);gl.bindBuffer(gl.ARRAY_BUFFER,sprayVBO);gl.bufferData(gl.ARRAY_BUFFER,sprayData.byteLength,gl.DYNAMIC_DRAW);
+gl.enableVertexAttribArray(0);gl.vertexAttribPointer(0,4,gl.FLOAT,false,16,0);
 gl.bindVertexArray(null);
 const P = {};
 for(const k in FS){const p=gl.createProgram();gl.attachShader(p,vs);gl.attachShader(p,compile(gl.FRAGMENT_SHADER,FS[k]));
@@ -884,14 +975,19 @@ function cloudFrame(dt){
 }
 
 /* ================= Water mode (lake) ================= */
-let mode='paint'; try{const m=localStorage.getItem('hf-mode');if(m==='water'||m==='light'||m==='silk'||m==='cloud')mode=m;}catch(e){}
+let mode='paint'; try{const m=localStorage.getItem('hf-mode');if(m==='water'||m==='wave'||m==='light'||m==='silk'||m==='cloud')mode=m;}catch(e){}
 let waterTime=0, wAcc=0, dropClock=0, glideClock=0; const gliders=[];
 const W_C=250, W_H=1/540, W_NK=.24, SUN=(()=>{const v=[.12,.82,.56],l=Math.hypot(...v);return v.map(x=>x/l);})();
-function waterClear(){const u=use('waterClear',[0,0]);blit(wat.w);wat.swap();blit(wat.w);wat.swap();}
-function waterPoke(x,y,amp,r){const u=use('waterPoke',[wat.r.tx,wat.r.ty]);gl.uniform1i(u.uT,wat.r.bind(0));
-  gl.uniform1f(u.aspect,aspect);gl.uniform2f(u.point,x,y);gl.uniform1f(u.amp,amp);gl.uniform1f(u.radius,r*(aspect>1?aspect:1));blit(wat.w);wat.swap();}
+// strength budget: however hard and often the water is struck, it never gets rougher than ~3 plops at once
+// (extra pushes are softened, and rough water calms faster) → the floor's light pattern always shows
+let wBudget=0,wExtra=0;const W_BCAP=.035;
+function waterClear(){wBudget=0;wExtra=0;const u=use('waterClear',[0,0]);blit(wat.w);wat.swap();blit(wat.w);wat.swap();}
+function waterPoke(x,y,amp,r){const I=Math.abs(amp)*r;
+  let k=1;if(I>0){const room=W_BCAP-wBudget;k=room>=I?1:Math.max(.15,Math.max(0,room)/I);amp*=k;wBudget+=I*k;}
+  const u=use('waterPoke',[wat.r.tx,wat.r.ty]);gl.uniform1i(u.uT,wat.r.bind(0));
+  gl.uniform1f(u.aspect,aspect);gl.uniform2f(u.point,x,y);gl.uniform1f(u.amp,amp);gl.uniform1f(u.radius,r*(aspect>1?aspect:1));blit(wat.w);wat.swap();return k;}
 function waterStep(){const u=use('waterStep',[wat.r.tx,wat.r.ty]);gl.uniform1i(u.uT,wat.r.bind(0));
-  gl.uniform1f(u.c2,W_C*W_C);gl.uniform1f(u.damp,Math.exp(-.55*W_H));gl.uniform1f(u.w2,4.);gl.uniform1f(u.hs,W_H);
+  gl.uniform1f(u.c2,W_C*W_C);gl.uniform1f(u.damp,Math.exp(-(.55+wExtra)*W_H));gl.uniform1f(u.w2,4.);gl.uniform1f(u.hs,W_H);
   gl.uniform1f(u.aspect,aspect);gl.uniform2f(u.tilt,-motionF[0]*.35,-motionF[1]*.35);blit(wat.w);wat.swap();}
 /* ---- 손 담그기: dipping a hand into the water ---- */
 let dipMode=false; try{dipMode=localStorage.getItem('hf-dip')==='1';}catch(e){}
@@ -965,11 +1061,12 @@ function waterHands(dt,live){
 function waterFrame(dt){
   const wts=Math.min(.45+.55*timeScale,2.6);            // slider + finger speed → water time
   const sdt=dt*flow*wts; waterTime+=sdt;
+  wExtra=Math.max(0,wBudget/W_BCAP-.6)*2.5; wBudget*=Math.exp(-(.3+wExtra*.5)*sdt);   // rough water settles faster
   const live=flow>.3;
   if(dipMode){queue.length=0;plops.length=0;updateDips(dt);}else waterHands(dt,live);
   if(plops.length){const n=plops.length,kk=1/Math.sqrt(n);            // many stones at once: each a little softer, total energy stays calm
-    if(live)for(const p of plops){waterPoke(p.x,p.y,WATER_AMP*PLOP_A*p.k*kk,PLOP_R);
-      if(PLOP_RING>0){if(rainDrops.length>=MAXR)rainDrops.shift();
+    if(live)for(const p of plops){const ek=waterPoke(p.x,p.y,WATER_AMP*PLOP_A*p.k*kk,PLOP_R);
+      if(PLOP_RING>0&&ek>.6){if(rainDrops.length>=MAXR)rainDrops.shift();
       rainDrops.push({x:p.x,y:p.y,age:0,size:PLOP_RING*Math.sqrt(kk)*p.k});}}   // + crisp capillary rings and a glint right where the finger touched
     plops.length=0;}
   // fingers / touch / pinch rings → pressure on the surface (stronger when moving faster)
@@ -1007,6 +1104,140 @@ function waterFrame(dt){
   {const tx=Math.max(-.6,Math.min(.6,viewTilt[0])),ty=Math.max(-.6,Math.min(.6,viewTilt[1]));gl.uniform2f(u.viewT,tx,ty);
    const sx=SUN[0]-tx*.55,sy=SUN[1]-ty*.55,sz=SUN[2],l=Math.hypot(sx,sy,sz);gl.uniform3f(u.sunDir,sx/l,sy/l,sz/l);}   // light swings the other way
   blit(null);
+}
+/* ================= Wave mode: the phone is a closed aquarium ================= */
+// shallow-water equations on a staggered grid (CPU): depth h per cell, velocities on cell edges, the screen edges are glass walls
+const WV={NY:100,NX:0,G:6.75,H0:.09,TK:1.0,SK:.6};
+let wvMx=new Float32Array(512),wvMy=new Float32Array(512),wvH=null,wvU,wvV,wvF,wvW,wvSp,wvS,wvT,wvFx,wvFy,wvBuf,wvTex=null,wvTime=0,wvRef=null,wvAmb=0,wvLin=[0,0];
+let waveG=[0,0],waveLin=[0,0],waveMotionT=0;
+const spray=[];
+const waveDims=()=>{const NY=Math.round(Math.min(110,Math.max(60,Math.sqrt(5200/aspect))));return [Math.max(24,Math.round(NY*aspect)),NY];};   // ~5000 cells on any screen shape
+function waveInit(){const [NX,NY]=waveDims(),N=NX*NY;WV.NX=NX;WV.NY=NY;
+  wvH=new Float32Array(N);for(let j=0;j<NY;j++)for(let i=0;i<NX;i++)wvH[j*NX+i]=WV.H0*(1+.06*Math.sin(i*.31+j*.17)*Math.sin(j*.23-i*.11+1.));wvU=new Float32Array((NX+1)*NY);wvV=new Float32Array(NX*(NY+1));
+  wvF=new Float32Array(N);wvW=new Float32Array(N).fill(1);wvSp=new Float32Array(N);wvS=new Float32Array(N);wvT=new Float32Array(N);
+  wvFx=new Float32Array((NX+1)*NY);wvFy=new Float32Array(NX*(NY+1));wvBuf=new Float32Array(N*4);
+  if(!wvTex)wvTex=gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D,wvTex);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA16F,NX,NY,0,gl.RGBA,gl.FLOAT,null);
+  spray.length=0;wvRef=null;}
+function waveStep(dt,ax,ay){
+  const NX=WV.NX,NY=WV.NY,G=WV.G,lx=aspect/NX,ly=1/NY,h=wvH,u=wvU,v=wvV,Fx=wvFx,Fy=wvFy,S=wvS,E=.0004,vmax=.45*Math.min(lx,ly)/dt,VI=Math.min(.2,.0008*dt/(lx*lx)),VJ=Math.min(.2,.0008*dt/(ly*ly));
+  for(let j=0;j<NY;j++){const r=j*NX,ru=j*(NX+1);                      // x momentum (interior edges)
+    for(let i=1;i<NX;i++){const k=ru+i,hl=h[r+i-1],hr=h[r+i];
+      if(hl<E&&hr<E){u[k]=0;Fx[k]=0;continue;}
+      let uu=u[k]+dt*(-G*(hr-hl)/lx+ax*wvMx[j]);
+      if(j>0&&j<NY-1)uu+=VI*(u[k-1]+u[k+1]-2*uu)+VJ*(u[k-NX-1]+u[k+NX+1]-2*uu);   // a little viscosity: rounded swells, not razor fronts
+      if((hl<E&&uu>0)||(hr<E&&uu<0))uu=0;                                 // nothing flows out of a dry cell
+      const hm=Math.max(.5*(hl+hr),.003);
+      uu/=1+dt*(.06+.004*Math.abs(uu)/hm);                                 // light damping + bottom friction in the shallows
+      if(uu>vmax)uu=vmax;else if(uu<-vmax)uu=-vmax;
+      u[k]=uu;Fx[k]=uu*(uu>0?hl:hr);}}
+  for(let j=1;j<NY;j++){const r0=(j-1)*NX,r1=j*NX;                     // y momentum
+    for(let i=0;i<NX;i++){const k=r1+i,hb=h[r0+i],ht=h[r1+i];
+      if(hb<E&&ht<E){v[k]=0;Fy[k]=0;continue;}
+      let vv=v[k]+dt*(-G*(ht-hb)/ly+ay*wvMy[i]);
+      if(i>0&&i<NX-1)vv+=VI*(v[k-1]+v[k+1]-2*vv)+VJ*(v[k-NX]+v[k+NX]-2*vv);
+      if((hb<E&&vv>0)||(ht<E&&vv<0))vv=0;
+      const hm=Math.max(.5*(hb+ht),.003);
+      vv/=1+dt*(.06+.004*Math.abs(vv)/hm);
+      if(vv>vmax)vv=vmax;else if(vv<-vmax)vv=-vmax;
+      v[k]=vv;Fy[k]=vv*(vv>0?hb:ht);}}
+  for(let j=0;j<NY;j++)for(let i=0;i<NX;i++){const c=j*NX+i,ku=j*(NX+1)+i;   // never take out more water than a cell holds
+    const out=(Math.max(Fx[ku+1],0)+Math.max(-Fx[ku],0))/lx+(Math.max(Fy[c+NX],0)+Math.max(-Fy[c],0))/ly;
+    S[c]=out*dt>h[c]?h[c]/(out*dt):1;}
+  for(let j=0;j<NY;j++){const r=j*NX,ru=j*(NX+1);for(let i=1;i<NX;i++){const k=ru+i;Fx[k]*=Fx[k]>0?S[r+i-1]:S[r+i];}}
+  for(let j=1;j<NY;j++){const r=j*NX;for(let i=0;i<NX;i++){const k=r+i;Fy[k]*=Fy[k]>0?S[k-NX]:S[k];}}
+  for(let j=0;j<NY;j++)for(let i=0;i<NX;i++){const c=j*NX+i,ku=j*(NX+1)+i;
+    const hn=h[c]+dt*((Fx[ku]-Fx[ku+1])/lx+(Fy[c]-Fy[c+NX])/ly);h[c]=hn>0?hn:0;}
+}
+function wavePost(dt){
+  const NX=WV.NX,NY=WV.NY,G=WV.G,lx=aspect/NX,ly=1/NY,h=wvH,u=wvU,v=wvV,F=wvF,T=wvT;
+  for(let j=0;j<NY;j++)for(let i=0;i<NX;i++){const c=j*NX+i,ku=j*(NX+1)+i,hc=h[c];
+    const uc=.5*(u[ku]+u[ku+1]),vc=.5*(v[c]+v[c+NX]),sp=Math.hypot(uc,vc);wvSp[c]=sp;
+    if(hc<.0015){F[c]*=Math.exp(-dt*3);continue;}
+    const div=(u[ku+1]-u[ku])/lx+(v[c+NX]-v[c])/ly, fr=sp/(Math.sqrt(G*hc)+.05);
+    let gen=Math.max(0,-div-15)*.02+Math.max(0,fr-.9)*.8;          // water piling up fast / running faster than its own waves → breaks white
+    if(hc<.02&&hc>.0015)gen+=sp*.45;                                              // swash running over the sand
+    F[c]+=gen*dt;}
+  // walls: water slamming into the glass → white water + spray
+  const wall=(c,a,nx,ny,x,y,tx,ty)=>{const hc=h[c];if(a<.08||hc<.008)return;
+    F[c]+=dt*(a-.08)*9;
+    let n=dt*260*(a-.15)*Math.min(hc/WV.H0,2.5);
+    while(n>0&&spray.length<SPRAY_MAX){if(n<1&&Math.random()>n)break;n-=1;
+      const r=Math.random(),vin=(.15+.55*Math.random())*a+.06,vt=(Math.random()-.5)*.5*a;
+      spray.push({x:x+(Math.random()-.5)*tx,y:y+(Math.random()-.5)*ty,z:.002,vx:nx*vin+tx/lx*vt*lx,vy:ny*vin+ty/ly*vt*ly,vz:(.45+.95*Math.random())*a*1.15,s:.4+r*r*1.2});}};
+  for(let j=0;j<NY;j++){const r=j*NX,ru=j*(NX+1),y=(j+.5)*ly;
+    wall(r,Math.max(-u[ru+1],-u[ru+2]),1,0,lx*.5,y,0,ly);wall(r+NX-1,Math.max(u[ru+NX-1],u[ru+NX-2]),-1,0,aspect-lx*.5,y,0,ly);}
+  for(let i=0;i<NX;i++){const x=(i+.5)*lx;
+    wall(i,Math.max(-v[NX+i],-v[2*NX+i]),0,1,x,ly*.5,lx,0);wall((NY-1)*NX+i,Math.max(v[(NY-1)*NX+i],v[(NY-2)*NX+i]),0,-1,x,1-ly*.5,lx,0);}
+  // foam drifts with the water and slowly fades
+  for(let j=0;j<NY;j++)for(let i=0;i<NX;i++){const c=j*NX+i,ku=j*(NX+1)+i;
+    const uc=.5*(u[ku]+u[ku+1]),vc=.5*(v[c]+v[c+NX]);
+    let x=i-uc*dt/lx,y=j-vc*dt/ly;x=x<0?0:x>NX-1?NX-1:x;y=y<0?0:y>NY-1?NY-1:y;
+    const i0=x|0,j0=y|0,i1=Math.min(i0+1,NX-1),j1=Math.min(j0+1,NY-1),fx=x-i0,fy=y-j0;
+    const a=F[j0*NX+i0]+(F[j0*NX+i1]-F[j0*NX+i0])*fx,b=F[j1*NX+i0]+(F[j1*NX+i1]-F[j1*NX+i0])*fx;
+    T[c]=Math.min(1.6,(a+(b-a)*fy)*Math.exp(-dt/2.2));}
+  F.set(T);
+  for(let c=0;c<NX*NY;c++){if(h[c]>.002)wvW[c]=1;else wvW[c]*=Math.exp(-dt/7);}   // sand stays dark where water just was
+}
+function sprayStep(dt){const NX=WV.NX,NY=WV.NY;
+  for(let k=spray.length-1;k>=0;k--){const d=spray[k];
+    d.x+=d.vx*dt;d.y+=d.vy*dt;d.z+=d.vz*dt;d.vz-=4.5*dt;
+    if(d.x<0){d.x=0;d.vx=-d.vx*.3;}else if(d.x>aspect){d.x=aspect;d.vx=-d.vx*.3;}
+    if(d.y<0){d.y=0;d.vy=-d.vy*.3;}else if(d.y>1){d.y=1;d.vy=-d.vy*.3;}
+    if(d.z<=0){const i=Math.min(NX-1,d.x/aspect*NX|0),j=Math.min(NY-1,d.y*NY|0);wvF[j*NX+i]=Math.min(1.6,wvF[j*NX+i]+.12*d.s);spray.splice(k,1);}}}
+function drawSpray(){const n=spray.length;if(!n)return;
+  for(let k=0;k<n;k++){const d=spray[k],o=k*4;sprayData[o]=d.x/aspect;sprayData[o+1]=d.y;
+    sprayData[o+2]=Math.min(18,(1.3+d.z*42)*d.s)*dpr;sprayData[o+3]=Math.min(.9,d.vz>0?.85:.45+d.z*10);}
+  gl.useProgram(SPRAYP);gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE_MINUS_SRC_ALPHA);
+  gl.bindVertexArray(sprayVAO);gl.bindBuffer(gl.ARRAY_BUFFER,sprayVBO);gl.bufferSubData(gl.ARRAY_BUFFER,0,sprayData,0,n*4);
+  gl.drawArrays(gl.POINTS,0,n);gl.bindVertexArray(vao);gl.disable(gl.BLEND);}
+function wavePush(x,y,vx,vy,R,k){           // a hand / finger moving through the water drags it along
+  const NX=WV.NX,NY=WV.NY,lx=aspect/NX,ly=1/NY,u=wvU,v=wvV;
+  let sx=vx*aspect,sy=vy;const m=Math.hypot(sx,sy);if(m>2.2){sx*=2.2/m;sy*=2.2/m;}
+  const px=x*aspect,py=y,R2=R*R,i0=Math.max(1,Math.floor((px-2*R)/lx)),i1=Math.min(NX-1,Math.ceil((px+2*R)/lx)),j0=Math.max(1,Math.floor((py-2*R)/ly)),j1=Math.min(NY-1,Math.ceil((py+2*R)/ly));
+  for(let j=Math.max(0,j0-1);j<=Math.min(NY-1,j1);j++)for(let i=i0;i<=i1;i++){const ex=i*lx-px,ey=(j+.5)*ly-py,w=Math.exp(-(ex*ex+ey*ey)/R2)*k;
+    if(w>.002){const q=j*(NX+1)+i;u[q]+=(sx-u[q])*w;}}
+  for(let j=j0;j<=j1;j++)for(let i=Math.max(0,i0-1);i<=Math.min(NX-1,i1);i++){const ex=(i+.5)*lx-px,ey=j*ly-py,w=Math.exp(-(ex*ex+ey*ey)/R2)*k;
+    if(w>.002){const q=j*NX+i;v[q]+=(sy-v[q])*w;}}}
+function wavePoke(x,y,a){                  // a tap: water pushed outward → a ring
+  const NX=WV.NX,NY=WV.NY,lx=aspect/NX,ly=1/NY,px=x*aspect,py=y,R=.035;
+  for(let j=0;j<NY;j++)for(let i=1;i<NX;i++){const ex=i*lx-px,ey=(j+.5)*ly-py,d=Math.hypot(ex,ey);if(d>3*R||d<1e-5)continue;
+    wvU[j*(NX+1)+i]+=ex/d*a*(d/R)*Math.exp(-d*d/(R*R));}
+  for(let j=1;j<NY;j++)for(let i=0;i<NX;i++){const ex=(i+.5)*lx-px,ey=j*ly-py,d=Math.hypot(ex,ey);if(d>3*R||d<1e-5)continue;
+    wvV[j*NX+i]+=ey/d*a*(d/R)*Math.exp(-d*d/(R*R));}}
+function waveForce(dt){                    // tilt (relative to how the phone is held) + shake (the water lags behind the phone)
+  let ax=0,ay=0;const live=gyroOn&&performance.now()-waveMotionT<600;
+  const lk=Math.min(1,dt*18);wvLin[0]+=(waveLin[0]-wvLin[0])*lk;wvLin[1]+=(waveLin[1]-wvLin[1])*lk;
+  if(live){if(!wvRef)wvRef=waveG.slice();const rk=Math.min(1,dt/7);wvRef[0]+=(waveG[0]-wvRef[0])*rk;wvRef[1]+=(waveG[1]-wvRef[1])*rk;
+    ax=(waveG[0]-wvRef[0])*WV.TK+wvLin[0]*WV.SK;ay=(waveG[1]-wvRef[1])*WV.TK+wvLin[1]*WV.SK;}
+  else wvRef=null;
+  wvAmb+=dt;const am=live?.012:.05;                                      // a gentle swell so the tank is never dead still
+  ax+=am*Math.sin(wvAmb*.53)+am*.5*Math.sin(wvAmb*1.31+1.);ay+=am*.8*Math.sin(wvAmb*.41+2.)+am*.4*Math.sin(wvAmb*1.07);
+  const m=Math.hypot(ax,ay);if(m>1.3){ax*=1.3/m;ay*=1.3/m;}
+  return [ax*WV.G,ay*WV.G];}
+function waveFrame(dt){
+  if(!wvH||WV.NX!==waveDims()[0])waveInit();
+  const sdt=Math.min(dt,1/30)*flow;wvTime+=sdt;
+  for(const s of queue.splice(0)){if(flow<.3||s.vOnly||s.vx==null)continue;
+    wavePush(s.x,s.y,s.vx,s.vy,s.hand?.045:.04,s.hand?(s.set>.6?.22:.1):.3);}
+  if(sdt>0){const [ax,ay]=waveForce(sdt);
+    let hm=0,um=0;for(let c=0;c<wvH.length;c++)if(wvH[c]>hm)hm=wvH[c];
+    for(let c=0;c<wvU.length;c++){const a=Math.abs(wvU[c]);if(a>um)um=a;}for(let c=0;c<wvV.length;c++){const a=Math.abs(wvV[c]);if(a>um)um=a;}
+    {const t=wvTime;for(let j=0;j<WV.NY;j++)wvMx[j]=1+.24*Math.sin(j*.083+t*.61+1.3)+.13*Math.sin(j*.197-t*1.07+4.);   // the push is never perfectly even → fronts bend
+     for(let i=0;i<WV.NX;i++)wvMy[i]=1+.24*Math.sin(i*.091-t*.53+2.1)+.13*Math.sin(i*.213+t*.97);}
+    const lmin=Math.min(aspect/WV.NX,1/WV.NY),dtMax=.55*lmin/(Math.sqrt(WV.G*hm)+um+.01),n=Math.min(16,Math.ceil(sdt/dtMax)),h=sdt/n;
+    for(let k=0;k<n;k++)waveStep(h,ax,ay);
+    wavePost(sdt);sprayStep(sdt);}
+  const N=WV.NX*WV.NY,B=wvBuf;for(let c=0;c<N;c++){const o=c*4;B[o]=wvH[c];B[o+1]=wvF[c];B[o+2]=wvW[c];B[o+3]=wvSp[c];}
+  gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,wvTex);gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,WV.NX,WV.NY,gl.RGBA,gl.FLOAT,B);
+  const u=use('waveRender',[1/WV.NX,1/WV.NY]);gl.uniform1i(u.uW,0);gl.uniform2f(u.simTexel,1/WV.NX,1/WV.NY);
+  gl.uniform1f(u.aspect,aspect);gl.uniform1f(u.time,wvTime);
+  {const tx=Math.max(-.6,Math.min(.6,viewTilt[0])),ty=Math.max(-.6,Math.min(.6,viewTilt[1]));gl.uniform2f(u.viewT,tx,ty);
+   const sx=SUN[0]-tx*.55,sy=SUN[1]-ty*.55,sz=SUN[2],l=Math.hypot(sx,sy,sz);gl.uniform3f(u.sunDir,sx/l,sy/l,sz/l);}
+  blit(null);drawSpray();
 }
 let WATER_AMP=1, HAND_K=.75;
 /* ---- 비: raindrops on the lake ---- */
@@ -1143,6 +1374,7 @@ function onMotion(e){
   const fx=(g[0]-gBase[0])*1.6+lin[0]*1.1, fy=(g[1]-gBase[1])*1.6+lin[1]*1.1;
   const m=Math.hypot(fx,fy),cap=m>2.5?2.5/m:1;motionRaw=[fx*cap,fy*cap];
   shakeAmt=Math.hypot(lin[0],lin[1]);
+  waveG=g;waveLin=lin;waveMotionT=now;
 }
 function updateGyro(dt){
   const vk=Math.min(1,dt*(gyroOn?5:2));viewTilt[0]+=((gyroOn?viewRaw[0]:0)-viewTilt[0])*vk;viewTilt[1]+=((gyroOn?viewRaw[1]:0)-viewTilt[1])*vk;
@@ -1166,7 +1398,7 @@ const bgm=new Audio();bgm.loop=true;bgm.preload='auto';
 try{bgm.preservesPitch=true;bgm.mozPreservesPitch=true;bgm.webkitPreservesPitch=true;}catch(e){}
 let musicOn=true; try{musicOn=localStorage.getItem('hf-music')!=='off';}catch(e){}
 let musicReady=null, musicRate=1, musicVol=0, curTrack=null, trackBusy=false;
-const TRACKS={paint:'audio/where_the_stream_widens.mp3',water:'audio/glass_upon_the_lake.mp3',light:'audio/where_the_ocean_meets_sky.mp3'};
+const TRACKS={paint:'audio/where_the_stream_widens.mp3',water:'audio/glass_upon_the_lake.mp3',light:'audio/where_the_ocean_meets_sky.mp3',wave:'audio/where_the_ocean_meets_sky.mp3'};
 const trackURL={};
 function getTrack(path){ if(!trackURL[path])trackURL[path]=fetch(path).then(r=>r.blob()).then(b=>URL.createObjectURL(b)).catch(()=>null); return trackURL[path]; }
 function loadMusic(){ const path=TRACKS[mode]||TRACKS.paint;
@@ -1275,7 +1507,8 @@ const pickColor=(i)=>{const p=pal();const c=p[(i+colorTick)%p.length];const k=.9
 const pointers=new Map();
 canvas.addEventListener('pointerdown',e=>{if(document.body.classList.contains('menu')){openMenu(false);return;}pointers.set(e.pointerId,{x:e.clientX/innerWidth,y:1-e.clientY/innerHeight,t:e.timeStamp,c:pickColor(pointers.size+(Math.random()*6|0))});wake();
   if(mode==='water'&&dipMode)dipStart('t'+e.pointerId,e.clientX/innerWidth,1-e.clientY/innerHeight,.005);
-  else if(mode==='water'){addPlop(e.clientX/innerWidth,1-e.clientY/innerHeight,1);wakeEnd('t'+e.pointerId);}});   // each finger that lands = one 퐁당
+  else if(mode==='water'){addPlop(e.clientX/innerWidth,1-e.clientY/innerHeight,1);wakeEnd('t'+e.pointerId);}
+  else if(mode==='wave'&&wvH&&flow>.3)wavePoke(e.clientX/innerWidth,1-e.clientY/innerHeight,.5);});   // each finger that lands = one 퐁당
 canvas.addEventListener('pointermove',e=>{const p=pointers.get(e.pointerId);if(!p)return;
   const x=e.clientX/innerWidth,y=1-e.clientY/innerHeight;const dtR=Math.min(Math.max((e.timeStamp-p.t)/1000,.008),.1);feelFinger(Math.hypot((x-p.x)*aspect,y-p.y)/dtR);
   if(mode==='water'&&!dipMode)wakeStep('t'+e.pointerId,x,y,Math.hypot((x-p.x)*aspect,y-p.y)/dtR);
@@ -1412,7 +1645,7 @@ function frame(now){
   resize();
   flow+=(flowTarget-flow)*Math.min(1,dt*(flowTarget>flow?2.5:6));
   updateGyro(dt);updateTimeScale(dt);
-  if(mode==='water'){ waterFrame(dt); } else if(mode==='light'){ lightFrame(dt); } else if(mode==='silk'){ queue.length=0; silkFrame(dt); } else if(mode==='cloud'){ cloudFrame(dt); } else {
+  if(mode==='water'){ waterFrame(dt); } else if(mode==='wave'){ waveFrame(dt); } else if(mode==='light'){ lightFrame(dt); } else if(mode==='silk'){ queue.length=0; silkFrame(dt); } else if(mode==='cloud'){ cloudFrame(dt); } else {
   // ambient life: drifting color drops keep the canvas evolving
   ambientClock+=dt*flow*Math.max(timeScale,.15);
   if(ambientClock>.6){ambientClock=0;const x=Math.random(),y=Math.random(),a=Math.random()*6.28;
@@ -1464,16 +1697,18 @@ const HINTS={paint:hintTxt.innerHTML,
   cloud:'<b>검지</b> 지나간 구름이 부드럽게 갈라짐 · 빠르게 움직이면 흩어짐<br><b>집기</b> 회전 흐름 · <b>손 펼치기</b> 넓게 확산 · <b>주먹</b> 천천히 안정',
   silk:'<b>검지</b> 실크가 따라 흐름 · 빠르게 움직이면 넓게 펼쳐짐<br><b>집기</b> 부드러운 소용돌이 · <b>손 펼치기</b> 활짝 펼침 · <b>주먹</b> 서서히 멈춤',
   light:'<b>손가락</b> 빛의 흐름 밀기 · <b>검지만 펴기</b> 가리킨 방향으로 빛줄기<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 멈춤',
+  wave:'<b>폰 기울이기</b> 물이 쏠려 벽에 부딪힘 · <b>흔들기</b> 출렁임<br><b>터치·손</b> 물 밀기 · <b>톡</b> 물결 · <b>주먹</b> 멈춤',
   water:'<b>톡 터치·손가락 하나씩 구부리기</b> 퐁당 · <b>검지 하나</b> 손끝을 물에 대고 움직이기<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 물 멈춤'};
-function setMode(m){mode=m;document.body.classList.toggle('water',m==='water');document.body.classList.toggle('light',m==='light');document.body.classList.toggle('silk',m==='silk');document.body.classList.toggle('cloud',m==='cloud');
+function setMode(m){mode=m;document.body.classList.toggle('water',m==='water');document.body.classList.toggle('wave',m==='wave');document.body.classList.toggle('light',m==='light');document.body.classList.toggle('silk',m==='silk');document.body.classList.toggle('cloud',m==='cloud');
   if(m==='cloud'&&vel){const u=use('waterClear',[0,0]);blit(vel.w);vel.swap();blit(vel.w);vel.swap();}   // start calm: no leftover swirls from other modes
   document.querySelectorAll('#modeSeg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.m===m));
-  seedBtn.textContent=m==='water'?'잔잔하게':'새 캔버스';hintTxt.innerHTML=(m==='water'&&dipMode)?HINTS.dip:HINTS[m];
+  seedBtn.textContent=(m==='water'||m==='wave')?'잔잔하게':'새 캔버스';hintTxt.innerHTML=(m==='water'&&dipMode)?HINTS.dip:HINTS[m];
   gliders.length=0;queue.length=0;drops.length=0;try{localStorage.setItem('hf-mode',m);}catch(e){}
+  if(m==='wave'&&!gyroOn)setGyro(true);                 // the aquarium lives on tilt and shake
   if(curTrack)switchTrack();}
 document.querySelectorAll('#modeSeg button').forEach(b=>b.onclick=()=>setMode(b.dataset.m));
 setMode(mode);
-seedBtn.onclick=()=>{if(mode==='water'){waterClear();gliders.length=0;}else if(mode==='light'){lightSeedAll();}else if(mode==='silk'){silkInit();}else if(mode==='cloud'){cloudReset();}else seed();drops.length=0;};
+seedBtn.onclick=()=>{if(mode==='wave'){waveInit();}else if(mode==='water'){waterClear();gliders.length=0;}else if(mode==='light'){lightSeedAll();}else if(mode==='silk'){silkInit();}else if(mode==='cloud'){cloudReset();}else seed();drops.length=0;};
 const lightWrap=document.getElementById('lights');
 function renderLights(){lightWrap.innerHTML='';for(const name in LIGHTS){const b=document.createElement('button');b.className='chip';
   b.setAttribute('aria-pressed',name===lightName);b.innerHTML='<i>'+LIGHTS[name].map(c=>`<span style="background:${c}"></span>`).join('')+'</i>'+name;

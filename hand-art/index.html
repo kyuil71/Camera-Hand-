@@ -109,7 +109,7 @@ body:not(.water) #floors,body:not(.water) #dipRow,body:not(.water) #rainRow{disp
     <label class="mfx" id="mfxRow"><span><b>음악 인터랙션</b><small>Music Interaction</small></span>
       <input type="checkbox" id="mfxSw" role="switch" aria-label="음악 인터랙션 Music Interaction"><i aria-hidden="true"></i></label>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 50</p>
+    <p class="hint" id="ver">버전 51</p>
   </div>
 </div>
 
@@ -292,15 +292,36 @@ void main(){vec4 c=texture(uA,vUv);float k=texture(uK,vUv).r;
 inkShow: H+`uniform sampler2D uS,uA;uniform float aspect;uniform vec2 simTexel;
 float fbm(vec2 p){float s=0.,a=.5;for(int i=0;i<4;i++){s+=a*vn(p);p=p*2.03+17.1;a*=.5;}return s;}
 float fib(vec2 p,float a){mat2 r=mat2(cos(a),sin(a),-sin(a),cos(a));vec2 q=r*p;return vn(vec2(q.x*2.,q.y*70.));}
-vec3 hanji(vec2 p){
- vec3 c=vec3(.93,.89,.80);
- c*=.97+.045*fbm(p*2.2+3.);
- float r1=1.-abs(2.*fbm(p*3.3+5.)-1.),r2=1.-abs(2.*fbm(p*3.3+5.+vec2(.003,.004))-1.);   /* soft crumples, lit from the upper left */
- c*=1.+clamp((r1-r2)*7.,-.025,.025);c-=pow(r1,40.)*.035;c+=pow(r2,40.)*.015;   /* fine creases */
- float r3=1.-abs(2.*fbm(p*8.+11.)-1.);c-=pow(r3,60.)*.03;
- float f1=smoothstep(.72,.96,fib(p*4.,.4)),f2=smoothstep(.72,.96,fib(p*5.3+3.,1.9)),f3=smoothstep(.74,.97,fib(p*6.1+9.,2.8));
- c+=vec3(.030,.027,.020)*max(f1,f2)-vec3(.022,.022,.02)*f3;            /* long mulberry fibres */
- c*=.965+.06*vn(p*650.);c*=.985+.03*vn(p*180.);
+vec2 h2i(vec2 p){return vec2(hash(p),hash(p+19.19));}
+vec3 crumple(vec2 p,float sd){                                       // crumpled paper: tilted facets + creases (x: facet light, y: crease distance, z: crease strength)
+ p+=.55*vec2(fbm(p*.45+sd),fbm(p*.45+sd+5.))+.12*vec2(vn(p*2.3+sd),vn(p*2.3-sd));   /* creases wander, never ruler-straight */
+ vec2 ip=floor(p),fp=p-ip;float d1=8.,d2=8.;vec2 id=ip,id2=ip;
+ for(int y=-1;y<=1;y++)for(int x=-1;x<=1;x++){vec2 o2=vec2(x,y);vec2 r=o2+.15+.7*h2i(ip+o2+sd)-fp;float d=dot(r,r);
+  if(d<d1){d2=d1;id2=id;d1=d;id=ip+o2;}else if(d<d2){d2=d;id2=ip+o2;}}
+ vec2 tl=h2i(id*1.7+sd)-.5;
+ float st=hash(id+id2+sd*.37);st=st*st;                                /* some creases deep, most faint */
+ return vec3(dot(tl,vec2(-.6,.8)),sqrt(d2)-sqrt(d1),st);}
+vec3 hanji(vec2 p,out float crease){
+ vec3 c=vec3(.935,.885,.785);
+ c=mix(c,vec3(.89,.82,.70),smoothstep(.45,.85,fbm(p*1.6+3.))*.45);          /* uneven, slightly aged tone */
+ c*=.955+.07*fbm(p*4.5+8.);
+ vec3 A=crumple(p*2.6,1.3),B=crumple(p*6.5,7.7);
+ c*=1.+A.x*.085+B.x*.05;                                                /* each facet catches the light a little differently */
+ float w1=.012+.02*A.z,w2=.016+.02*B.z;
+ float k1=(1.-smoothstep(0.,w1,A.y))*(.25+.75*A.z),k2=(1.-smoothstep(0.,w2,B.y))*(.15+.6*B.z);
+ // fine wrinkles: thin wandering ridge lines at three sizes, each with a lit side and a shaded side
+ float wr=0.,wl=0.;
+ for(int i=0;i<3;i++){float sc=2.8*pow(2.25,float(i)),am=1./(1.+float(i)*.7);vec2 o=vec2(float(i)*7.3,float(i)*3.1);
+  float r=1.-abs(2.*fbm(p*sc+o)-1.),r2=1.-abs(2.*fbm((p+vec2(-.0025,.0035)/sc*3.)*sc+o)-1.);
+  wr+=pow(r,14.)*am;wl+=(pow(r2,14.)-pow(r,14.))*am;}
+ crease=max(k1,min(1.,wr));
+ c*=1.-.09*k1-.05*k2-.14*wr;c+=vec3(.10,.095,.08)*clamp(wl,0.,1.);      /* crease shadows and lit lips */
+ c+=vec3(.05,.048,.04)*(1.-smoothstep(0.,.015,abs(A.y-w1-.012)))*A.z;   /* a bright lip beside the deep creases */
+ float f1=smoothstep(.70,.95,fib(p*4.,.4)),f2=smoothstep(.70,.95,fib(p*5.3+3.,1.9)),f3=smoothstep(.75,.97,fib(p*7.1+9.,2.8)),f4=smoothstep(.80,.98,fib(p*11.+2.,.9));
+ c+=vec3(.035,.031,.022)*max(f1,f2);c-=vec3(.045,.05,.055)*f3+vec3(.03,.04,.05)*f4;   /* long mulberry fibres, light and dark */
+ float pulp=vn(p*120.)*.6+vn(p*260.)*.4;c*=.92+.16*pulp;                /* rough pulp: clumps and pits */
+ c*=.93+.13*vn(p*700.);                                                /* tooth of the paper */
+ c-=vec3(.10,.11,.13)*smoothstep(.985,1.,hash(floor(p*520.)))*.55;       /* tiny specks of bark */
  return c;}
 float dens(vec2 uv){return dot(texture(uS,uv).rgb,vec3(.3333));}
 void main(){vec2 uv=vUv;vec2 p=vec2(uv.x*aspect,uv.y);
@@ -323,7 +344,9 @@ void main(){vec2 uv=vUv;vec2 p=vec2(uv.x*aspect,uv.y);
  ab*=mix(1.,.72+.56*vn(p*430.),.55);                                 /* pigment caught in the paper's grain */
  ab*=1.+.55*smoothstep(.05,.6,d)*(fbm(p*9.+fbm(p*3.)*2.)-.5)+.25*(fbm(p*31.)-.5);   /* mottled clouds inside the stain */
  ab=3.2*(1.-exp(-ab/3.2));
- vec3 col=hanji(p)*exp(-ab);
+ float cr;vec3 pap=hanji(p,cr);
+ ab*=1.+.18*cr*smoothstep(.02,.2,d);                                   /* ink pools a little in the deep creases */
+ vec3 col=pap*exp(-ab);
  col*=1.-.05*smoothstep(.05,.6,A.a);                                 /* still-wet paper looks a touch darker */
  col*=1.-.07*pow(length(uv-.5)*1.3,2.);
  o=vec4(col,1.);}`,
@@ -1346,7 +1369,7 @@ function inkFrame(dt){
     inkTips[key]={x:s.x,y:s.y,t:now};}
   // now and then a drop falls by itself
   inkAmb-=sdt;if(inkAmb<0){inkAmb=7+Math.random()*7;inkDrop(.15+.7*Math.random(),.12+.76*Math.random(),inkNext++,.45+.3*Math.random());}
-  if(sdt>0){const it=Math.max(1,Math.min(40,Math.round(sdt*2200))),h=sdt/it,fade=Math.exp(-h/12);
+  if(sdt>0){const it=Math.max(1,Math.min(40,Math.round(sdt*2200))),h=sdt/it,fade=Math.exp(-h/24);
     let tx=0,ty=0;if(gyroOn){tx=viewTilt[0]*2.4;ty=viewTilt[1]*2.4;const m=Math.hypot(tx,ty);if(m>1){tx/=m;ty/=m;}}
     for(let k=0;k<it;k++){
       let u=use('inkSettle',[inkS.r.tx,inkS.r.ty]);gl.uniform1i(u.uA,inkA.r.bind(0));gl.uniform1i(u.uS,inkS.r.bind(1));
@@ -1869,7 +1892,13 @@ const mfxSw=document.getElementById('mfxSw'),mfxRow=document.getElementById('mfx
 mfxSw.addEventListener('change',()=>setMfx(mfxSw.checked,true));
 setMfx(MFX.on,false);
 const _setMusic=setMusic;setMusic=function(on){_setMusic(on);mfxRow.classList.toggle('off',!on);};mfxRow.classList.toggle('off',!musicOn);
-document.getElementById('gyroBtn').onclick=()=>setGyro(!gyroOn);
+document.getElementById('gyroBtn').onclick=()=>{const want=!gyroOn;setGyro(want);try{localStorage.setItem('hf-gyro',want?'1':'0');}catch(e){}};   // remembers the choice
+// on a phone, 흔들기 starts switched on (unless it was switched off before); iOS needs a tap first to ask permission
+{const phone=(matchMedia&&matchMedia('(pointer:coarse)').matches)||/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
+ let pref=null;try{pref=localStorage.getItem('hf-gyro');}catch(e){}
+ if(phone&&pref!=='0'&&typeof DeviceMotionEvent!=='undefined'){
+  if(typeof DeviceMotionEvent.requestPermission==='function')addEventListener('pointerdown',()=>{if(!gyroOn)setGyro(true);},{once:true,capture:true});
+  else setGyro(true);}}
 setDip(dipMode);
 document.getElementById('snapBtn').onclick=()=>{snapReq=true;};
 // true fullscreen (also draws under the camera cut-out / status bar area)

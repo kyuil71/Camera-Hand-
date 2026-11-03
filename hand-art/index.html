@@ -91,7 +91,7 @@ body:not(.water) #floors,body:not(.water) #dipRow,body:not(.water) #rainRow{disp
     <div class="row chips" id="clouds"></div>
     <div class="row chips" id="rainRow"><button class="chip" data-r="0">비 없음</button><button class="chip" data-r="1">이슬비</button><button class="chip" data-r="2">비</button><button class="chip" data-r="3">소나기</button></div>
     <div class="row" id="dipRow"><button class="btn" id="dipBtn">손 담그기 켜기</button></div>
-    <div class="row chips" id="floors"><button class="chip" data-f="2"><i class="sw" style="background:linear-gradient(135deg,#000,#1b1d20 50%,#000)"></i>검은 유리</button><button class="chip" data-f="1"><i class="sw" style="background:linear-gradient(135deg,#1c2328,#3a464e 50%,#11171b)"></i>다크 그레이</button><button class="chip" data-f="0"><i class="sw" style="background:linear-gradient(135deg,#8c8270,#c9bda4 45%,#6e675c)"></i>자갈</button></div>
+    <div class="row chips" id="floors"><button class="chip" data-f="2"><i class="sw" style="background:linear-gradient(135deg,#000,#1b1d20 50%,#000)"></i>검은 유리</button><button class="chip" data-f="1"><i class="sw" style="background:linear-gradient(135deg,#1c2328,#3a464e 50%,#11171b)"></i>다크 그레이</button><button class="chip" data-f="3"><i class="sw" style="background:#1d2024;background-image:linear-gradient(#5a5f66 1.5px,transparent 1.5px),linear-gradient(90deg,#5a5f66 1.5px,transparent 1.5px);background-size:8px 8px"></i>그레이 타일</button><button class="chip" data-f="0"><i class="sw" style="background:linear-gradient(135deg,#8c8270,#c9bda4 45%,#6e675c)"></i>자갈</button></div>
     <div class="row">
       <button class="btn main" id="camBtn">손 인식 시작</button>
       <button class="btn" id="seedBtn">새 캔버스</button>
@@ -106,7 +106,7 @@ body:not(.water) #floors,body:not(.water) #dipRow,body:not(.water) #rainRow{disp
     <label class="mfx" id="mfxRow"><span><b>음악 인터랙션</b><small>Music Interaction</small></span>
       <input type="checkbox" id="mfxSw" role="switch" aria-label="음악 인터랙션 Music Interaction"><i aria-hidden="true"></i></label>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 44</p>
+    <p class="hint" id="ver">버전 45</p>
   </div>
 </div>
 
@@ -445,6 +445,14 @@ vec3 bed(vec2 q,out float sh){
   float diff=max(dot(n,L),0.);float spec=pow(max(dot(reflect(-L,n),vec3(0.,0.,1.)),0.),18.)*.12;
   col=mix(col,c*(.40+.80*diff)+spec,smoothstep(1.,.9,d1));sh=mix(sh,1.,smoothstep(1.,.9,d1));}
  return col;}
+vec3 tiles(vec2 q){                              // dark gray tiles, big grid (~20 tiles on screen) with light grout lines
+ float sz=sqrt(aspect/20.);vec2 c=q/sz;vec2 ic=floor(c),fc=c-ic;
+ vec2 e=min(fc,1.-fc)*sz;float d=min(e.x,e.y);                 // distance to the nearest grout line (screen units)
+ float aa=max(fwidth(q.x)+fwidth(q.y),.0008);
+ float gw=.0042;float grout=1.-smoothstep(gw-aa,gw+aa,d);
+ float bev=smoothstep(gw,gw+.012,d);                           // rounded tile edge: a little darker right next to the grout
+ vec3 tc=vec3(.105,.112,.120)*(.92+.16*hash(ic+7.3))*(.94+.12*vn(q*38.))*(.82+.18*bev);
+ return mix(tc,vec3(.33,.345,.36)*(.9+.2*vn(q*90.)),grout);}
 vec3 sky(vec3 R,float t){
  float h=clamp(R.z,0.,1.);
  vec3 c=mix(vec3(.76,.85,.92),vec3(.16,.37,.70),pow(h,.6));
@@ -472,23 +480,24 @@ void main(){
  float sh=1.;vec3 bc;
  if(floorType<.5)bc=bed(hit,sh);
  else if(floorType<1.5)bc=vec3(.075,.088,.098)*(.9+.2*vn(hit*2.5));     // dark smoked glass
+ else if(floorType>2.5)bc=tiles(hit);                                    // dark gray tiles
  else bc=vec3(.030,.034,.038)*(.85+.3*vn(hit*2.5));                    // black glass (faint pattern shows through)
  vec2 lq=hit-sunDir.xy/sunDir.z*depth*.6+g*depth*1.2;
  mat2 r1=mat2(.80,.60,-.60,.80),r2=mat2(.34,-.94,.94,.34);
  float c1=caus(r1*lq*8.,t*.8),c2=caus(r2*lq*12.5+vec2(3.1,1.7),t*1.0);
  float cs=(c1+c2)*.5;cs=cs*cs*1.9+cs*.18;
- if(floorType>1.5)cs*=.5;                                                // black glass: caustics 50% weaker
+ if(floorType>1.5)cs*=floorType<2.5?.5:.45;                             // black glass / tiles: caustics softer                                                // black glass: caustics 50% weaker
  vec2 huv=vec2(hit.x/aspect,hit.y);
  float lap2=texture(uH,huv).z;
  cs*=1.+clamp(-lap2*nk*900.,-.85,3.);
  vec3 lit=bc*sh*(.52+2.6*cs);
  vec3 absorb=vec3(1.05,.26,.19);float path=tt+depth*1.1;
  if(floorType>.5){
-  lit+=vec3(.85,.95,1.)*cs*(floorType<1.5?.16:.10);                     // caustic light on glass
+  lit+=vec3(.85,.95,1.)*cs*(floorType<1.5?.16:floorType>2.5?.12:.10);                     // caustic light on glass
   vec3 fr=vec3(rd.x,rd.y,-rd.z);                                         // glossy glass floor mirrors the sky
   vec3 fsk=sky(normalize(fr),t);fsk=mix(vec3(dot(fsk,vec3(.3,.55,.15))),fsk,.35);
-  lit+=fsk*(floorType<1.5?.07:.045);}
- vec3 under=lit*exp(-absorb*path)+vec3(.03,.15,.16)*(floorType<.5?1.:floorType<1.5?.3:.16)*(1.-exp(-1.4*path));
+  lit+=fsk*(floorType<1.5?.07:floorType>2.5?.03:.045);}
+ vec3 under=lit*exp(-absorb*path)+vec3(.03,.15,.16)*(floorType<.5?1.:floorType<1.5||floorType>2.5?.3:.16)*(1.-exp(-1.4*path));
  vec3 R=reflect(-V,N);R.z=abs(R.z);
  vec3 col=mix(under,sky(R,t),F);
  col*=1.-.18*pow(length(uv-.5)*1.25,2.);
@@ -909,17 +918,18 @@ function updateDips(dt){
 const wTip={}, wWind=[{x:.5,y:.5,dx:0,dy:1,k:0,px:null,py:null},{x:.5,y:.5,dx:0,dy:1,k:0,px:null,py:null}];
 const windBuf=new Float32Array(8), windK=new Float32Array(2);
 /* ---- Ripple input: "퐁당" — every new contact drops ONE small stone; moving only leaves a faint wake ---- */
-const PLOP_A=2.6, PLOP_R=.00016;                 // a small pebble: tight impulse → the wave equation spreads it into clean rings
+// pond-style plop: a finger-wide push → a clear lens dome that magnifies the floor, then one broad ring spreading out
+let PLOP_A=6.5, PLOP_R=.0018, PLOP_RING=1.0, WAKE_STEP=.016, WAKE_A=[.45,.7], WAKE_R=.0012;   // dragging pushes water aside: broad, spreading wake                 // a small pebble: tight impulse → the wave equation spreads it into clean rings
 const plops=[];                                   // contacts that started since the last frame
 const wakes=new Map();                            // per contact: distance travelled since the last wake touch
 function addPlop(x,y,k){plops.push({x,y,k:k==null?1:k});}
 function wakeStep(id,x,y,speed){                  // speed in screen-heights / s
   let w=wakes.get(id);if(!w){w={x,y,acc:0};wakes.set(id,w);}
   const d=Math.hypot((x-w.x)*aspect,y-w.y);w.x=x;w.y=y;if(d>.2)return;   // tracking jump
-  w.acc+=d;const step=.022;
+  w.acc+=d;const step=WAKE_STEP;
   while(w.acc>=step){w.acc-=step;                 // fixed spacing → event rate never multiplies the waves
     const s=Math.min(1,Math.max(0,(speed-.08)/1.4));
-    queue.push({x,y,wake:1,amp:.06+.34*s*s,r:.00018+.00022*s});}}
+    queue.push({x,y,wake:1,amp:WAKE_A[0]+WAKE_A[1]*s,r:WAKE_R});}}
 function wakeEnd(id){wakes.delete(id);}
 // camera: each finger bending down like a piano key = one plop at its tip (hysteresis + confirmation → no jitter repeats)
 const keyState={};                                // 'h'+hand+'_'+finger → {down,since,t0,x,y,cool,fired}
@@ -959,8 +969,8 @@ function waterFrame(dt){
   if(dipMode){queue.length=0;plops.length=0;updateDips(dt);}else waterHands(dt,live);
   if(plops.length){const n=plops.length,kk=1/Math.sqrt(n);            // many stones at once: each a little softer, total energy stays calm
     if(live)for(const p of plops){waterPoke(p.x,p.y,WATER_AMP*PLOP_A*p.k*kk,PLOP_R);
-      if(rainDrops.length>=MAXR)rainDrops.shift();
-      rainDrops.push({x:p.x,y:p.y,age:0,size:1.75*Math.sqrt(kk)*p.k});}   // + crisp capillary rings and a glint right where the finger touched
+      if(PLOP_RING>0){if(rainDrops.length>=MAXR)rainDrops.shift();
+      rainDrops.push({x:p.x,y:p.y,age:0,size:PLOP_RING*Math.sqrt(kk)*p.k});}}   // + crisp capillary rings and a glint right where the finger touched
     plops.length=0;}
   // fingers / touch / pinch rings → pressure on the surface (stronger when moving faster)
   for(const s of queue.splice(0)){ if(!live)continue;
@@ -1015,7 +1025,7 @@ function updateRain(dt){
     if(d.size>.75&&flow>.3)waterPoke(d.x,d.y,WATER_AMP*.35*d.size,.00006);}   // big drops also stir the lake
   rainBuf.fill(0);rainDrops.forEach((d,i)=>rainBuf.set([d.x,d.y,d.age,d.size],i*4));
 }
-let floorType=2; try{const v=parseInt(localStorage.getItem('hf-floor4'));if(v>=0&&v<=2)floorType=v;}catch(e){}
+let floorType=2; try{const v=parseInt(localStorage.getItem('hf-floor4'));if(v>=0&&v<=3)floorType=v;}catch(e){}
 
 /* ================= Wall splashes: droplets that leap off the walls ================= */
 const drops=[]; const MAX_DROPS=320;

@@ -106,7 +106,7 @@ body:not(.water) #floors,body:not(.water) #dipRow,body:not(.water) #rainRow{disp
     <label class="mfx" id="mfxRow"><span><b>음악 인터랙션</b><small>Music Interaction</small></span>
       <input type="checkbox" id="mfxSw" role="switch" aria-label="음악 인터랙션 Music Interaction"><i aria-hidden="true"></i></label>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 46</p>
+    <p class="hint" id="ver">버전 48</p>
   </div>
 </div>
 
@@ -1030,8 +1030,9 @@ function wakeEnd(id){wakes.delete(id);}
 // camera: each finger bending down like a piano key = one plop at its tip (hysteresis + confirmation → no jitter repeats)
 const keyState={};                                // 'h'+hand+'_'+finger → {down,since,t0,x,y,cool,fired}
 const KEYS=[[8,5],[12,9],[16,13],[20,17]];
+const spreadState={};                            // per hand: ready to drop all spread fingers in at once
 function fingerKeys(res){
-  const now=performance.now(),list=res.multiHandLandmarks||[],seen={};
+  const now=performance.now(),list=res.multiHandLandmarks||[],seen={},seenS={};
   if(mode!=='water'||dipMode)return;
   list.forEach((lm,h)=>{if(h>1)return;const hi=handInfo[h];if(!hi)return;
     const wr=lm[0],ratio=KEYS.map(([t,m])=>Math.hypot(lm[t].x-wr.x,lm[t].y-wr.y)/(Math.hypot(lm[m].x-wr.x,lm[m].y-wr.y)+1e-6));
@@ -1043,8 +1044,21 @@ function fingerKeys(res){
       // confirm ~90 ms later: still pressed, the hand is not making a fist / pinch / pointing, and another finger is still up
       if(st.down&&!st.fired&&now-st.t0>90){st.fired=true;
         const othersUp=ratio.filter((v,k)=>k!==j&&v>1.62).length;
-        if(!hi.fist&&!hi.pinch&&!hi.point&&othersUp>=1&&now>st.cool){addPlop(st.x,st.y,.9);st.cool=now+220;}}});});
+        if(!hi.fist&&!hi.pinch&&!hi.point&&othersUp>=1&&now>st.cool){addPlop(st.x,st.y,.9);st.cool=now+220;}}});
+    // several fingers spread (or a hand arriving open) → every extended fingertip touches the water at once: one plop each
+    const ext=[];KEYS.forEach(([t],j)=>{if(ratio[j]>1.62)ext.push(t);});
+    const sz=Math.hypot(lm[9].x-wr.x,lm[9].y-wr.y);
+    if(ext.length>=1&&Math.hypot(lm[4].x-lm[5].x,lm[4].y-lm[5].y)>sz*.62)ext.push(4);   // the thumb counts when it is clearly out
+    const sp=spreadState[h]||(spreadState[h]={armed:true,t0:0,low:0});seenS[h]=1;
+    if(ext.length>=2&&!hi.fist&&!hi.pinch){sp.low=0;
+      if(sp.armed){if(!sp.t0)sp.t0=now;
+        if(now-sp.t0>90){sp.armed=false;sp.t0=0;                                  // held open ~90 ms → not a flicker
+          for(const t of ext)addPlop(lm[t].x,1-lm[t].y,.9);
+          KEYS.forEach((_,j)=>{const st=keyState['h'+h+'_'+j];if(st)st.cool=now+300;});}}}
+    else{sp.t0=0;if(ext.length<=1){if(!sp.low)sp.low=now;if(now-sp.low>150)sp.armed=true;}}   // close the hand (or point) to drop the fingers in again
+  });
   for(const k in keyState)if(!seen[k])delete keyState[k];
+  for(const k in spreadState)if(!seenS[k])delete spreadState[k];
 }
 function waterHands(dt,live){
   const seen={};
@@ -1526,7 +1540,7 @@ const d2=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 function onHands(res){
   const now=performance.now();const q0=queue.length;
   const list=res.multiHandLandmarks||[];
-  if(!list.length){ if(now-lastSeen>250){for(const k in tracks)delete tracks[k];for(const k in pointState)delete pointState[k];} handInfo=[]; setDetect(false); if(camOn)status('손 인식 켜짐 · 손을 카메라에 보여주세요'); fistSince=0; return; }
+  if(!list.length){ for(const k in spreadState)delete spreadState[k]; if(now-lastSeen>250){for(const k in tracks)delete tracks[k];for(const k in pointState)delete pointState[k];} handInfo=[]; setDetect(false); if(camOn)status('손 인식 켜짐 · 손을 카메라에 보여주세요'); fistSince=0; return; }
   lastSeen=now; handInfo=[]; setDetect(true);
   const seenH={};
   let anyFist=false;
@@ -1698,7 +1712,7 @@ const HINTS={paint:hintTxt.innerHTML,
   silk:'<b>검지</b> 실크가 따라 흐름 · 빠르게 움직이면 넓게 펼쳐짐<br><b>집기</b> 부드러운 소용돌이 · <b>손 펼치기</b> 활짝 펼침 · <b>주먹</b> 서서히 멈춤',
   light:'<b>손가락</b> 빛의 흐름 밀기 · <b>검지만 펴기</b> 가리킨 방향으로 빛줄기<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 멈춤',
   wave:'<b>폰 기울이기</b> 물이 쏠려 벽에 부딪힘 · <b>흔들기</b> 출렁임<br><b>터치·손</b> 물 밀기 · <b>톡</b> 물결 · <b>주먹</b> 멈춤',
-  water:'<b>톡 터치·손가락 하나씩 구부리기</b> 퐁당 · <b>검지 하나</b> 손끝을 물에 대고 움직이기<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 물 멈춤'};
+  water:'<b>톡 터치·손가락 하나씩 구부리기</b> 퐁당 · <b>손가락 여러 개 펴기</b> 한꺼번에 퐁당<br><b>검지 하나</b> 손끝을 물에 대고 움직이기<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 물 멈춤'};
 function setMode(m){mode=m;document.body.classList.toggle('water',m==='water');document.body.classList.toggle('wave',m==='wave');document.body.classList.toggle('light',m==='light');document.body.classList.toggle('silk',m==='silk');document.body.classList.toggle('cloud',m==='cloud');
   if(m==='cloud'&&vel){const u=use('waterClear',[0,0]);blit(vel.w);vel.swap();blit(vel.w);vel.swap();}   // start calm: no leftover swirls from other modes
   document.querySelectorAll('#modeSeg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.m===m));

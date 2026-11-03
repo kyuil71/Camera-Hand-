@@ -56,11 +56,13 @@ body.menu .dock{transform:translate(-50%,0)}
 .speed{display:flex;align-items:center;gap:12px;margin:0 2px 12px;touch-action:none}
 .speed span{font-size:16px;color:var(--mute);flex:0 0 auto}
 .speed b{font-size:16px;font-weight:600;min-width:64px;text-align:right;font-variant-numeric:tabular-nums}
-#speed{flex:1;-webkit-appearance:none;appearance:none;height:28px;background:transparent;touch-action:none}
+#speed,#plopSize{flex:1;-webkit-appearance:none;appearance:none;height:28px;background:transparent;touch-action:none}
+#plopSize::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:linear-gradient(90deg,#3a6a7a,#8fd3e8)}
+#plopSize::-moz-range-track{height:4px;border-radius:2px;background:linear-gradient(90deg,#3a6a7a,#8fd3e8)}
 #speed::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:linear-gradient(90deg,#00c8ff,#ffd000,#ff5a00)}
-#speed::-webkit-slider-thumb{-webkit-appearance:none;width:26px;height:26px;margin-top:-11px;border-radius:50%;background:#fff;box-shadow:0 1px 6px rgba(0,0,0,.4)}
+#plopSize::-webkit-slider-thumb,#speed::-webkit-slider-thumb{-webkit-appearance:none;width:26px;height:26px;margin-top:-11px;border-radius:50%;background:#fff;box-shadow:0 1px 6px rgba(0,0,0,.4)}
 #speed::-moz-range-track{height:4px;border-radius:2px;background:linear-gradient(90deg,#00c8ff,#ffd000,#ff5a00)}
-#speed::-moz-range-thumb{width:26px;height:26px;border:0;border-radius:50%;background:#fff}
+#plopSize::-moz-range-thumb,#speed::-moz-range-thumb{width:26px;height:26px;border:0;border-radius:50%;background:#fff}
 .seg{gap:0;margin:0 0 12px;overflow-x:auto;scrollbar-width:none;border:1px solid var(--line);border-radius:14px;padding:3px;background:rgba(255,255,255,.04)}
 .seg::-webkit-scrollbar{display:none}
 .seg button{flex:1 0 auto;padding:0 10px;min-height:42px;border:0;border-radius:11px;background:transparent;color:var(--mute);font:inherit;font-size:16px;font-weight:600}
@@ -71,7 +73,7 @@ body:not(.ink) #inks{display:none}
 body.ink #palettes{display:none}
 body:not(.silk) #silks{display:none}
 body:not(.light) #lights{display:none}
-body:not(.water) #floors,body:not(.water) #dipRow,body:not(.water) #rainRow{display:none}
+body:not(.water) #plopRow,body:not(.water) #floors,body:not(.water) #dipRow,body:not(.water) #rainRow{display:none}
 #rainRow{margin-bottom:10px}
 #dipRow{margin-bottom:10px}
 #dipBtn.on{background:var(--ink);color:#101826}
@@ -102,6 +104,7 @@ body:not(.water) #floors,body:not(.water) #dipRow,body:not(.water) #rainRow{disp
     <div class="head" id="sheetHead"><span class="bar"></span><div id="status">손 인식 꺼짐 · 화면을 문질러 보세요</div></div>
     <div class="row seg" id="modeSeg"><button data-m="paint">Pigment</button><button data-m="water">Ripple</button><button data-m="wave">Wave</button><button data-m="light">Aurora</button><button data-m="silk">Silk</button><button data-m="cloud">Cloud</button><button data-m="ink">Ink</button></div>
     <div class="speed"><span>흐름 속도</span><input type="range" id="speed" min="0" max="100" step="1"><b id="speedVal"></b></div>
+    <div class="speed" id="plopRow"><span>퐁당 크기</span><input type="range" id="plopSize" min="0" max="100" step="1" aria-label="퐁당 크기"><b id="plopVal"></b></div>
     <div class="row chips" id="palettes"></div>
     <div class="row chips" id="lights"></div>
     <div class="row chips" id="silks"></div>
@@ -124,7 +127,7 @@ body:not(.water) #floors,body:not(.water) #dipRow,body:not(.water) #rainRow{disp
     <label class="mfx" id="mfxRow"><span><b>음악 인터랙션</b><small>Music Interaction</small></span>
       <input type="checkbox" id="mfxSw" role="switch" aria-label="음악 인터랙션 Music Interaction"><i aria-hidden="true"></i></label>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 56</p>
+    <p class="hint" id="ver">버전 57</p>
   </div>
 </div>
 
@@ -1090,10 +1093,10 @@ let waterTime=0, wAcc=0, dropClock=0, glideClock=0; const gliders=[];
 const W_C=250, W_H=1/540, W_NK=.24, SUN=(()=>{const v=[.12,.82,.56],l=Math.hypot(...v);return v.map(x=>x/l);})();
 // strength budget: however hard and often the water is struck, it never gets rougher than ~3 plops at once
 // (extra pushes are softened, and rough water calms faster) → the floor's light pattern always shows
-let wBudget=0,wExtra=0;const W_BCAP=.035;
+let wBudget=0,wExtra=0,wCapK=1;const W_BCAP=.035;
 function waterClear(){wBudget=0;wExtra=0;const u=use('waterClear',[0,0]);blit(wat.w);wat.swap();blit(wat.w);wat.swap();}
 function waterPoke(x,y,amp,r){const I=Math.abs(amp)*r;
-  let k=1;if(I>0){const room=W_BCAP-wBudget;k=room>=I?1:Math.max(.15,Math.max(0,room)/I);amp*=k;wBudget+=I*k;}
+  let k=1;if(I>0){const room=W_BCAP*wCapK-wBudget;k=room>=I?1:Math.max(.15,Math.max(0,room)/I);amp*=k;wBudget+=I*k;}
   const u=use('waterPoke',[wat.r.tx,wat.r.ty]);gl.uniform1i(u.uT,wat.r.bind(0));
   gl.uniform1f(u.aspect,aspect);gl.uniform2f(u.point,x,y);gl.uniform1f(u.amp,amp);gl.uniform1f(u.radius,r*(aspect>1?aspect:1));blit(wat.w);wat.swap();return k;}
 function waterStep(){const u=use('waterStep',[wat.r.tx,wat.r.ty]);gl.uniform1i(u.uT,wat.r.bind(0));
@@ -1125,6 +1128,9 @@ const wTip={}, wWind=[{x:.5,y:.5,dx:0,dy:1,k:0,px:null,py:null},{x:.5,y:.5,dx:0,
 const windBuf=new Float32Array(8), windK=new Float32Array(2);
 /* ---- Ripple input: "퐁당" — every new contact drops ONE small stone; moving only leaves a faint wake ---- */
 // pond-style plop: a finger-wide push → a clear lens dome that magnifies the floor, then one broad ring spreading out
+// 퐁당 크기 slider: 0.5× … 2× the width of a plop (50 = as before)
+let plopVal=50;try{const v=parseInt(localStorage.getItem('hf-plop'));if(v>=0&&v<=100)plopVal=v;}catch(e){}
+let plopScale=Math.pow(2,(plopVal-50)/50);
 let PLOP_A=6.5, PLOP_R=.0018, PLOP_RING=1.0, WAKE_STEP=.016, WAKE_A=[.45,.7], WAKE_R=.0012;   // dragging pushes water aside: broad, spreading wake                 // a small pebble: tight impulse → the wave equation spreads it into clean rings
 const plops=[];                                   // contacts that started since the last frame
 const wakes=new Map();                            // per contact: distance travelled since the last wake touch
@@ -1173,13 +1179,14 @@ function waterHands(dt,live){
 function waterFrame(dt){
   const wts=Math.min(.45+.55*timeScale,2.6);            // slider + finger speed → water time
   const sdt=dt*flow*wts; waterTime+=sdt;
-  wExtra=Math.max(0,wBudget/W_BCAP-.6)*2.5; wBudget*=Math.exp(-(.3+wExtra*.5)*sdt);   // rough water settles faster
+  wExtra=Math.max(0,wBudget/(W_BCAP*wCapK)-.6)*2.5; wBudget*=Math.exp(-(.3+wExtra*.5)*sdt);   // rough water settles faster
   const live=flow>.3;
   if(dipMode){queue.length=0;plops.length=0;updateDips(dt);}else waterHands(dt,live);
   if(plops.length){const n=plops.length,kk=1/Math.sqrt(n);            // many stones at once: each a little softer, total energy stays calm
-    if(live)for(const p of plops){const ek=waterPoke(p.x,p.y,WATER_AMP*PLOP_A*p.k*kk,PLOP_R);
+    const ps=plopScale;
+    if(live)for(const p of plops){const ek=waterPoke(p.x,p.y,WATER_AMP*PLOP_A*p.k*kk*Math.pow(ps,-.4),PLOP_R*ps*ps);   // 퐁당 크기: wider push, a little gentler per area
       if(PLOP_RING>0&&ek>.6){if(rainDrops.length>=MAXR)rainDrops.shift();
-      rainDrops.push({x:p.x,y:p.y,age:0,size:PLOP_RING*Math.sqrt(kk)*p.k});}}   // + crisp capillary rings and a glint right where the finger touched
+      rainDrops.push({x:p.x,y:p.y,age:0,size:Math.min(1.8,PLOP_RING*Math.sqrt(kk)*p.k*Math.sqrt(ps))});}}   // + crisp capillary rings and a glint right where the finger touched
     plops.length=0;}
   // fingers / touch / pinch rings → pressure on the surface (stronger when moving faster)
   for(const s of queue.splice(0)){ if(!live)continue;
@@ -1874,6 +1881,10 @@ const speedEl=document.getElementById('speed'),speedTxt=document.getElementById(
 const speedLabel=v=>v<30?'아주 느림':v<45?'느림':v<60?'보통':v<80?'빠름':'아주 빠름';
 function applySpeed(v){speedVal=+v;speed=sliderToSpeed(speedVal);if(handAct<.05)timeScale=speed;speedTxt.textContent=speedLabel(speedVal);try{localStorage.setItem('hf-speed',speedVal);}catch(e){}}
 speedEl.value=speedVal;applySpeed(speedVal);speedEl.addEventListener('input',e=>applySpeed(e.target.value));
+const plopEl=document.getElementById('plopSize'),plopTxt=document.getElementById('plopVal');
+function applyPlop(v){plopVal=+v;plopScale=Math.pow(2,(plopVal-50)/50);wCapK=Math.pow(plopScale,1.6);   // bigger plops get a bigger roughness budget
+  plopTxt.textContent=plopVal<20?'아주 작게':plopVal<40?'작게':plopVal<=60?'보통':plopVal<=80?'크게':'아주 크게';try{localStorage.setItem('hf-plop',plopVal);}catch(e){}}
+plopEl.value=plopVal;applyPlop(plopVal);plopEl.addEventListener('input',e=>applyPlop(e.target.value));
 const seedBtn=document.getElementById('seedBtn'),hintTxt=document.getElementById('hintTxt');
 const HINTS={paint:hintTxt.innerHTML,
   dip:'<b>손 담그기</b> · 터치: 오래 누를수록 깊게, 톡 누르면 살짝<br>손: 손바닥을 화면 쪽으로 내밀어 오래 둘수록 깊게, 떼면 물이 되솟음',

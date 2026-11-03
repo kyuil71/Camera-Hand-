@@ -18,6 +18,15 @@ canvas#art,canvas#fx{position:fixed;inset:0;width:100%;height:100%;display:block
 canvas#fx{pointer-events:none}
 .bar{display:block;width:56px;height:5px;border-radius:3px;background:rgba(190,196,206,.55);transition:background .35s,box-shadow .35s}
 body.detect .bar{background:#fff;box-shadow:0 0 12px rgba(255,255,255,.95)}
+#cap{position:fixed;top:calc(env(safe-area-inset-top) + 12px);right:calc(env(safe-area-inset-right) + 12px);z-index:6;display:flex;gap:10px;align-items:center}
+#cap button{width:44px;height:44px;border-radius:22px;border:1px solid rgba(255,255,255,.28);background:rgba(10,12,16,.38);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+  display:flex;align-items:center;justify-content:center;padding:0;color:#fff;touch-action:manipulation}
+#cap svg{width:22px;height:22px}
+#recBtn .dot{width:16px;height:16px;border-radius:8px;background:#ff3b30;transition:border-radius .2s,width .2s,height .2s}
+#recBtn.on .dot{width:14px;height:14px;border-radius:3px}
+#recTime{font:600 13px/1 system-ui,sans-serif;color:#fff;background:rgba(255,59,48,.85);padding:5px 8px;border-radius:10px;display:none;font-variant-numeric:tabular-nums}
+#recBtn.on+#recTime{display:block}
+#flash{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:7;transition:opacity .35s}
 #grab{position:fixed;left:0;right:0;bottom:0;z-index:5;height:calc(env(safe-area-inset-bottom) + 64px);display:flex;justify-content:center;padding-top:30px;touch-action:none;transition:opacity .3s}
 body.menu #grab{opacity:0;pointer-events:none}
 .head{display:flex;flex-direction:column;align-items:center;gap:10px;padding:2px 0 12px;touch-action:none}
@@ -80,6 +89,9 @@ body:not(.water) #floors,body:not(.water) #dipRow,body:not(.water) #rainRow{disp
 <canvas id="fx"></canvas>
 <video id="video" playsinline muted style="display:none"></video>
 
+<div id="cap"><button id="recBtn" aria-label="녹화"><span class="dot"></span></button><span id="recTime">0:00</span>
+  <button id="shotBtn" aria-label="캡처"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.6-2.2h6.8L17 8h3v11H4z"/><circle cx="12" cy="13.2" r="3.6"/></svg></button></div>
+<div id="flash"></div>
 <div id="grab" aria-label="메뉴 열기"><span class="bar"></span></div>
 
 <div class="dock" id="sheet">
@@ -109,7 +121,7 @@ body:not(.water) #floors,body:not(.water) #dipRow,body:not(.water) #rainRow{disp
     <label class="mfx" id="mfxRow"><span><b>음악 인터랙션</b><small>Music Interaction</small></span>
       <input type="checkbox" id="mfxSw" role="switch" aria-label="음악 인터랙션 Music Interaction"><i aria-hidden="true"></i></label>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 54</p>
+    <p class="hint" id="ver">버전 55</p>
   </div>
 </div>
 
@@ -1843,8 +1855,8 @@ function frame(now){
   gl.uniform1f(u.dotSize,2.0*dpr);gl.uniform1f(u.relief,11.+7.*(1.-flow));gl.uniform1f(u.time,now*.001);blit(null);
   }
   updateMusic(dt);
-  if(snapReq){snapReq=false;canvas.toBlob(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);
-    a.download='hand-flow-'+new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')+'.png';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000);},'image/png');}
+  if(snapReq){const jpg=snapReq==='jpg';snapReq=false;           // read the canvas right after drawing (the buttons and menu are not part of it)
+    canvas.toBlob(b=>{if(b)saveBlob(b,jpg?'jpg':'png');},jpg?'image/jpeg':'image/png',.94);}
   requestAnimationFrame(frame);
 }
 
@@ -1925,7 +1937,36 @@ document.getElementById('gyroBtn').onclick=()=>{const want=!gyroOn;setGyro(want)
   if(typeof DeviceMotionEvent.requestPermission==='function')addEventListener('pointerdown',()=>{if(!gyroOn)setGyro(true);},{once:true,capture:true});
   else setGyro(true);}}
 setDip(dipMode);
-document.getElementById('snapBtn').onclick=()=>{snapReq=true;};
+document.getElementById('snapBtn').onclick=()=>{snapReq='png';};
+/* ================= Record (MP4) & capture (JPEG): only the artwork, never the buttons or the menu ================= */
+function stamp(){const d=new Date(),z=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate())+'_'+z(d.getHours())+'-'+z(d.getMinutes())+'-'+z(d.getSeconds());}
+function saveBlob(b,ext){const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='hand-flow-'+stamp()+'.'+ext;
+  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),8000);}
+const recBtn=document.getElementById('recBtn'),recTime=document.getElementById('recTime'),flashEl=document.getElementById('flash');
+let rec=null,recChunks=[],recT0=0,recTimer=0,recExt='mp4';
+function recAudioTracks(){try{
+  if(!musicOn)return [];
+  if(MFX.ctx){if(!MFX.rec){MFX.rec=MFX.ctx.createMediaStreamDestination();MFX.gain.connect(MFX.rec);}return MFX.rec.stream.getAudioTracks();}
+  const cs=bgm.captureStream||bgm.mozCaptureStream;if(cs&&!bgm.paused)return cs.call(bgm).getAudioTracks();}catch(e){}return [];}
+function recStart(){
+  if(!canvas.captureStream||typeof MediaRecorder==='undefined'){status('이 브라우저는 화면 녹화를 지원하지 않아요');return;}
+  const vs=canvas.captureStream(60),stream=new MediaStream([...vs.getVideoTracks(),...recAudioTracks()]);
+  const types=['video/mp4;codecs=avc1.42E01E,mp4a.40.2','video/mp4;codecs=avc1','video/mp4','video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'];
+  const type=types.find(t=>MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported(t))||'';
+  recExt=type.startsWith('video/mp4')?'mp4':'webm';
+  try{rec=new MediaRecorder(stream,type?{mimeType:type,videoBitsPerSecond:12e6}:{videoBitsPerSecond:12e6});}catch(e){status('녹화를 시작하지 못했어요');rec=null;return;}
+  recChunks=[];rec.ondataavailable=e=>{if(e.data&&e.data.size)recChunks.push(e.data);};
+  rec.onstop=()=>{const b=new Blob(recChunks,{type:rec&&rec.mimeType||type||'video/mp4'});vs.getTracks().forEach(t=>t.stop());rec=null;
+    if(b.size)saveBlob(b,recExt);if(recExt!=='mp4')status('이 브라우저는 MP4 녹화를 지원하지 않아 WebM으로 저장했어요');};
+  rec.start(1000);recT0=performance.now();recBtn.classList.add('on');recBtn.setAttribute('aria-label','녹화 중지');
+  const tick=()=>{const t=Math.floor((performance.now()-recT0)/1000);recTime.textContent=Math.floor(t/60)+':'+String(t%60).padStart(2,'0');};
+  tick();recTimer=setInterval(tick,500);}
+function recStop(){if(rec&&rec.state!=='inactive')rec.stop();clearInterval(recTimer);recBtn.classList.remove('on');recBtn.setAttribute('aria-label','녹화');}
+recBtn.onclick=e=>{e.stopPropagation();if(rec)recStop();else recStart();};
+document.getElementById('shotBtn').onclick=e=>{e.stopPropagation();snapReq='jpg';
+  flashEl.style.transition='none';flashEl.style.opacity='.55';requestAnimationFrame(()=>{flashEl.style.transition='opacity .35s';flashEl.style.opacity='0';});};
+for(const el of [recBtn,document.getElementById('shotBtn')])el.addEventListener('pointerdown',e=>e.stopPropagation());
+
 // true fullscreen (also draws under the camera cut-out / status bar area)
 const goFull=()=>{const d=document.documentElement;if(document.fullscreenElement)return;
   const r=(d.requestFullscreen||d.webkitRequestFullscreen);try{const p=r?.call(d,{navigationUI:'hide'});p&&p.catch&&p.catch(()=>{});}catch(e){}};

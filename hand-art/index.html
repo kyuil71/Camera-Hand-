@@ -127,7 +127,7 @@ body:not(.water) #plopRow,body:not(.water) #floors,body:not(.water) #dipRow,body
     <label class="mfx" id="mfxRow"><span><b>음악 인터랙션</b><small>Music Interaction</small></span>
       <input type="checkbox" id="mfxSw" role="switch" aria-label="음악 인터랙션 Music Interaction"><i aria-hidden="true"></i></label>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 57</p>
+    <p class="hint" id="ver">버전 58</p>
   </div>
 </div>
 
@@ -1128,9 +1128,9 @@ const wTip={}, wWind=[{x:.5,y:.5,dx:0,dy:1,k:0,px:null,py:null},{x:.5,y:.5,dx:0,
 const windBuf=new Float32Array(8), windK=new Float32Array(2);
 /* ---- Ripple input: "퐁당" — every new contact drops ONE small stone; moving only leaves a faint wake ---- */
 // pond-style plop: a finger-wide push → a clear lens dome that magnifies the floor, then one broad ring spreading out
-// 퐁당 크기 slider: 0.5× … 2× the width of a plop (50 = as before)
-let plopVal=50;try{const v=parseInt(localStorage.getItem('hf-plop'));if(v>=0&&v<=100)plopVal=v;}catch(e){}
-let plopScale=Math.pow(2,(plopVal-50)/50);
+// 퐁당 크기 slider
+let plopVal=100;try{const v=parseInt(localStorage.getItem('hf-plop2'));if(v>=0&&v<=100)plopVal=v;}catch(e){}
+let plopScale=.5*Math.pow(2,(plopVal-100)/50);   // 0.125× … 0.5× (the old smallest is now the largest)
 let PLOP_A=6.5, PLOP_R=.0018, PLOP_RING=1.0, WAKE_STEP=.016, WAKE_A=[.45,.7], WAKE_R=.0012;   // dragging pushes water aside: broad, spreading wake                 // a small pebble: tight impulse → the wave equation spreads it into clean rings
 const plops=[];                                   // contacts that started since the last frame
 const wakes=new Map();                            // per contact: distance travelled since the last wake touch
@@ -1149,21 +1149,34 @@ const keyState={};                                // 'h'+hand+'_'+finger → {do
 const KEYS=[[8,5],[12,9],[16,13],[20,17]];
 function fingerKeys(res){
   const now=performance.now(),list=res.multiHandLandmarks||[],seen={};
-  if(mode!=='water'||dipMode)return;
+  if((mode!=='water'&&mode!=='ink')||(mode==='water'&&dipMode)){for(const k in keyState)contactEnd(k);return;}
   list.forEach((lm,h)=>{if(h>1)return;const hi=handInfo[h];if(!hi)return;
     const wr=lm[0],sz=Math.hypot(lm[9].x-wr.x,lm[9].y-wr.y)+1e-6;
     // how straight each finger is: index…pinky by tip distance from the wrist, the thumb by its tip's distance from the index knuckle
     const fing=KEYS.map(([t,m])=>({t,r:Math.hypot(lm[t].x-wr.x,lm[t].y-wr.y)/(Math.hypot(lm[m].x-wr.x,lm[m].y-wr.y)+1e-6),lo:1.35,hi:1.62}));
     fing.push({t:4,r:Math.hypot(lm[4].x-lm[5].x,lm[4].y-lm[5].y)/sz,lo:.42,hi:.62,thumb:1});
     fing.forEach((f,j)=>{const key='h'+h+'_'+j;seen[key]=1;let st=keyState[key];
-      if(!st)st=keyState[key]={down:f.r<f.lo,t0:0,x:0,y:0,cool:0,fired:true};     // a finger already bent when the hand appears does nothing
-      if(!st.down&&f.r<f.lo){st.down=true;st.t0=now;st.x=lm[f.t].x;st.y=1-lm[f.t].y;st.fired=false;}   // bent
-      else if(st.down&&f.r>f.hi){st.down=false;}                                                       // straightened again
+      if(!st)st=keyState[key]={down:f.r<f.lo,t0:0,x:0,y:0,cool:0,fired:true,on:false};     // a finger already bent when the hand appears does nothing
+      const tx=lm[f.t].x,ty=1-lm[f.t].y;
+      if(!st.down&&f.r<f.lo){st.down=true;st.t0=now;st.x=tx;st.y=ty;st.fired=false;}   // bent
+      else if(st.down&&f.r>f.hi){st.down=false;contactEnd(key);}                      // straightened again → lifted off
       if(st.down&&!st.fired&&now-st.t0>90){st.fired=true;
         // not when the bend is part of pointing (index-in-the-water mode) or a thumb–index pinch
-        if(!hi.point&&!(hi.pinch&&(f.thumb||j===0))&&now>st.cool){addPlop(st.x,st.y,.9);st.cool=now+220;}}});});
-  for(const k in keyState)if(!seen[k])delete keyState[k];
+        if(!hi.point&&!(hi.pinch&&(f.thumb||j===0))&&now>st.cool){contactStart(key,st,tx,ty,now);st.cool=now+220;}}
+      else if(st.on)contactMove(key,st,tx,ty,now);});});                             // bent finger moving: follows the fingertip
+  for(const k in keyState)if(!seen[k]){contactEnd(k);delete keyState[k];}
 }
+// a bent finger is a finger touching the surface: in Ripple it drops in (퐁당) and drags a wake, on hanji it starts painting
+function contactStart(key,st,x,y,now){st.on=true;st.sx=x;st.sy=y;st.lt=now;
+  if(mode==='water'){addPlop(x,y,.9);wakes.delete('k'+key);}
+  else if(mode==='ink'&&inkA&&flow>.3){st.ci=inkNext++;inkDrop(x,y,st.ci,.55);}}
+function contactMove(key,st,x,y,now){
+  const a=.75,nx=st.sx+(x-st.sx)*a,ny=st.sy+(y-st.sy)*a;                          // light smoothing: steady, yet right on the fingertip
+  const dt=Math.max(.012,(now-st.lt)/1000),sp=Math.hypot((nx-st.sx)*aspect,ny-st.sy)/dt;
+  if(mode==='water')wakeStep('k'+key,nx,ny,sp);
+  else if(mode==='ink'&&inkA&&flow>.3)inkStroke(st.sx,st.sy,nx,ny,st.ci||0,1);
+  st.sx=nx;st.sy=ny;st.lt=now;}
+function contactEnd(key){const st=keyState[key];if(st)st.on=false;wakeEnd('k'+key);}
 function waterHands(dt,live){
   const seen={};
   handInfo.forEach((h,i)=>{if(i>1)return;
@@ -1408,11 +1421,7 @@ function inkFrame(dt){
   if(!inkA)inkAlloc();
   inkSplats=0;const sdt=Math.min(dt,1/30)*flow;inkTime+=sdt;
   inkCyc+=dt;if(inkCyc>6){inkCyc=0;inkCycle++;}
-  // hands: every moving fingertip draws with its own ink
-  for(const s of queue.splice(0)){if(flow<.3||s.vOnly||!s.hand||s.vx==null)continue;
-    const key='f'+(s.fi||0),pv=inkTips[key],now=performance.now();
-    if(pv&&now-pv.t<160)inkStroke(pv.x,pv.y,s.x,s.y,(s.fi||0)+inkCycle,s.set>.6?1:.55);
-    inkTips[key]={x:s.x,y:s.y,t:now};}
+  queue.length=0;                                   // hands paint only with bent fingers (see contactStart / contactMove)
   // now and then a drop falls by itself
   if(inkName==='랜덤'&&sdt>0)inkBotStep(sdt);
   else{inkAmb-=sdt;}if(inkName!=='랜덤'&&inkAmb<0){inkAmb=7+Math.random()*7;inkDrop(.15+.7*Math.random(),.12+.76*Math.random(),inkNext++,.45+.3*Math.random());}
@@ -1716,7 +1725,7 @@ const d2=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 function onHands(res){
   const now=performance.now();const q0=queue.length;
   const list=res.multiHandLandmarks||[];
-  if(!list.length){ if(now-lastSeen>250){for(const k in tracks)delete tracks[k];for(const k in pointState)delete pointState[k];} handInfo=[]; setDetect(false); if(camOn)status('손 인식 켜짐 · 손을 카메라에 보여주세요'); fistSince=0; return; }
+  if(!list.length){ for(const k in keyState)contactEnd(k); if(now-lastSeen>250){for(const k in tracks)delete tracks[k];for(const k in pointState)delete pointState[k];} handInfo=[]; setDetect(false); if(camOn)status('손 인식 켜짐 · 손을 카메라에 보여주세요'); fistSince=0; return; }
   lastSeen=now; handInfo=[]; setDetect(true);
   const seenH={};
   let anyFist=false;
@@ -1770,7 +1779,7 @@ function onHands(res){
   });
   for(const k in handSize)if(!seenH[k]&&handSize[k].dipping){handSize[k].dipping=false;dipEnd('h'+k);}
   if(anyFist){ if(!fistSince)fistSince=now; } else fistSince=0;
-  flowTarget = (fistSince && now-fistSince>(mode==='water'?900:160)) ? 0 : 1;   // Ripple: a quick bend of every finger = plops; only a held fist stills the water
+  flowTarget = (fistSince && now-fistSince>((mode==='water'||mode==='ink')?900:160)) ? 0 : 1;   // Ripple: a quick bend of every finger = plops; only a held fist stills the water
   fingerKeys(res);
   for(let k=q0;k<queue.length;k++)queue[k].hand=1;
   status(`카메라 인식됨 · 손 ${list.length}개${flowTarget?'':' · 굳힘'}${handInfo.some(x=>x.point)?' · 가리키기':''}`);
@@ -1882,18 +1891,18 @@ const speedLabel=v=>v<30?'아주 느림':v<45?'느림':v<60?'보통':v<80?'빠�
 function applySpeed(v){speedVal=+v;speed=sliderToSpeed(speedVal);if(handAct<.05)timeScale=speed;speedTxt.textContent=speedLabel(speedVal);try{localStorage.setItem('hf-speed',speedVal);}catch(e){}}
 speedEl.value=speedVal;applySpeed(speedVal);speedEl.addEventListener('input',e=>applySpeed(e.target.value));
 const plopEl=document.getElementById('plopSize'),plopTxt=document.getElementById('plopVal');
-function applyPlop(v){plopVal=+v;plopScale=Math.pow(2,(plopVal-50)/50);wCapK=Math.pow(plopScale,1.6);   // bigger plops get a bigger roughness budget
-  plopTxt.textContent=plopVal<20?'아주 작게':plopVal<40?'작게':plopVal<=60?'보통':plopVal<=80?'크게':'아주 크게';try{localStorage.setItem('hf-plop',plopVal);}catch(e){}}
+function applyPlop(v){plopVal=+v;plopScale=.5*Math.pow(2,(plopVal-100)/50);wCapK=Math.pow(plopScale,1.6);   // bigger plops get a bigger roughness budget
+  plopTxt.textContent=plopVal<20?'아주 작게':plopVal<40?'작게':plopVal<=60?'보통':plopVal<=80?'크게':'아주 크게';try{localStorage.setItem('hf-plop2',plopVal);}catch(e){}}
 plopEl.value=plopVal;applyPlop(plopVal);plopEl.addEventListener('input',e=>applyPlop(e.target.value));
 const seedBtn=document.getElementById('seedBtn'),hintTxt=document.getElementById('hintTxt');
 const HINTS={paint:hintTxt.innerHTML,
   dip:'<b>손 담그기</b> · 터치: 오래 누를수록 깊게, 톡 누르면 살짝<br>손: 손바닥을 화면 쪽으로 내밀어 오래 둘수록 깊게, 떼면 물이 되솟음',
-  ink:'<b>랜덤</b> 붓이 스스로 그림 — 언제든 함께 그리기<br><b>터치·손가락</b> 한지에 먹물이 스며듦 · 겹칠수록 짙어짐<br>먹물은 천천히 옅어져 사라짐 · <b>흔들기 켜면</b> 기울인 쪽으로 번짐',
+  ink:'<b>랜덤</b> 붓이 스스로 그림 — 언제든 함께 그리기<br><b>터치</b> 또는 <b>손가락 구부리기</b> 먹물이 스며듦 · 구부린 채 움직이면 따라 그려짐 · 겹칠수록 짙어짐<br>먹물은 천천히 옅어져 사라짐 · <b>흔들기 켜면</b> 기울인 쪽으로 번짐',
   cloud:'<b>검지</b> 지나간 구름이 부드럽게 갈라짐 · 빠르게 움직이면 흩어짐<br><b>집기</b> 회전 흐름 · <b>손 펼치기</b> 넓게 확산 · <b>주먹</b> 천천히 안정',
   silk:'<b>검지</b> 실크가 따라 흐름 · 빠르게 움직이면 넓게 펼쳐짐<br><b>집기</b> 부드러운 소용돌이 · <b>손 펼치기</b> 활짝 펼침 · <b>주먹</b> 서서히 멈춤',
   light:'<b>손가락</b> 빛의 흐름 밀기 · <b>검지만 펴기</b> 가리킨 방향으로 빛줄기<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 멈춤',
   wave:'<b>폰 기울이기</b> 물이 쏠려 벽에 부딪힘 · <b>흔들기</b> 출렁임<br><b>터치·손</b> 물 밀기 · <b>톡</b> 물결 · <b>주먹</b> 멈춤',
-  water:'<b>톡 터치</b> 퐁당 · <b>손가락 구부리기</b> 구부린 손끝마다 퐁당<br><b>검지 하나</b> 손끝을 물에 대고 움직이기<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹 쥐고 있기</b> 물 멈춤'};
+  water:'<b>톡 터치</b> 퐁당 · <b>손가락 구부리기</b> 구부린 손끝마다 퐁당, 구부린 채 움직이면 따라가는 물결<br><b>검지 하나</b> 손끝을 물에 대고 움직이기<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹 쥐고 있기</b> 물 멈춤'};
 function setMode(m){mode=m;document.body.classList.toggle('water',m==='water');document.body.classList.toggle('wave',m==='wave');document.body.classList.toggle('light',m==='light');document.body.classList.toggle('silk',m==='silk');document.body.classList.toggle('cloud',m==='cloud');document.body.classList.toggle('ink',m==='ink');
   if(m==='cloud'&&vel){const u=use('waterClear',[0,0]);blit(vel.w);vel.swap();blit(vel.w);vel.swap();}   // start calm: no leftover swirls from other modes
   document.querySelectorAll('#modeSeg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.m===m));

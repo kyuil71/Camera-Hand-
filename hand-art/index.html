@@ -120,7 +120,7 @@ body:not(.water) #plopRow,body:not(.water) #floors,body:not(.water) #dipRow,body
       <button class="btn" id="install">앱 설치</button>
     </div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 71</p>
+    <p class="hint" id="ver">버전 72</p>
   </div>
 </div>
 </div><!-- #app -->
@@ -825,7 +825,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 71';
+const VER_TXT='버전 72';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -1138,8 +1138,8 @@ const W_C=250, W_H=1/540, W_NK=.24, SUN=(()=>{const v=[.12,.82,.56],l=Math.hypot
 // (extra pushes are softened, and rough water calms faster) → the floor's light pattern always shows
 let wBudget=0,wExtra=0,wCapK=1;const W_BCAP=.035;
 function waterClear(){wBudget=0;wExtra=0;const u=use('waterClear',[0,0]);blit(wat.w);wat.swap();blit(wat.w);wat.swap();}
-function waterPoke(x,y,amp,r,bw){const I=Math.abs(amp)*r*(bw==null?1:bw);   // bw: how much this push counts against the roughness budget
-  let k=1;if(I>0){const room=W_BCAP*wCapK-wBudget;k=room>=I?1:Math.max(.15,Math.max(0,room)/I);amp*=k;wBudget+=I*k;}
+function waterPoke(x,y,amp,r,bw,minK){const I=Math.abs(amp)*r*(bw==null?1:bw);   // bw: how much this push counts against the roughness budget
+  let k=1;if(I>0){const room=W_BCAP*wCapK-wBudget;k=room>=I?1:Math.max(minK==null?.15:minK,Math.max(0,room)/I);amp*=k;wBudget+=I*k;}
   const u=use('waterPoke',[wat.r.tx,wat.r.ty]);gl.uniform1i(u.uT,wat.r.bind(0));
   gl.uniform1f(u.aspect,aspect);gl.uniform2f(u.point,x,y);gl.uniform1f(u.amp,amp);gl.uniform1f(u.radius,r*(aspect>1?aspect:1));blit(wat.w);wat.swap();return k;}
 function waterStep(){const u=use('waterStep',[wat.r.tx,wat.r.ty]);gl.uniform1i(u.uT,wat.r.bind(0));
@@ -1190,13 +1190,13 @@ function wakeEnd(id){wakes.delete(id);}
 function waterFrame(dt){
   const wts=Math.min(.45+.55*timeScale,2.6);            // slider + finger speed → water time
   const sdt=dt*flow*wts; waterTime+=sdt;
-  wExtra=Math.max(0,wBudget/(W_BCAP*wCapK)-.6)*2.5; wBudget*=Math.exp(-(.3+wExtra*.5)*sdt);   // rough water settles faster
+  wExtra=Math.max(0,wBudget/(W_BCAP*wCapK)-.8)*1.5; wBudget*=Math.exp(-(.3+wExtra*.5)*sdt);   // rough water settles faster
   const live=flow>.3;
   if(dipMode){queue.length=0;plops.length=0;updateDips(dt);}
   if(plops.length){const n=plops.length,kk=1/Math.sqrt(n);            // many stones at once: each a little softer, total energy stays calm
     const ps=plopScale;
-    if(live)for(const p of plops){const ek=waterPoke(p.x,p.y,WATER_AMP*PLOP_A*p.k*kk*Math.pow(ps,-.4),PLOP_R*ps*ps);   // 퐁당 크기: wider push, a little gentler per area
-      if(PLOP_RING>0&&ek>.6){if(rainDrops.length>=MAXR)rainDrops.shift();
+    if(live)for(const p of plops){const ek=waterPoke(p.x,p.y,WATER_AMP*PLOP_A*p.k*kk*Math.pow(ps,-.4),PLOP_R*ps*ps,.4,.8);   // 탭은 매번 또렷하게: 예산에 가볍게 계산, 많이 쳐도 80% 이상   // 퐁당 크기: wider push, a little gentler per area
+      if(PLOP_RING>0&&ek>.3){if(rainDrops.length>=MAXR)rainDrops.shift();
       rainDrops.push({x:p.x,y:p.y,age:0,size:Math.min(1.8,PLOP_RING*Math.sqrt(kk)*p.k*Math.sqrt(ps))});}}   // + crisp capillary rings and a glint right where the finger touched
     plops.length=0;}
   // fingers / touch / pinch rings → pressure on the surface (stronger when moving faster)

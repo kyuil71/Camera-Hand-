@@ -108,6 +108,7 @@ body:not(.water) #plopRow,body:not(.water) #floors,body:not(.water) #dipRow,body
     <div class="row chips" id="rainRow"><button class="chip" data-r="0">비 없음</button><button class="chip" data-r="1">이슬비</button><button class="chip" data-r="2">비</button><button class="chip" data-r="3">소나기</button></div>
     <div class="row" id="dipRow"><button class="btn" id="dipBtn">손 담그기 켜기</button></div>
     <div class="row chips" id="floors"><button class="chip" data-f="2"><i class="sw" style="background:linear-gradient(135deg,#000,#1b1d20 50%,#000)"></i>검은 유리</button><button class="chip" data-f="1"><i class="sw" style="background:linear-gradient(135deg,#1c2328,#3a464e 50%,#11171b)"></i>다크 그레이</button><button class="chip" data-f="3"><i class="sw" style="background:#1d2024;background-image:linear-gradient(#5a5f66 1.5px,transparent 1.5px),linear-gradient(90deg,#5a5f66 1.5px,transparent 1.5px);background-size:8px 8px"></i>그레이 타일</button><button class="chip" data-f="0"><i class="sw" style="background:linear-gradient(135deg,#8c8270,#c9bda4 45%,#6e675c)"></i>자갈</button></div>
+    <div class="row chips" id="engRow"><button class="chip" data-e="tasks">새 손 인식</button><button class="chip" data-e="legacy">기존 손 인식</button></div>
     <div class="row">
       <button class="btn main" id="camBtn">손 인식 시작</button>
       <button class="btn" id="seedBtn">새 캔버스</button>
@@ -119,8 +120,8 @@ body:not(.water) #plopRow,body:not(.water) #floors,body:not(.water) #dipRow,body
       <button class="btn" id="fsBtn">전체화면</button>
       <button class="btn" id="install">앱 설치</button>
     </div>
-    <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 73</p>
+    <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
+    <p class="hint" id="ver">버전 74</p>
   </div>
 </div>
 </div><!-- #app -->
@@ -827,7 +828,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 73';
+const VER_TXT='버전 74';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -1679,16 +1680,24 @@ const d2=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 function onHands(res){
   const now=performance.now();const q0=queue.length;
   let list=res.multiHandLandmarks||[];
-  if(viewAng)list=list.map(lm=>lm.map(p=>{const [u,v]=locXY(p.x*innerWidth,p.y*innerHeight);return {x:u,y:v,z:p.z};}));   // 화면이 돌아가 있어도 손 좌표는 기기 기준으로
+  if(viewAng)list=list.map(lm=>{const m=lm.map(p=>{const [u,v]=locXY(p.x*innerWidth,p.y*innerHeight);return {x:u,y:v,z:p.z};});m.world=lm.world;m.slot=lm.slot;return m;});   // 화면이 돌아가 있어도 손 좌표는 기기 기준으로
   if(!list.length){ if(now-lastSeen>250){for(const k in tracks)delete tracks[k];for(const k in pointState)delete pointState[k];} handInfo=[]; setDetect(false); if(camOn)status('손 인식 켜짐 · 손을 카메라에 보여주세요'); fistSince=0; return; }
   lastSeen=now; handInfo=[]; setDetect(true);
   const seenH={};
   let anyFist=false;
   list.forEach((lm,h)=>{
     const size=d2(lm[0],lm[9])||.1;
-    const fist=[8,12,16,20].every(i=>d2(lm[i],lm[0])<size*1.15);
-    const pinch=!fist && d2(lm[4],lm[8])<size*.38;
-    const pointing=!fist && !pinch && d2(lm[8],lm[0])>size*1.5 && [12,16,20].every(i=>d2(lm[i],lm[0])<size*1.25);
+    const W=lm.world&&lm.world.length===21?lm.world:null;      // 새 인식: 손의 3D 좌표(미터) → 마디 각도로 판정 (거리·기울기와 무관)
+    const bends=W?FINGERS.map(ch=>bendOf(W,ch)):null;
+    let fist,pinch,pointing;
+    if(W){const D=d=>d*Math.PI/180;
+      fist=[1,2,3,4].every(i=>bends[i]>D(100));
+      pinch=!fist&&d3(W[4],W[8])<.032;
+      pointing=!fist&&!pinch&&bends[1]<D(60)&&[2,3,4].every(i=>bends[i]>D(90));}
+    else{
+      fist=[8,12,16,20].every(i=>d2(lm[i],lm[0])<size*1.15);
+      pinch=!fist && d2(lm[4],lm[8])<size*.38;
+      pointing=!fist && !pinch && d2(lm[8],lm[0])>size*1.5 && [12,16,20].every(i=>d2(lm[i],lm[0])<size*1.25);}
     let point=null;
     if(pointing){
       let dx=(lm[8].x-lm[5].x)*aspect, dy=-(lm[8].y-lm[5].y); const l=Math.hypot(dx,dy)||1; dx/=l; dy/=l;
@@ -1701,7 +1710,7 @@ function onHands(res){
     TIPS.forEach((ti,j)=>{
       const raw={x:lm[ti].x, y:1-lm[ti].y};       // selfieMode=true already mirrors
       const key=h+'-'+ti; const prev=tracks[key];
-      const sm=prev?{x:prev.x+(raw.x-prev.x)*.6,y:prev.y+(raw.y-prev.y)*.6,t:now}:{...raw,t:now};
+      const ke=W?1:.6;const sm=prev?{x:prev.x+(raw.x-prev.x)*ke,y:prev.y+(raw.y-prev.y)*ke,t:now}:{...raw,t:now};   // 새 인식은 One Euro 필터로 이미 다듬어짐
       tracks[key]=sm; pts.push(sm);
       if(!prev||fist||(pointing&&ti!==8))return;
       let dx=sm.x-prev.x, dy=sm.y-prev.y; const sp=Math.hypot(dx,dy);
@@ -1723,7 +1732,8 @@ function onHands(res){
         queue.push({x:mid.x+Math.cos(a)*R,y:mid.y+Math.sin(a)*R*aspect,dx:-Math.sin(a)*(250+500*Math.min(speed,2))*dir,dy:Math.cos(a)*(250+500*Math.min(speed,2))*dir,r:.0045,vOnly:true});}
     }
     pinchState[pk]=pinch;
-    const open=!fist&&!pinch&&!pointing&&[8,12,16,20].every(i=>d2(lm[i],lm[0])>size*1.55);
+    const open=!fist&&!pinch&&!pointing&&(W?[1,2,3,4].every(i=>bends[i]<60*Math.PI/180):[8,12,16,20].every(i=>d2(lm[i],lm[0])>size*1.55));
+    if(W)fingerTaps(lm.slot??h,lm,bends,fist,now);
     handInfo.push({pts,fist,pinch,mid,point,open,palm:{x:lm[9].x,y:1-lm[9].y}});
     // 손 담그기 gesture: palm moves toward the screen relative to its resting size
     const hs=handSize[h]||(handSize[h]={base:size,dipping:false}),palm={x:lm[9].x,y:1-lm[9].y};seenH[h]=1;
@@ -1736,6 +1746,7 @@ function onHands(res){
   if(anyFist){ if(!fistSince)fistSince=now; } else fistSince=0;
   flowTarget = (fistSince && now-fistSince>160) ? 0 : 1;
   for(let k=q0;k<queue.length;k++)queue[k].hand=1;
+  firePendingTaps(now);
   status(`카메라 인식됨 · 손 ${list.length}개${flowTarget?'':' · 굳힘'}${handInfo.some(x=>x.point)?' · 가리키기':''}`);
 }
 
@@ -1746,10 +1757,77 @@ const statusEl=document.getElementById('status');const status=t=>{if(t)statusEl.
 const camBtn=document.getElementById('camBtn');
 let stream=null, wakeLock=null;
 
+/* ===== 새 손 인식 (핸드 미러 3D와 같은 방식): MediaPipe Tasks HandLandmarker · full 모델 · GPU · 동영상 모드 · One Euro 필터 =====
+   파일은 모두 mediapipe/tasks/ 안에 있어 오프라인에서도 동작 */
+let ENGINE='tasks';try{const v=localStorage.getItem('hf-engine');if(v==='tasks'||v==='legacy')ENGINE=v;}catch(e){}
+let tasksLM=null,tasksDelegate='',lastVT=-1;
+const FINGERS=[[1,2,3,4],[5,6,7,8],[9,10,11,12],[13,14,15,16],[17,18,19,20]];
+const d3=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z);
+function angV(a,b,c,d){const ux=b.x-a.x,uy=b.y-a.y,uz=b.z-a.z,vx=d.x-c.x,vy=d.y-c.y,vz=d.z-c.z;
+  const l=Math.hypot(ux,uy,uz)*Math.hypot(vx,vy,vz)||1;return Math.acos(Math.max(-1,Math.min(1,(ux*vx+uy*vy+uz*vz)/l)));}
+const bendOf=(W,ch)=>angV(W[ch[0]],W[ch[1]],W[ch[1]],W[ch[2]])+angV(W[ch[1]],W[ch[2]],W[ch[2]],W[ch[3]]);   // 두 마디가 꺾인 각도의 합
+class OneEuro{constructor(){this.x=null;this.dx=0;this.t=0;}
+  f(x,t,minC,beta){if(this.x===null){this.x=x;this.t=t;return x;}const dt=Math.max(1e-3,(t-this.t)/1000);this.t=t;
+    const al=fc=>1/(1+(1/(2*Math.PI*fc))/dt);const dx=(x-this.x)/dt;this.dx+=al(1)*(dx-this.dx);this.x+=al(minC+beta*Math.abs(this.dx))*(x-this.x);return this.x;}}
+const oeXY=[null,null],oeW=[null,null],oeSeen=[0,0];
+async function loadTasks(){
+  const vision=await import('./mediapipe/tasks/vision_bundle.mjs');
+  const fs=await vision.FilesetResolver.forVisionTasks(new URL('mediapipe/tasks/wasm',location.href).href);
+  const mk=d=>vision.HandLandmarker.createFromOptions(fs,{baseOptions:{modelAssetPath:new URL('mediapipe/tasks/hand_landmarker.task',location.href).href,delegate:d},
+    runningMode:'VIDEO',numHands:2,minHandDetectionConfidence:.6,minHandPresenceConfidence:.6,minTrackingConfidence:.5});
+  try{tasksLM=await mk('GPU');tasksDelegate='GPU';}catch(e){console.warn('GPU 인식 실패 → CPU',e);tasksLM=await mk('CPU');tasksDelegate='CPU';}
+}
+function tasksDetect(){
+  if(video.currentTime===lastVT)return;lastVT=video.currentTime;
+  const t=performance.now();let res;try{res=tasksLM.detectForVideo(video,t);}catch(e){console.warn(e);return;}
+  const out=[],used=[false,false];
+  (res.landmarks||[]).forEach((lm,i)=>{
+    const lab=res.handedness?.[i]?.[0]?.categoryName;let slot=lab==='Right'?0:1;if(used[slot])slot=1-slot;used[slot]=true;
+    if(!oeXY[slot]||t-oeSeen[slot]>350){oeXY[slot]=Array.from({length:42},()=>new OneEuro());oeW[slot]=Array.from({length:63},()=>new OneEuro());fingerState[slot]={};}
+    oeSeen[slot]=t;const F=oeXY[slot],G=oeW[slot];
+    const f=lm.map((p,j)=>({x:F[j*2].f(1-p.x,t,1.6,3.5),y:F[j*2+1].f(p.y,t,1.6,3.5),z:p.z}));     // 셀카 거울상으로 (기존 엔진의 selfieMode와 같게)
+    const w=res.worldLandmarks?.[i];
+    f.world=w?w.map((p,j)=>({x:G[j*3].f(p.x,t,3,1.5),y:G[j*3+1].f(p.y,t,3,1.5),z:G[j*3+2].f(p.z,t,3,1.5)})):null;
+    f.slot=slot;out.push(f);});
+  out.sort((a,b)=>a.slot-b.slot);
+  onHands({multiHandLandmarks:out});
+}
+// 손가락을 톡 굽히면 = 그 자리를 터치한 것 (물: 퐁당, 먹: 먹물 한 방울, 파도: 물 밀기, 물감: 색 터짐)
+// 주먹을 쥘 때 네 손가락이 한꺼번에 굽는 건 터치가 아님 → 잠깐 기다렸다가 주먹이면 취소
+const fingerState=[{},{}],pendingTaps=[];
+function fingerTaps(slot,lm,bends,fist,now){
+  const st=fingerState[slot]||(fingerState[slot]={});const R=Math.PI/180;
+  if(fist){for(let i=pendingTaps.length-1;i>=0;i--)if(pendingTaps[i].slot===slot)pendingTaps.splice(i,1);}
+  for(let fi=1;fi<5;fi++){const b=bends[fi],tip=lm[FINGERS[fi][3]];let s=st[fi];
+    if(!s){s=st[fi]={ext:b<60*R,x:tip.x,y:1-tip.y};continue;}
+    if(s.ext){
+      if(b>80*R){s.ext=false;if(!fist)pendingTaps.push({slot,x:s.x,y:s.y,fire:now+130,fi});}
+      else{s.x=tip.x;s.y=1-tip.y;}}               // 펴져 있는 동안의 손끝 자리 = 톡 칠 자리
+    else if(b<60*R){s.ext=true;s.x=tip.x;s.y=1-tip.y;}}
+}
+function firePendingTaps(now){
+  for(let i=pendingTaps.length-1;i>=0;i--){const p=pendingTaps[i];if(p.fire>now)continue;pendingTaps.splice(i,1);
+    if(flowTarget<1||flow<.3)continue;
+    const bent=Object.values(fingerState[p.slot]||{}).filter(s=>!s.ext).length;if(bent>=4)continue;   // 주먹으로 가는 중
+    fingerTap(p.x,p.y,p.fi);}
+}
+function fingerTap(x,y,fi){
+  if(mode==='water'){if(!dipMode)addPlop(x,y,.9);}
+  else if(mode==='ink'){if(inkA)inkDrop(x,y,inkNext++,.9);}
+  else if(mode==='wave'){if(wvH)wavePoke(x,y,.45);}
+  else if(mode==='paint'){colorTick++;for(let i=0;i<6;i++){const a=i/6*Math.PI*2;queue.push({x:x+Math.cos(a)*.012,y:y+Math.sin(a)*.012*aspect,dx:Math.cos(a)*600,dy:Math.sin(a)*600,c:pickColor(i+fi),r:.0022,s:.9,t:.8,hand:1});}}
+}
+function setEngine(e){ENGINE=e;try{localStorage.setItem('hf-engine',e);}catch(_){}
+  document.querySelectorAll('#engRow .chip').forEach(b=>b.setAttribute('aria-pressed',b.dataset.e===e));
+  if(camOn){stopCam();startCam();}}
+document.querySelectorAll('#engRow .chip').forEach(b=>b.onclick=()=>setEngine(b.dataset.e));
+document.querySelectorAll('#engRow .chip').forEach(b=>b.setAttribute('aria-pressed',b.dataset.e===ENGINE));
 async function startCam(){
   try{
     status('AI 모델 불러오는 중…');camBtn.disabled=true;
-    if(!hands){
+    if(ENGINE==='tasks'&&!tasksLM){try{await loadTasks();}catch(e){console.warn('새 손 인식을 못 불러옴 → 기존 인식',e);ENGINE='legacy';
+      document.querySelectorAll('#engRow .chip').forEach(b=>b.setAttribute('aria-pressed',b.dataset.e==='legacy'));}}
+    if(ENGINE==='legacy'&&!hands){
       hands=new Hands({locateFile:f=>'mediapipe/'+f});
       hands.setOptions({maxNumHands:2,modelComplexity:0,minDetectionConfidence:.6,minTrackingConfidence:.5,selfieMode:true});
       hands.onResults(onHands);
@@ -1770,7 +1848,8 @@ function stopCam(){camOn=false;stream&&stream.getTracks().forEach(t=>t.stop());s
   try{wakeLock&&wakeLock.release();}catch(e){} status('손 인식 꺼짐 · 화면을 문질러 보세요');}
 async function detectLoop(){
   if(!camOn)return;
-  if(!busy&&video.readyState>=2){busy=true;try{await hands.send({image:video});}catch(e){console.warn(e);}busy=false;}
+  if(ENGINE==='tasks'&&tasksLM){if(video.readyState>=2)tasksDetect();}
+  else if(!busy&&video.readyState>=2&&hands){busy=true;try{await hands.send({image:video});}catch(e){console.warn(e);}busy=false;}
   requestAnimationFrame(detectLoop);
 }
 camBtn.onclick=()=>{wake();camOn?stopCam():startCam();};
@@ -1856,7 +1935,7 @@ const HINTS={paint:hintTxt.innerHTML,
   silk:'<b>검지</b> 실크가 따라 흐름 · 빠르게 움직이면 넓게 펼쳐짐<br><b>집기</b> 부드러운 소용돌이 · <b>손 펼치기</b> 활짝 펼침 · <b>주먹</b> 서서히 멈춤',
   light:'<b>손가락</b> 빛의 흐름 밀기 · <b>검지만 펴기</b> 가리킨 방향으로 빛줄기<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 멈춤',
   wave:'<b>폰 기울이기</b> 물이 쏠려 벽에 부딪힘 · <b>흔들기</b> 출렁임<br><b>터치·손</b> 물 밀기 · <b>톡</b> 물결 · <b>주먹</b> 멈춤',
-  water:'<b>톡 터치</b> 퐁당 · <b>끌기</b> 물결<br><b>손가락</b> 움직여 물결 · <b>검지만 펴기</b> 가리킨 방향으로 물길<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 물 멈춤'};
+  water:'<b>톡 터치·손가락 톡 굽히기</b> 퐁당 · <b>끌며 원 그리기</b> 소용돌이<br><b>손가락</b> 움직여 물결 · <b>검지만 펴기</b> 가리킨 방향으로 물길<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 물 멈춤'};
 function setMode(m){mode=m;document.body.classList.toggle('water',m==='water');document.body.classList.toggle('wave',m==='wave');document.body.classList.toggle('light',m==='light');document.body.classList.toggle('silk',m==='silk');document.body.classList.toggle('cloud',m==='cloud');document.body.classList.toggle('ink',m==='ink');
   if(m==='cloud'&&vel){const u=use('waterClear',[0,0]);blit(vel.w);vel.swap();blit(vel.w);vel.swap();}   // start calm: no leftover swirls from other modes
   document.querySelectorAll('#modeSeg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.m===m));

@@ -118,7 +118,7 @@ body:not(.water) #plopRow,body:not(.water) #floors,body:not(.water) #dipRow,body
       <button class="btn" id="install">앱 설치</button>
     </div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 64</p>
+    <p class="hint" id="ver">버전 65</p>
   </div>
 </div>
 
@@ -995,7 +995,7 @@ function silkFrame(dt){
   silkT+=k;
   // fingers (hands + touch): position + velocity, in aspect space
   const fing=[];
-  const vlim=(vx,vy)=>{const m=Math.hypot(vx,vy),L=1.2;return m>L?[vx*L/m,vy*L/m]:[vx,vy];};   // a hand can lead the silk, never yank it
+  const vlim=(vx,vy)=>{const m=Math.hypot(vx,vy),L=3.;return m>L?[vx*L/m,vy*L/m]:[vx,vy];};   // a hand leads the silk firmly, but can't yank it apart
   handInfo.forEach((h,i)=>{if(h.fist||!h.pts||!h.pts[1])return;const p=h.pts[1],x=p.x*aspect,y=p.y,pr=silkPrevF['h'+i];
     let vx=pr?(x-pr.x)/Math.max(dt,.016):0,vy=pr?(y-pr.y)/Math.max(dt,.016):0;silkPrevF['h'+i]={x,y};[vx,vy]=vlim(vx,vy);
     fing.push({x,y,vx,vy,pinch:h.pinch,mid:h.mid,open:h.open,palm:h.palm});});
@@ -1006,25 +1006,29 @@ function silkFrame(dt){
   let wideT=1+.55*Math.min(handAct,2.2),spreadT=1;
   for(const f of fing)if(f.open)spreadT=1.45;
   silkWide+=(wideT-silkWide)*Math.min(1,dt*1.5);silkSpread+=(spreadT-silkSpread)*Math.min(1,dt*1.2);
-  const damp=Math.pow(.986,k*60);
+  const SUB=3,ks=k/SUB;                                    // 3 small steps per frame: quick to follow a hand, yet never more than a fraction of a stitch per step
+  const kf=ks/SUB;                                         // forces that build momentum: scaled so the overall pace matches one big step
+  for(let sub=0;sub<SUB;sub++){
+  const damp=Math.pow(.986,ks*60);
   for(const R of silkRibs){const P=R.pts,h=P[0];
     // head: wanders along the slow currents, steers softly away from the edges (never hits a wall)
-    const F=silkField(h.x,h.y,silkT+R.ph*3);R.wa+=k*(.4+.3*Math.sin(silkT*.2+R.ph));
+    const F=silkField(h.x,h.y,silkT+R.ph*3);R.wa+=ks*(.4+.3*Math.sin(silkT*.2+R.ph));
     let dx=F[0]+.05*Math.cos(R.wa),dy=F[1]+.05*Math.sin(R.wa);
     const m=.12;if(h.x<m)dx+=(m-h.x)*1.6;if(h.x>aspect-m)dx-=(h.x-aspect+m)*1.6;if(h.y<m)dy+=(m-h.y)*1.6;if(h.y>1-m)dy-=(h.y-1+m)*1.6;
-    R.hv.x+=(dx-R.hv.x)*Math.min(1,k*1.2);R.hv.y+=(dy-R.hv.y)*Math.min(1,k*1.2);
+    R.hv.x+=(dx-R.hv.x)*Math.min(1,ks*1.2);R.hv.y+=(dy-R.hv.y)*Math.min(1,ks*1.2);
     for(let i=0;i<P.length;i++){const q=P[i];
       let vx=(q.x-q.px)*damp,vy=(q.y-q.py)*damp;q.px=q.x;q.py=q.y;
-      if(i===0){vx=vx*.9+R.hv.x*k*.1*60*.016*6;vy=vy*.9+R.hv.y*k*.1*60*.016*6;}
-      else{const G=silkField(q.x,q.y,silkT*1.3+i*.05+R.ph);vx+=G[0]*k*.012;vy+=G[1]*k*.012;}       // breeze along the body
-      vx+=motionF[0]*.0006*k*60;vy+=motionF[1]*.0006*k*60;                                   // tilt / shake
+      if(i===0){vx=vx*.9+R.hv.x*ks*.1*60*.016*6;vy=vy*.9+R.hv.y*ks*.1*60*.016*6;}
+      else{const G=silkField(q.x,q.y,silkT*1.3+i*.05+R.ph);vx+=G[0]*kf*.012;vy+=G[1]*kf*.012;}       // breeze along the body
+      vx+=motionF[0]*.0006*kf*60;vy+=motionF[1]*.0006*kf*60;                                   // tilt / shake
       if(live)for(const f of fing){const ex=q.x-f.x,ey=q.y-f.y,d2=ex*ex+ey*ey,fall=Math.exp(-d2/.035);
         if(fall<.01)continue;
-        vx+=f.vx*k*.22*fall;vy+=f.vy*k*.22*fall;                                               // the silk follows the finger, gently
+        vx+=f.vx*kf*1.0*fall;vy+=f.vy*kf*1.0*fall;                                               // the silk is carried along by the hand
+        {const d=Math.sqrt(d2)+1e-5,rr=.07;if(d<rr){const push=(rr-d)/rr;vx+=ex/d*push*R.seg*.15;vy+=ey/d*push*R.seg*.15;}}   // and pushed aside where the hand passes
         if(f.pinch&&f.mid){const cx=f.mid.x*aspect,cy=f.mid.y,rx=q.x-cx,ry=q.y-cy,fa=Math.exp(-(rx*rx+ry*ry)/.06);
-          vx+=(-ry*1.6-rx*.25)*k*fa*.6;vy+=(rx*1.6-ry*.25)*k*fa*.6;}                          // pinch → gentle vortex
+          vx+=(-ry*1.6-rx*.25)*kf*fa*.6;vy+=(rx*1.6-ry*.25)*kf*fa*.6;}                          // pinch → gentle vortex
         if(f.open&&f.palm){const cx=f.palm.x*aspect,cy=f.palm.y,rx=q.x-cx,ry=q.y-cy,dd=Math.hypot(rx,ry)+1e-4,fa=Math.exp(-dd*dd/.09);
-          vx+=rx/dd*.25*k*fa;vy+=ry/dd*.25*k*fa;}}                                           // open hand → unfurl outward
+          vx+=rx/dd*.25*kf*fa;vy+=ry/dd*.25*kf*fa;}}                                           // open hand → unfurl outward
       const sp=Math.hypot(vx,vy),cap=R.seg*.3;if(sp>cap){vx*=cap/sp;vy*=cap/sp;}               // never more than a third of a stitch per step → no folds over itself
       q.x+=vx;q.y+=vy;}
     // keep it a continuous ribbon: length constraints + smoothing (no kinks, no angles)
@@ -1035,6 +1039,7 @@ function silkFrame(dt){
         const ux=b.x-a.x,uy=b.y-a.y,wx=c.x-b.x,wy=c.y-b.y,cs=(ux*wx+uy*wy)/((Math.hypot(ux,uy)*Math.hypot(wx,wy))||1e-9);
         const kb=cs<.82?.5:.22;                                                              // bends sharper than ~35° are eased out firmly
         b.x+=(a.x+c.x-2*b.x)*kb;b.y+=(a.y+c.y-2*b.y)*kb;}}
+  }
   }
   // ---- build triangle strips ----
   let o=0;
@@ -1050,7 +1055,7 @@ function silkFrame(dt){
       const nx=-ty,ny=tx;
       let wav=(.025+.02*silkWide)*Math.sin(u*7.5-silkT*1.3+R.ph)*Math.sin(Math.PI*u);
       if(i>0&&i<M-1){const p0=P[i-1],p1=P[i],p2=P[i+1],ux=p1.x-p0.x,uy=p1.y-p0.y,vx2=p2.x-p1.x,vy2=p2.y-p1.y;   // the inside of a bend must not cross over
-        const turn=Math.abs(Math.atan2(ux*vy2-uy*vx2,ux*vx2+uy*vy2))+1e-4,rad=R.seg/turn,lim=rad*.85;
+        const turn=Math.abs(Math.atan2(ux*vy2-uy*vx2,ux*vx2+uy*vy2))+1e-4,rad=R.seg/turn,lim=rad*.72;
         if(ww*.5+Math.abs(wav)>lim){const s2=lim/(ww*.5+Math.abs(wav));ww*=s2;wav*=s2;}}
       for(const sd of [-1,1]){const x=P[i].x+nx*(ww*sd*.5+wav),y=P[i].y+ny*(ww*sd*.5+wav);
         silkData.set([x/aspect,y,u,sd,c,sn,tx,ty],o);o+=8;}}}

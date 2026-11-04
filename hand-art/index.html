@@ -118,7 +118,7 @@ body:not(.water) #plopRow,body:not(.water) #floors,body:not(.water) #dipRow,body
       <button class="btn" id="install">앱 설치</button>
     </div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 62</p>
+    <p class="hint" id="ver">버전 63</p>
   </div>
 </div>
 
@@ -180,6 +180,11 @@ vec4 a1=texture(uSrc,b),a2=texture(uSrc,b+vec2(srcTexel.x,0.)),a3=texture(uSrc,b
 r=clamp(r,min(min(a1,a2),min(a3,a4)),max(max(a1,a2),max(a3,a4)));
 r=mix(fwd,r,sharp);
 o=r/(1.+diss*dt);}`,
+dyeSoft: H+`uniform sampler2D uT;uniform float k;                  /* a little paint diffusion: threads thinner than a few pixels melt back into the flow */
+void main(){vec2 e=vec2(vR.x-vUv.x,vT.y-vUv.y)*2.2;vec4 c=texture(uT,vUv);
+ vec4 a=(texture(uT,vUv+vec2(e.x,0.))+texture(uT,vUv-vec2(e.x,0.))+texture(uT,vUv+vec2(0.,e.y))+texture(uT,vUv-vec2(0.,e.y)))*.15
+       +(texture(uT,vUv+e)+texture(uT,vUv-e)+texture(uT,vUv+vec2(e.x,-e.y))+texture(uT,vUv-vec2(e.x,-e.y)))*.1;
+ o=mix(c,a/1.,k);}`,
 detail: H+`uniform sampler2D uT;uniform vec2 dims;uniform float rate,sd;
 void main(){float n=bristle(vUv,dims,sd);o=vec4(mix(rate<1.?texture(uT,vUv).x:n,n,min(rate,1.)),0.,0.,1.);}`,
 advect: H+`uniform sampler2D uVel,uSrc;uniform vec2 simTexel;uniform float dt;uniform vec4 diss;
@@ -224,7 +229,7 @@ float Hh(vec2 uv){vec4 d=texture(uDye,uv);float t=texture(uDet,uv).x;
 return d.a*.78+dot(d.rgb,vec3(.3,.5,.2))*.22+(t-.5)*(.05+.04*d.a);}
 vec2 grd(vec2 uv,vec2 e){return vec2(Hh(uv-vec2(e.x,0.))-Hh(uv+vec2(e.x,0.)),Hh(uv-vec2(0.,e.y))-Hh(uv+vec2(0.,e.y)));}
 void main(){vec4 d=texture(uDye,vUv);float t=texture(uDet,vUv).x;
-vec2 g=grd(vUv,dyeTexel*1.5)*.22+grd(vUv,dyeTexel*4.5)*.55+grd(vUv,dyeTexel*12.)*.55;
+vec2 g=grd(vUv,dyeTexel*1.5)*.05+grd(vUv,dyeTexel*4.5)*.45+grd(vUv,dyeTexel*12.)*.75;   /* relief from the broad shapes, not every thread */
 vec3 n=normalize(vec3(g*relief,1.));
 vec3 L=normalize(vec3(-.42,.62,.66));vec3 Hv=normalize(L+vec3(0.,0.,1.));
 float diff=max(dot(n,L),0.);
@@ -879,9 +884,10 @@ function stepVel(dt,amb,curlK,fine){
   gl.uniform1i(u.uVel,vel.r.bind(0));blit(vel.w);vel.swap();
 }
 function step(dt){
-  stepVel(dt,34,5.5,.2);let u;                         // fewer tiny eddies → big flowing masses, small detail only where it belongs
-  u=use('maccormack',[dye.r.tx,dye.r.ty]);gl.uniform2f(u.simTexel,vel.r.tx,vel.r.ty);gl.uniform2f(u.srcTexel,dye.r.tx,dye.r.ty);gl.uniform1f(u.dt,dt);gl.uniform1f(u.sharp,.6);
+  stepVel(dt,34,2.2,0.);let u;                         // gentle swirl only: broad flowing masses, no fine curls
+  u=use('maccormack',[dye.r.tx,dye.r.ty]);gl.uniform2f(u.simTexel,vel.r.tx,vel.r.ty);gl.uniform2f(u.srcTexel,dye.r.tx,dye.r.ty);gl.uniform1f(u.dt,dt);gl.uniform1f(u.sharp,.3);
   gl.uniform1i(u.uVel,vel.r.bind(0));gl.uniform1i(u.uSrc,dye.r.bind(1));gl.uniform4f(u.diss,.003,.003,.003,.03);blit(dye.w);dye.swap();
+  u=use('dyeSoft',[dye.r.tx,dye.r.ty]);gl.uniform1i(u.uT,dye.r.bind(0));gl.uniform1f(u.k,Math.min(.5,.22*dt*60/Math.max(timeScale,.3)));blit(dye.w);dye.swap();   // smallest scale the paint keeps
   gl.uniform2f(u.srcTexel,det.r.tx,det.r.ty);gl.uniform1i(u.uSrc,det.r.bind(1));gl.uniform4f(u.diss,0,0,0,0);blit(det.w);det.swap();
   detailPass(.006);
 }
@@ -1610,7 +1616,7 @@ canvas.addEventListener('pointermove',e=>{const p=pointers.get(e.pointerId);if(!
   const x=e.clientX/innerWidth,y=1-e.clientY/innerHeight;const dtR=Math.min(Math.max((e.timeStamp-p.t)/1000,.008),.1);feelFinger(Math.hypot((x-p.x)*aspect,y-p.y)/dtR);
   if(mode==='ink'){if(inkA&&flow>.3)inkStroke(p.x,p.y,x,y,p.ink||0,1);}
   else if(mode==='water'&&!dipMode)wakeStep('t'+e.pointerId,x,y,Math.hypot((x-p.x)*aspect,y-p.y)/dtR);
-  else queue.push({x,y,vx:(x-p.x)/dtR,vy:(y-p.y)/dtR,set:.85,c:p.c,r:.0032,s:.9});p.x=x;p.y=y;p.t=e.timeStamp;
+  else queue.push({x,y,vx:(x-p.x)/dtR,vy:(y-p.y)/dtR,set:.85,c:p.c,r:.0042,s:.9});p.x=x;p.y=y;p.t=e.timeStamp;
   if(dipMode)dipMove('t'+e.pointerId,x,y);});
 ['pointerup','pointercancel','pointerleave'].forEach(t=>canvas.addEventListener(t,e=>{pointers.delete(e.pointerId);dipEnd('t'+e.pointerId);wakeEnd('t'+e.pointerId);}));
 
@@ -1704,7 +1710,7 @@ function onHands(res){
       const isIndex=ti===8, strong=isIndex?1:.55;
       const dtR=Math.min(Math.max((now-prev.t)/1000,.016),.12);
       feelFinger(Math.hypot(dx*aspect,dy)/dtR*(isIndex?1:.8));
-      queue.push({x:sm.x,y:sm.y,vx:dx/dtR,vy:dy/dtR,fi:h*5+j,set:isIndex?.85:.45,c:pickColor(j+h*2),r:isIndex?.0034:.0019,s:Math.min(1,.12+sp*40)*strong,t:isIndex?.7:.4});
+      queue.push({x:sm.x,y:sm.y,vx:dx/dtR,vy:dy/dtR,fi:h*5+j,set:isIndex?.85:.45,c:pickColor(j+h*2),r:isIndex?.0042:.0030,s:Math.min(1,.12+sp*40)*strong,t:isIndex?.7:.4});
     });
     // pinch → vortex around pinch point
     const pk='p'+h, mid={x:(lm[4].x+lm[8].x)/2,y:1-(lm[4].y+lm[8].y)/2};
@@ -1799,7 +1805,7 @@ function frame(now){
   // ambient life: drifting color drops keep the canvas evolving
   ambientClock+=dt*flow*Math.max(timeScale,.15);
   if(ambientClock>.6){ambientClock=0;const x=Math.random(),y=Math.random(),a=Math.random()*6.28;
-    const rr=Math.random(), big=rr<.55, r=big?.014+Math.random()*.026:(rr<.85?.005+Math.random()*.006:.0028+Math.random()*.002);
+    const rr=Math.random(), big=rr<.6, r=big?.016+Math.random()*.026:(rr<.88?.008+Math.random()*.006:.006+Math.random()*.003);
     splatDye(x,y,pickColor(Math.random()*6|0),r,big?.85:.75,big?1.1:.8);
     splatVel(x,y,Math.cos(a)*(big?650:380),Math.sin(a)*(big?650:380),big?r*1.4:.004);}
   if(Math.random()<dt*.15)colorTick++;

@@ -14,6 +14,7 @@
 :root{--bg:#000;--glass:rgba(12,20,38,.62);--line:rgba(255,255,255,.14);--ink:#f4efe4;--mute:rgba(244,239,228,.66);--accent:#f7c844}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;background:var(--bg);color:var(--ink);font:16px/1.4 -apple-system,"Pretendard","Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
+#app{position:fixed;left:50%;top:50%;width:100vw;height:100vh;overflow:hidden;transform:translate(-50%,-50%);transform-origin:50% 50%}
 canvas#art,canvas#fx{position:fixed;inset:0;width:100%;height:100%;display:block}
 canvas#fx{pointer-events:none}
 .bar{display:block;width:56px;height:5px;border-radius:3px;background:rgba(190,196,206,.55);transition:background .35s,box-shadow .35s}
@@ -83,6 +84,7 @@ body:not(.water) #plopRow,body:not(.water) #floors,body:not(.water) #dipRow,body
 </style>
 </head>
 <body>
+<div id="app">
 <canvas id="art"></canvas>
 <canvas id="fx"></canvas>
 <video id="video" playsinline muted style="display:none"></video>
@@ -118,9 +120,10 @@ body:not(.water) #plopRow,body:not(.water) #floors,body:not(.water) #dipRow,body
       <button class="btn" id="install">앱 설치</button>
     </div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 68</p>
+    <p class="hint" id="ver">버전 69</p>
   </div>
 </div>
+</div><!-- #app -->
 
 <script src="mediapipe/hands.js"></script>
 <script>
@@ -822,8 +825,21 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-function resize(){dpr=Math.min(window.devicePixelRatio||1,2);
-  const w=Math.round(innerWidth*dpr),h=Math.round(innerHeight*dpr);
+/* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
+const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0;
+function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
+  a=((Math.round(a/90)*90)%360+360)%360;return a;}
+function applyRot(){const a=devAngle();if(a===viewAng&&innerWidth===viewIW&&innerHeight===viewIH)return;
+  viewAng=a;viewIW=innerWidth;viewIH=innerHeight;const sw=a===90||a===270;
+  appEl.style.width=(sw?innerHeight:innerWidth)+'px';appEl.style.height=(sw?innerWidth:innerHeight)+'px';
+  appEl.style.transform='translate(-50%,-50%) rotate('+(-a)+'deg)';}   // 화면이 돈 만큼 반대로
+const VW=()=>(viewAng===90||viewAng===270)?innerHeight:innerWidth, VH=()=>(viewAng===90||viewAng===270)?innerWidth:innerHeight;
+// screen point (CSS px) → app-local 0..1 (x right, y down)
+function locXY(px,py){const t=viewAng*Math.PI/180,c=Math.cos(t),sn=Math.sin(t);const cx=px-innerWidth/2,cy=py-innerHeight/2;
+  const lx=cx*c-cy*sn, ly=cx*sn+cy*c;return [lx/VW()+.5, ly/VH()+.5];}
+const loc=e=>locXY(e.clientX,e.clientY);
+function resize(){applyRot();dpr=Math.min(window.devicePixelRatio||1,2);
+  const w=Math.round(VW()*dpr),h=Math.round(VH()*dpr);
   if(canvas.width===w&&canvas.height===h&&vel)return;
   canvas.width=w;canvas.height=h;fx.width=w;fx.height=h;aspect=w/h;
   const [sw,sh]=res(SIM_RES),[dw,dh]=res(DYE_RES);
@@ -1529,7 +1545,7 @@ function drawDrops(){
 
 /* ================= Gyro: tilt and shake the phone ================= */
 let gyroOn=false, gBase=null, motionF=[0,0], motionRaw=[0,0], shakeAmt=0, lastMotionT=0;
-function toScreen(x,y){const ang=((screen.orientation&&screen.orientation.angle)||window.orientation||0)*Math.PI/180;
+function toScreen(x,y){const ang=0;   // 내용이 항상 기기 기준 방향이므로 기기 축 그대로
   return [x*Math.cos(ang)+y*Math.sin(ang),-x*Math.sin(ang)+y*Math.cos(ang)];}
 let gView=null,viewRaw=[0,0];const viewTilt=[0,0];
 function onMotion(e){
@@ -1601,13 +1617,13 @@ const pickColor=(i)=>{const p=pal();const c=p[(i+colorTick)%p.length];const k=.9
 
 // touch fallback
 const pointers=new Map();
-canvas.addEventListener('pointerdown',e=>{if(document.body.classList.contains('menu')){openMenu(false);return;}pointers.set(e.pointerId,{x:e.clientX/innerWidth,y:1-e.clientY/innerHeight,t:e.timeStamp,c:pickColor(pointers.size+(Math.random()*6|0))});wake();
-  if(mode==='water'&&dipMode)dipStart('t'+e.pointerId,e.clientX/innerWidth,1-e.clientY/innerHeight,.005);
-  else if(mode==='water'){addPlop(e.clientX/innerWidth,1-e.clientY/innerHeight,1);wakeEnd('t'+e.pointerId);}
-  else if(mode==='wave'&&wvH&&flow>.3)wavePoke(e.clientX/innerWidth,1-e.clientY/innerHeight,.5);
+canvas.addEventListener('pointerdown',e=>{if(document.body.classList.contains('menu')){openMenu(false);return;}const [ex,ey]=loc(e);pointers.set(e.pointerId,{x:ex,y:1-ey,t:e.timeStamp,c:pickColor(pointers.size+(Math.random()*6|0))});wake();
+  if(mode==='water'&&dipMode)dipStart('t'+e.pointerId,ex,1-ey,.005);
+  else if(mode==='water'){addPlop(ex,1-ey,1);wakeEnd('t'+e.pointerId);}
+  else if(mode==='wave'&&wvH&&flow>.3)wavePoke(ex,1-ey,.5);
   else if(mode==='ink'&&flow>.3){const p=pointers.get(e.pointerId);p.ink=inkNext++;if(inkA)inkDrop(p.x,p.y,p.ink,1);}});   // each finger that lands = one 퐁당
 canvas.addEventListener('pointermove',e=>{const p=pointers.get(e.pointerId);if(!p)return;
-  const x=e.clientX/innerWidth,y=1-e.clientY/innerHeight;const dtR=Math.min(Math.max((e.timeStamp-p.t)/1000,.008),.1);feelFinger(Math.hypot((x-p.x)*aspect,y-p.y)/dtR);
+  const [lx0,ly0]=loc(e),x=lx0,y=1-ly0;const dtR=Math.min(Math.max((e.timeStamp-p.t)/1000,.008),.1);feelFinger(Math.hypot((x-p.x)*aspect,y-p.y)/dtR);
   if(mode==='ink'){if(inkA&&flow>.3)inkStroke(p.x,p.y,x,y,p.ink||0,1);}
   else if(mode==='water'&&!dipMode)wakeStep('t'+e.pointerId,x,y,Math.hypot((x-p.x)*aspect,y-p.y)/dtR);
   else queue.push({x,y,vx:(x-p.x)/dtR,vy:(y-p.y)/dtR,set:.85,c:p.c,r:.0042,s:.9});p.x=x;p.y=y;p.t=e.timeStamp;
@@ -1623,7 +1639,8 @@ const d2=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 
 function onHands(res){
   const now=performance.now();const q0=queue.length;
-  const list=res.multiHandLandmarks||[];
+  let list=res.multiHandLandmarks||[];
+  if(viewAng)list=list.map(lm=>lm.map(p=>{const [u,v]=locXY(p.x*innerWidth,p.y*innerHeight);return {x:u,y:v,z:p.z};}));   // 화면이 돌아가 있어도 손 좌표는 기기 기준으로
   if(!list.length){ if(now-lastSeen>250){for(const k in tracks)delete tracks[k];for(const k in pointState)delete pointState[k];} handInfo=[]; setDetect(false); if(camOn)status('손 인식 켜짐 · 손을 카메라에 보여주세요'); fistSince=0; return; }
   lastSeen=now; handInfo=[]; setDetect(true);
   const seenH={};
@@ -1908,9 +1925,9 @@ let hideTimer=0;
 function wake(){}   // no automatic Fullscreen API (avoids Chrome's fullscreen notice)
 const openMenu=v=>document.body.classList.toggle('menu',v);
 function swipe(el,dir,fn){let y0=null;
-  el.addEventListener('pointerdown',e=>{y0=e.clientY;el.setPointerCapture?.(e.pointerId);});
-  el.addEventListener('pointermove',e=>{if(y0==null)return;if((y0-e.clientY)*dir>28){y0=null;fn();}});
-  el.addEventListener('pointerup',e=>{if(y0!=null&&Math.abs(y0-e.clientY)<8)fn();y0=null;});
+  el.addEventListener('pointerdown',e=>{y0=loc(e)[1]*VH();el.setPointerCapture?.(e.pointerId);});
+  el.addEventListener('pointermove',e=>{if(y0==null)return;if((y0-loc(e)[1]*VH())*dir>28){y0=null;fn();}});
+  el.addEventListener('pointerup',e=>{if(y0!=null&&Math.abs(y0-loc(e)[1]*VH())<8)fn();y0=null;});
   el.addEventListener('pointercancel',()=>y0=null);}
 swipe(document.getElementById('grab'),1,()=>{wake();openMenu(true);});          // swipe up (or tap) on the bar
 swipe(document.getElementById('sheetHead'),-1,()=>openMenu(false));   // swipe down (or tap) on the sheet handle
@@ -1931,6 +1948,7 @@ if('serviceWorker' in navigator && location.protocol!=='file:'){
 }
 
 // keep the screen from auto-rotating while the app runs (works in the installed app / fullscreen)
+addEventListener('orientationchange',()=>resize());try{screen.orientation&&screen.orientation.addEventListener('change',()=>resize());}catch(e){}
 function lockOrientation(){try{const o=screen.orientation;if(o&&o.lock)o.lock('portrait').catch(()=>{});}catch(e){}}
 lockOrientation();
 addEventListener('pointerdown',lockOrientation,{capture:true,once:true});

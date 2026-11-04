@@ -120,7 +120,7 @@ body:not(.water) #plopRow,body:not(.water) #floors,body:not(.water) #dipRow,body
       <button class="btn" id="install">앱 설치</button>
     </div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 69</p>
+    <p class="hint" id="ver">버전 70</p>
   </div>
 </div>
 </div><!-- #app -->
@@ -825,14 +825,26 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
+const VER_TXT='버전 70';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
-const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0;
+const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
   a=((Math.round(a/90)*90)%360+360)%360;return a;}
-function applyRot(){const a=devAngle();if(a===viewAng&&innerWidth===viewIW&&innerHeight===viewIH)return;
-  viewAng=a;viewIW=innerWidth;viewIH=innerHeight;const sw=a===90||a===270;
+// 기기 기준 중력 방향(가속도계)으로 OS 화면 각도를 추정 — 각도 값이 안 바뀌거나 틀리게 오는 기기 대비
+addEventListener('devicemotion',e=>{const g=e.accelerationIncludingGravity;if(g&&g.x!=null)devG=[g.x,g.y];},{passive:true});
+function gravAngle(){if(!devG)return null;const [x,y]=devG;if(Math.hypot(x,y)<4)return null;return Math.abs(x)>Math.abs(y)?(x>0?90:270):(y>0?0:180);}
+const md=v=>((v%360)+360)%360;
+function applyRot(){const a=devAngle();rawAng=a;const scrP=innerHeight>=innerWidth;
+  const key=Math.min(screen.width,screen.height)+'x'+Math.max(screen.width,screen.height);
+  if(lockAng===null||key!==lockKey){lockKey=key;lockAng=a;lockP=scrP;}     // 앱을 켠 순간(또는 접고 펼친 순간)의 방향으로 고정
+  let rot=md(a-lockAng);
+  const ok=r=>((r%180===0)?scrP:!scrP)===lockP;                              // 돌려 놓은 결과가 처음 모양(세로/가로)과 같은가
+  if(!ok(rot)){const g=gravAngle();let r2=g!=null?md(g-lockAng):null;if(r2==null||!ok(r2))r2=md(rot+90);rot=r2;}
+  if(rot===viewAng&&innerWidth===viewIW&&innerHeight===viewIH)return;
+  viewAng=rot;viewIW=innerWidth;viewIH=innerHeight;const sw=rot===90||rot===270;
   appEl.style.width=(sw?innerHeight:innerWidth)+'px';appEl.style.height=(sw?innerWidth:innerHeight)+'px';
-  appEl.style.transform='translate(-50%,-50%) rotate('+(-a)+'deg)';}   // 화면이 돈 만큼 반대로
+  appEl.style.transform='translate(-50%,-50%) rotate('+(-rot)+'deg)';      // 화면이 돈 만큼 반대로
+  const v=document.getElementById('ver');if(v)v.textContent=VER_TXT+(rot?' · 회전 보정 '+rot+'°':'');}
 const VW=()=>(viewAng===90||viewAng===270)?innerHeight:innerWidth, VH=()=>(viewAng===90||viewAng===270)?innerWidth:innerHeight;
 // screen point (CSS px) → app-local 0..1 (x right, y down)
 function locXY(px,py){const t=viewAng*Math.PI/180,c=Math.cos(t),sn=Math.sin(t);const cx=px-innerWidth/2,cy=py-innerHeight/2;
@@ -1545,7 +1557,7 @@ function drawDrops(){
 
 /* ================= Gyro: tilt and shake the phone ================= */
 let gyroOn=false, gBase=null, motionF=[0,0], motionRaw=[0,0], shakeAmt=0, lastMotionT=0;
-function toScreen(x,y){const ang=0;   // 내용이 항상 기기 기준 방향이므로 기기 축 그대로
+function toScreen(x,y){const ang=(lockAng||0)*Math.PI/180;   // 내용은 고정된 방향 기준
   return [x*Math.cos(ang)+y*Math.sin(ang),-x*Math.sin(ang)+y*Math.cos(ang)];}
 let gView=null,viewRaw=[0,0];const viewTilt=[0,0];
 function onMotion(e){

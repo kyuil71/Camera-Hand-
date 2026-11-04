@@ -120,7 +120,7 @@ body:not(.water) #plopRow,body:not(.water) #floors,body:not(.water) #dipRow,body
       <button class="btn" id="install">앱 설치</button>
     </div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기</p>
-    <p class="hint" id="ver">버전 70</p>
+    <p class="hint" id="ver">버전 71</p>
   </div>
 </div>
 </div><!-- #app -->
@@ -825,7 +825,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 70';
+const VER_TXT='버전 71';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -1886,7 +1886,13 @@ setDip(dipMode);
 document.getElementById('snapBtn').onclick=()=>{snapReq='png';};
 /* ================= Record (MP4) & capture (JPEG): only the artwork, never the buttons or the menu ================= */
 function stamp(){const d=new Date(),z=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate())+'_'+z(d.getHours())+'-'+z(d.getMinutes())+'-'+z(d.getSeconds());}
-function saveBlob(b,ext){const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='hand-flow-'+stamp()+'.'+ext;
+async function saveNative(b,ext){   // 안드로이드 앱(APK) 안에서는 갤러리에 바로 저장
+  const S=window.AndroidSave;const id=S.begin('hand-flow-'+stamp()+'.'+ext,b.type||(ext==='mp4'?'video/mp4':ext==='webm'?'video/webm':'image/jpeg'));if(id<0)return false;
+  const CH=786432;for(let o=0;o<b.size;o+=CH){const u=new Uint8Array(await b.slice(o,o+CH).arrayBuffer());let t='';
+    for(let i=0;i<u.length;i+=32768)t+=String.fromCharCode.apply(null,u.subarray(i,i+32768));if(!S.append(id,btoa(t)))return false;}
+  return S.end(id);}
+function saveBlob(b,ext){if(window.AndroidSave){saveNative(b,ext).then(ok=>{if(!ok)saveWeb(b,ext);}).catch(()=>saveWeb(b,ext));return;}saveWeb(b,ext);}
+function saveWeb(b,ext){const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='hand-flow-'+stamp()+'.'+ext;
   document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),8000);}
 const recBtn=document.getElementById('recBtn'),recTime=document.getElementById('recTime'),flashEl=document.getElementById('flash');
 let rec=null,recChunks=[],recT0=0,recTimer=0,recExt='mp4';
@@ -1922,6 +1928,7 @@ const isApp=()=>matchMedia('(display-mode: fullscreen)').matches||matchMedia('(d
 let wantFull=false,needRefull=false,lastScreen=screen.width+'x'+screen.height,lastResizeT=0;
 try{wantFull=localStorage.getItem('hf-full')==='1';}catch(e){}
 function setWantFull(v){wantFull=v;try{localStorage.setItem('hf-full',v?'1':'0');}catch(e){}}
+if(window.AndroidSave)document.getElementById('fsBtn').style.display='none';   // 앱(APK)은 이미 전체 화면
 document.getElementById('fsBtn').onclick=()=>{if(document.fullscreenElement){setWantFull(false);document.exitFullscreen();}else{setWantFull(true);goFull();}};
 addEventListener('resize',()=>{lastResizeT=performance.now();const k=screen.width+'x'+screen.height;
   if(k!==lastScreen){lastScreen=k;if(wantFull)needRefull=true;}});           // folded / unfolded → different screen

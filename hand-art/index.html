@@ -123,7 +123,7 @@ body:not(.water) #plopRow,body:not(.water) #floors,body:not(.water) #dipRow,body
       <button class="btn" id="install">앱 설치</button>
     </div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 76</p>
+    <p class="hint" id="ver">버전 77</p>
   </div>
 </div>
 </div><!-- #app -->
@@ -485,12 +485,13 @@ void main(){vec2 uv=vUv;vec3 avg=(pal[0]+pal[1]+pal[2]+pal[3]+pal[4]+pal[5])/6.;
  c=1.-exp(-c*1.15);c=clamp(mix(vec3(dot(c,vec3(.3,.55,.15))),c,1.3),0.,1.);
  o=vec4(c,1.);}`,
 
-waterStep: H+`uniform sampler2D uT;uniform float c2,damp,w2,hs,aspect;uniform vec2 tilt;
+waterStep: H+`uniform sampler2D uT;uniform float c2,damp,w2,hs,aspect,sm;uniform vec2 tilt;
 void main(){vec4 s=texture(uT,vUv);float hC=s.x,v=s.y;
 float lap=texture(uT,vL).x+texture(uT,vR).x+texture(uT,vT).x+texture(uT,vB).x-4.*hC;
 v+=(c2*lap-w2*hC+tilt.x*(vUv.x-.5)*aspect+tilt.y*(vUv.y-.5))*hs;
 v+=.025*(texture(uT,vL).y+texture(uT,vR).y+texture(uT,vT).y+texture(uT,vB).y-4.*v);   /* grid-scale noise dies out, real waves stay */
 v*=damp;hC+=v*hs;
+hC+=sm*lap;                                                                  /* very rough water: the finest crinkles melt first, big waves stay */
 o=vec4(hC,v,0.,1.);}`,
 waterPress: H+`uniform sampler2D uT;uniform float aspect,radius,depth,k;uniform vec2 point;
 void main(){vec4 s=texture(uT,vUv);vec2 p=vUv-point;p.x*=aspect;float g=exp(-dot(p,p)/radius);
@@ -586,6 +587,8 @@ vec2 twist(vec2 q){for(int i=0;i<4;i++){if(float(i)>=swlN)break;vec2 d=q-swl[i].
 void main(){
  vec2 uv=vUv;vec2 p=vec2(uv.x*aspect,uv.y);float t=time;
  vec2 gs=texture(uH,uv).xy/simTexel.y*nk;
+ vec2 gb;{vec2 d=simTexel*1.6;gb=(texture(uH,uv+d).xy+texture(uH,uv-d).xy+texture(uH,uv+vec2(d.x,-d.y)).xy+texture(uH,uv+vec2(-d.x,d.y)).xy)*.25/simTexel.y*nk;
+  gs=mix(gs,gb,smoothstep(.10,.35,length(gs-gb)));}                 /* churned water: fine crinkles are smoothed so the picture never breaks up */
  {float m=length(gs);if(m>.6)gs*=(.6+.45*tanh((m-.6)/.45))/m;}      /* slopes never steeper than ~1: the floor always shows through */
  float gk=min(1.,gustK(p,t)+rough),e=.0015;              /* rain roughens the whole surface */
  float s0=swellH(p,t)+ripH(p,t,gk);
@@ -604,7 +607,7 @@ void main(){
  else if(floorType<1.5)bc=vec3(.075,.088,.098)*(.9+.2*vn(hit*2.5));     // dark smoked glass
  else if(floorType>2.5)bc=tiles(hit);                                    // dark gray tiles
  else bc=vec3(.030,.034,.038)*(.85+.3*vn(hit*2.5));                    // black glass (faint pattern shows through)
- vec2 lq=hit-sunDir.xy/sunDir.z*depth*.6+g*min(1.,.35/max(length(g),1e-4))*depth*1.2;   /* rough water bends the light web, never scrambles it */
+ vec2 gw=gb+ga;vec2 lq=hit-sunDir.xy/sunDir.z*depth*.6+gw*min(1.,.35/max(length(gw),1e-4))*depth*1.2;   /* rough water bends the light web, never scrambles it */
  mat2 r1=mat2(.80,.60,-.60,.80),r2=mat2(.34,-.94,.94,.34);
  float c1=caus(r1*lq*8.,t*.8),c2=caus(r2*lq*12.5+vec2(3.1,1.7),t*1.0);
  float cs=(c1+c2)*.5;cs=cs*cs*1.9+cs*.18;
@@ -830,7 +833,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 76';
+const VER_TXT='버전 77';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -1003,84 +1006,93 @@ const SILKS={
   'Sunset':['#FF7F6E','#FF9F43','#FF6FAE','#9B6BDE'],
   'Aurora':['#1FD1B2','#2F7BFF','#8E5CF7','#F06BC8']};
 let silkName='Pastel'; try{const v=localStorage.getItem('hf-silk');if(v&&SILKS[v])silkName=v;}catch(e){}
-let silkT=0, silkRibs=null, silkSpread=1, silkWide=1, silkPrevF={};
+let silkT=0, silkRibs=null, silkSpread=1, silkWide=1, silkPrevF={}, silkFlap=0;
 function silkCol(k){const P=SILKS[silkName].map(hex2rgb);k=((k%4)+4)%4;const i=Math.floor(k),f=k-i,a=P[i],b=P[(i+1)%4],e=f*f*(3-2*f);
   return [a[0]+(b[0]-a[0])*e,a[1]+(b[1]-a[1])*e,a[2]+(b[2]-a[2])*e];}
+// 실크 천들이 바람에 날림. 손가락을 움직이면 그 방향으로 바람이 일어 천이 날아가고, 바람이 불어오는 쪽에서 새 천이 들어옴
+let silkWind={x:0,y:0},silkAmbA=Math.random()*6.283,silkGustT=0;
+function silkMake(R,depth,place){             // place: null = anywhere on screen, else {x,y} = upwind spawn direction
+  const len=.75+.45*Math.random(),seg=len/(SILK_M-1);let hx,hy,a0;
+  if(!place){a0=Math.random()*6.283;const cx=(.15+.7*Math.random())*aspect,cy=.15+.7*Math.random();hx=cx+Math.cos(a0)*len*.5;hy=cy+Math.sin(a0)*len*.5;}   // the middle of the silk on screen
+  else{const dl=Math.hypot(place.x,place.y)||1,dx=place.x/dl,dy=place.y/dl;
+    const px=(.1+.8*Math.random())*aspect,py=.1+.8*Math.random();     // a random spot, traced back upwind until just off screen
+    const tx=dx>1e-3?px/dx:dx<-1e-3?(aspect-px)/-dx:1e9,ty=dy>1e-3?py/dy:dy<-1e-3?(1-py)/-dy:1e9,t=Math.min(tx,ty)+.03;
+    hx=px-dx*t;hy=py-dy*t;a0=Math.atan2(dy,dx)+(Math.random()-.5)*.6;}   // head points downwind, the body trails behind (off screen)
+  const pts=[];for(let i=0;i<SILK_M;i++){const x=hx-Math.cos(a0)*seg*i,y=hy-Math.sin(a0)*seg*i;pts.push({x,y,px:x,py:y});}
+  Object.assign(R,{pts,seg,depth,w:(.09+.10*depth)*(.85+.3*Math.random()),ph:Math.random()*6.283,
+    ph0:(Math.random()<.5?0:Math.PI)+(Math.random()-.5)*.35,ck:Math.random()*4,fl:.8+.4*Math.random(),age:0,blow:{x:0,y:0},
+    ent:place?{x:place.x/(Math.hypot(place.x,place.y)||1)*.16,y:place.y/(Math.hypot(place.x,place.y)||1)*.16}:{x:0,y:0}});   // a new silk keeps floating in even if the wind drops
+  return R;}
 function silkInit(){silkRibs=[];
-  for(let r=0;r<SILK_N;r++){const depth=r/(SILK_N-1);          // 0 = farthest … 1 = nearest
-    const len=.8+.45*Math.random(),seg=len/(SILK_M-1),hx=(.15+.7*Math.random())*aspect,hy=.15+.7*Math.random(),a0=Math.random()*6.283;
-    const pts=[];for(let i=0;i<SILK_M;i++){const x=hx-Math.cos(a0)*seg*i,y=hy-Math.sin(a0)*seg*i;pts.push({x,y,px:x,py:y});}
-    const kind=[0,2,1,0,2,0,1,2,0][r%9];                        // 0 = lies open, 1 = sways a little, 2 = turns over as it travels
-    silkRibs.push({pts,seg,depth,w:(.09+.10*depth)*(.85+.3*Math.random()),ph:Math.random()*6.283,tw:.04+.08*Math.random(),kind,
-      ph0:(Math.random()<.5?0:Math.PI)+(Math.random()-.5)*.4,hv:{x:0,y:0},wa:Math.random()*6.283,ck:r*.7+Math.random()});}}
-function silkField(x,y,t){const X=x/aspect;                          // big slow currents (same family as Aurora)
+  for(let r=0;r<SILK_N;r++){const R=silkMake({},r/(SILK_N-1),null);R.ck=r*.7+Math.random();silkRibs.push(R);}}
+function silkField(x,y,t){const X=x/aspect;                          // soft eddies in the air
   return [ .10*Math.sin(y*3.1+t*.21)+.06*Math.sin(y*5.3+X*2.+t*.33)+.04*Math.cos(X*4.1-t*.17),
            .08*Math.cos(X*2.7-t*.19)+.05*Math.sin(X*4.9+y*2.3-t*.29)+.03*Math.sin(y*6.1+t*.4)];}
 function silkFrame(dt){
   if(!silkRibs)silkInit();
   const live=flow>.3, k=Math.min(dt,1/30)*flow*(.35+timeScale);   // fist → flow eases to 0 → silk slows gradually
   silkT+=k;
-  // fingers (hands + touch): position + velocity, in aspect space
-  const fing=[];
-  const vlim=(vx,vy)=>{const m=Math.hypot(vx,vy),L=3.;return m>L?[vx*L/m,vy*L/m]:[vx,vy];};   // a hand leads the silk firmly, but can't yank it apart
+  // fingers (hands + touch) only make wind — they never grab or shove the silk
+  let gx=0,gy=0,gn=0;const fing=[];
+  const vlim=(vx,vy)=>{const m=Math.hypot(vx,vy),L=3.;return m>L?[vx*L/m,vy*L/m]:[vx,vy];};
   handInfo.forEach((h,i)=>{if(h.virt||h.fist||!h.pts||!h.pts[1])return;const p=h.pts[1],x=p.x*aspect,y=p.y,pr=silkPrevF['h'+i];
-    let vx=pr?(x-pr.x)/Math.max(dt,.016):0,vy=pr?(y-pr.y)/Math.max(dt,.016):0;silkPrevF['h'+i]={x,y};[vx,vy]=vlim(vx,vy);
-    fing.push({x,y,vx,vy,pinch:h.pinch,mid:h.mid,open:h.open,palm:h.palm});});
+    let vx=pr?(x-pr.x)/Math.max(dt,.016):0,vy=pr?(y-pr.y)/Math.max(dt,.016):0;silkPrevF['h'+i]={x,y};[vx,vy]=vlim(vx,vy);fing.push({x,y,vx,vy});});
   for(const [id,p] of pointers){const x=p.x*aspect,y=p.y,pr=silkPrevF['t'+id];
     let vx=pr?(x-pr.x)/Math.max(dt,.016):0,vy=pr?(y-pr.y)/Math.max(dt,.016):0;silkPrevF['t'+id]={x,y};[vx,vy]=vlim(vx,vy);fing.push({x,y,vx,vy});}
   if(!handInfo.length)for(const kk in silkPrevF)if(kk[0]==='h')delete silkPrevF[kk];
-  // fast hands → silk spreads wide; open palm → unfurls
-  let wideT=1+.55*Math.min(handAct,2.2),spreadT=1;
-  for(const f of fing)if(f.open)spreadT=1.45;
-  silkWide+=(wideT-silkWide)*Math.min(1,dt*1.5);silkSpread+=(spreadT-silkSpread)*Math.min(1,dt*1.2);
-  const SUB=3,ks=k/SUB;                                    // 3 small steps per frame: quick to follow a hand, yet never more than a fraction of a stitch per step
-  const kf=ks/SUB;                                         // forces that build momentum: scaled so the overall pace matches one big step
+  for(const kk in silkPrevF)if(kk[0]==='t'&&!pointers.has(isNaN(+kk.slice(1))?kk.slice(1):+kk.slice(1)))delete silkPrevF[kk];
+  for(const f of fing){const sp=Math.hypot(f.vx,f.vy);if(sp>.15&&live){gx+=f.vx;gy+=f.vy;gn++;}}
+  if(gn){const tx=gx/gn*1.4,ty=gy/gn*1.4,a=Math.min(1,dt*4);         // a stroke sets the wind going its way
+    silkWind.x+=(tx-silkWind.x)*a;silkWind.y+=(ty-silkWind.y)*a;silkGustT=0;}
+  else{silkGustT+=dt;const d=Math.exp(-dt/(silkGustT<1.?4.:1.8));silkWind.x*=d;silkWind.y*=d;}   // then it dies down slowly
+  {const m=Math.hypot(silkWind.x,silkWind.y);if(m>2.2){silkWind.x*=2.2/m;silkWind.y*=2.2/m;}}
+  silkAmbA+=dt*.05*Math.sin(silkT*.07)+dt*.02;                         // a light breeze that slowly changes direction
+  const amb=.035+.02*Math.sin(silkT*.11);
+  const WX=Math.cos(silkAmbA)*amb+silkWind.x,WY=Math.sin(silkAmbA)*amb*.6+silkWind.y,Wm=Math.hypot(WX,WY);
+  {const gm=Math.hypot(silkWind.x,silkWind.y);                          // a real gust carries the silk all the way off — it keeps flying even as the wind drops
+   if(gm>.35&&gn)for(const R of silkRibs){const bm=Math.hypot(R.blow.x,R.blow.y),want=.32;if(bm<want||(R.blow.x*silkWind.x+R.blow.y*silkWind.y)<0){R.blow.x=silkWind.x/gm*want;R.blow.y=silkWind.y/gm*want;}}
+   const bd=Math.exp(-dt/7);for(const R of silkRibs){R.blow.x*=bd;R.blow.y*=bd;}}
+  const SUB=4,ks=k/SUB;
   for(let sub=0;sub<SUB;sub++){
-  const damp=Math.pow(.986,ks*60);
-  for(const R of silkRibs){const P=R.pts,h=P[0];
-    // head: wanders along the slow currents, steers softly away from the edges (never hits a wall)
-    const F=silkField(h.x,h.y,silkT+R.ph*3);R.wa+=ks*(.4+.3*Math.sin(silkT*.2+R.ph));
-    let dx=F[0]+.05*Math.cos(R.wa),dy=F[1]+.05*Math.sin(R.wa);
-    const m=.12;if(h.x<m)dx+=(m-h.x)*1.6;if(h.x>aspect-m)dx-=(h.x-aspect+m)*1.6;if(h.y<m)dy+=(m-h.y)*1.6;if(h.y>1-m)dy-=(h.y-1+m)*1.6;
-    R.hv.x+=(dx-R.hv.x)*Math.min(1,ks*1.2);R.hv.y+=(dy-R.hv.y)*Math.min(1,ks*1.2);
-    for(let i=0;i<P.length;i++){const q=P[i];
+  const damp=Math.pow(.99,ks*60);
+  for(const R of silkRibs){const P=R.pts,par=.55+.45*R.depth;      // far silk drifts a little slower (depth)
+    for(let i=0;i<P.length;i++){const q=P[i],u=i/(P.length-1);
       let vx=(q.x-q.px)*damp,vy=(q.y-q.py)*damp;q.px=q.x;q.py=q.y;
-      if(i===0){vx=vx*.9+R.hv.x*ks*.1*60*.016*6;vy=vy*.9+R.hv.y*ks*.1*60*.016*6;}
-      else{const G=silkField(q.x,q.y,silkT*1.3+i*.05+R.ph);vx+=G[0]*kf*.012;vy+=G[1]*kf*.012;}       // breeze along the body
-      vx+=motionF[0]*.0006*kf*60;vy+=motionF[1]*.0006*kf*60;                                   // tilt / shake
-      if(live)for(const f of fing){const ex=q.x-f.x,ey=q.y-f.y,d2=ex*ex+ey*ey,fall=Math.exp(-d2/.05);
-        if(fall<.01)continue;
-        vx+=f.vx*kf*1.7*fall;vy+=f.vy*kf*1.7*fall;                                               // the silk is carried along by the hand
-        {const d=Math.sqrt(d2)+1e-5,rr=.10;if(d<rr){const push=(rr-d)/rr;vx+=ex/d*push*R.seg*.28;vy+=ey/d*push*R.seg*.28;}}   // and pushed aside where the hand passes
-        if(f.pinch&&f.mid){const cx=f.mid.x*aspect,cy=f.mid.y,rx=q.x-cx,ry=q.y-cy,fa=Math.exp(-(rx*rx+ry*ry)/.06);
-          vx+=(-ry*1.6-rx*.25)*kf*fa*.6;vy+=(rx*1.6-ry*.25)*kf*fa*.6;}                          // pinch → gentle vortex
-        if(f.open&&f.palm){const cx=f.palm.x*aspect,cy=f.palm.y,rx=q.x-cx,ry=q.y-cy,dd=Math.hypot(rx,ry)+1e-4,fa=Math.exp(-dd*dd/.09);
-          vx+=rx/dd*.25*kf*fa;vy+=ry/dd*.25*kf*fa;}}                                           // open hand → unfurl outward
-      const sp=Math.hypot(vx,vy),cap=R.seg*.3;if(sp>cap){vx*=cap/sp;vy*=cap/sp;}               // never more than a third of a stitch per step → no folds over itself
+      const G=silkField(q.x,q.y,silkT*1.2+i*.04+R.ph);
+      let ux=(WX+G[0]*.55)*par*R.fl+R.ent.x+R.blow.x,uy=(WY+G[1]*.55)*par*R.fl+R.ent.y+R.blow.y;          // the air's velocity here
+      if(live)for(const f of fing){const ex=q.x-f.x,ey=q.y-f.y,fa=Math.exp(-(ex*ex+ey*ey)/.06);if(fa>.02){ux+=f.vx*.35*fa;uy+=f.vy*.35*fa;}}   // a little stronger gust right by the finger
+      const cd=i===0?.16:.05+.04*(1-u);                                   // the leading edge catches the air most → the rest streams behind it
+      if(i>0){const a=P[i-1],tx=q.x-a.x,ty=q.y-a.y,tl=Math.hypot(tx,ty)||1;   // silk in moving air: a wave runs down it from the leading edge
+        const Af=(.12+.5*Math.min(Wm,1.5))*R.fl*Math.pow(u,.7)*Math.sin(u*8.5-silkFlap*1.6+R.ph);ux+=-ty/tl*Af;uy+=tx/tl*Af;}
+      vx+=(ux*ks-vx)*cd;vy+=(uy*ks-vy)*cd;
+      const sp=Math.hypot(vx,vy),cap=R.seg*.45;if(sp>cap){vx*=cap/sp;vy*=cap/sp;}
       q.x+=vx;q.y+=vy;}
-    // keep it a continuous ribbon: length constraints + smoothing (no kinks, no angles)
+    // a continuous ribbon: length constraints + smoothing (no kinks, no folds)
     for(let it=0;it<4;it++){
       for(let i=1;i<P.length;i++){const a=P[i-1],b=P[i],ex=b.x-a.x,ey=b.y-a.y,d=Math.hypot(ex,ey)||1e-6,c=(d-R.seg)/d;
         if(i===1){b.x-=ex*c;b.y-=ey*c;}else{a.x+=ex*c*.25;a.y+=ey*c*.25;b.x-=ex*c*.75;b.y-=ey*c*.75;}}
       for(let i=1;i<P.length-1;i++){const a=P[i-1],b=P[i],c=P[i+1];
         const ux=b.x-a.x,uy=b.y-a.y,wx=c.x-b.x,wy=c.y-b.y,cs=(ux*wx+uy*wy)/((Math.hypot(ux,uy)*Math.hypot(wx,wy))||1e-9);
-        const kb=cs<.82?.5:.22;                                                              // bends sharper than ~35° are eased out firmly
+        const kb=cs<.8?.45:.05;                                              // gentle curves stay, sharp bends are eased out
         b.x+=(a.x+c.x-2*b.x)*kb;b.y+=(a.y+c.y-2*b.y)*kb;}}
-  }
-  }
+  }}
+  // blown off screen → a new silk drifts in from where the wind comes from
+  const mg=.08;
+  for(const R of silkRibs){R.age+=dt;const ed=Math.exp(-dt/5);R.ent.x*=ed;R.ent.y*=ed;if(R.age<3)continue;let out=true;for(const q of R.pts)if(q.x>-mg&&q.x<aspect+mg&&q.y>-mg&&q.y<1+mg){out=false;break;}
+    if(out){const ck=R.ck,dir=Wm>.01?{x:WX,y:WY}:{x:Math.cos(silkAmbA),y:Math.sin(silkAmbA)};silkMake(R,R.depth,dir);R.ck=ck+1.3;}}
+  silkWide=1+.25*Math.min(Wm,1.2);                                     // stronger wind → the silk flutters a little wider
+  silkFlap+=dt*(1.5+5*Math.min(Wm,1.2))*flow;
   // ---- build triangle strips ----
   let o=0;
   for(const R of silkRibs){const P=R.pts,M=P.length;
     for(let i=0;i<M;i++){const a=P[Math.max(0,i-1)],b=P[Math.min(M-1,i+1)];let tx=b.x-a.x,ty=b.y-a.y;const tl=Math.hypot(tx,ty)||1;tx/=tl;ty/=tl;
       const u=i/(M-1);
-      const th=R.kind===0?R.ph0+.22*Math.sin(silkT*.18+u*2.2+R.ph)                                        // open: stays spread, only breathes
-              :R.kind===1?R.ph0+.75*Math.sin(silkT*.22+i*R.tw*.45+R.ph)                                    // sways: tilts, rarely edge-on
-              :R.ph+silkT*.35+i*R.tw+.9*Math.sin(silkT*.27+i*.11+R.ph);                                    // turns over, the fold travelling along it
+      const th=R.ph0+.18*Math.sin(silkT*.2+u*2.4+R.ph);                                    // lies open, only breathes — never twists over
       const c=Math.cos(th),sn=Math.sin(th);
-      const w=R.w*silkWide*silkSpread*Math.pow(Math.sin(Math.PI*Math.min(1,u*1.06+.02)),.55)*(.85+.15*Math.sin(u*7+silkT*.4+R.ph));
-      let ww=w*(.18+.82*Math.abs(c));                                                        // turned edge-on → narrow, never a line
+      const w=R.w*silkWide*Math.pow(Math.sin(Math.PI*Math.min(1,u*1.06+.02)),.55)*(.85+.15*Math.sin(u*7+silkT*.4+R.ph));
+      let ww=w*(.25+.75*Math.abs(c));
       const nx=-ty,ny=tx;
-      let wav=(.025+.02*silkWide)*Math.sin(u*7.5-silkT*1.3+R.ph)*Math.sin(Math.PI*u);
+      let wav=(.022+.02*(silkWide-1)*3)*Math.sin(u*7.5-silkT*1.3-silkFlap*1.0+R.ph)*Math.pow(u,.6)*Math.sin(Math.PI*Math.min(1,u*.9+.1));   // flutter runs to the trailing end
       if(i>0&&i<M-1){const p0=P[i-1],p1=P[i],p2=P[i+1],ux=p1.x-p0.x,uy=p1.y-p0.y,vx2=p2.x-p1.x,vy2=p2.y-p1.y;   // the inside of a bend must not cross over
         const turn=Math.abs(Math.atan2(ux*vy2-uy*vx2,ux*vx2+uy*vy2))+1e-4,rad=R.seg/turn,lim=rad*.72;
         if(ww*.5+Math.abs(wav)>lim){const s2=lim/(ww*.5+Math.abs(wav));ww*=s2;wav*=s2;}}
@@ -1141,14 +1153,14 @@ let waterTime=0, wAcc=0, dropClock=0, glideClock=0; const gliders=[];
 const W_C=250, W_H=1/540, W_NK=.24, SUN=(()=>{const v=[.12,.82,.56],l=Math.hypot(...v);return v.map(x=>x/l);})();
 // strength budget: however hard and often the water is struck, it never gets rougher than ~3 plops at once
 // (extra pushes are softened, and rough water calms faster) → the floor's light pattern always shows
-let wBudget=0,wExtra=0,wCapK=1;const W_BCAP=.035;
+let wBudget=0,wExtra=0,wCapK=1,wSmooth=0;const W_BCAP=.035;
 function waterClear(){wBudget=0;wExtra=0;const u=use('waterClear',[0,0]);blit(wat.w);wat.swap();blit(wat.w);wat.swap();}
 function waterPoke(x,y,amp,r,bw,minK){const I=Math.abs(amp)*r*(bw==null?1:bw);   // bw: how much this push counts against the roughness budget
   let k=1;if(I>0){const room=W_BCAP*wCapK-wBudget;k=room>=I?1:Math.max(minK==null?.15:minK,Math.max(0,room)/I);amp*=k;wBudget+=I*k;}
   const u=use('waterPoke',[wat.r.tx,wat.r.ty]);gl.uniform1i(u.uT,wat.r.bind(0));
   gl.uniform1f(u.aspect,aspect);gl.uniform2f(u.point,x,y);gl.uniform1f(u.amp,amp);gl.uniform1f(u.radius,r*(aspect>1?aspect:1));blit(wat.w);wat.swap();return k;}
 function waterStep(){const u=use('waterStep',[wat.r.tx,wat.r.ty]);gl.uniform1i(u.uT,wat.r.bind(0));
-  gl.uniform1f(u.c2,W_C*W_C);gl.uniform1f(u.damp,Math.exp(-(.55+wExtra)*W_H));gl.uniform1f(u.w2,4.);gl.uniform1f(u.hs,W_H);
+  gl.uniform1f(u.c2,W_C*W_C);gl.uniform1f(u.sm,wSmooth);gl.uniform1f(u.damp,Math.exp(-(.55+wExtra)*W_H));gl.uniform1f(u.w2,4.);gl.uniform1f(u.hs,W_H);
   gl.uniform1f(u.aspect,aspect);gl.uniform2f(u.tilt,-motionF[0]*.35,-motionF[1]*.35);blit(wat.w);wat.swap();}
 /* ---- 손 담그기: dipping a hand into the water ---- */
 let dipMode=false; try{dipMode=localStorage.getItem('hf-dip')==='1';}catch(e){}
@@ -1196,7 +1208,7 @@ function wakeStep(id,x,y,speed,tms){              // speed in screen-heights / s
   w.acc+=d;const step=WAKE_STEP;
   while(w.acc>=step){w.acc-=step;                 // fixed spacing → event rate never multiplies the waves
     const s=Math.min(1,Math.max(0,(speed-.08)/1.4));
-    queue.push({x,y,wake:1,amp:(WAKE_A[0]+WAKE_A[1]*s)*1.1,r:WAKE_R*1.3});}}   // the finger ploughs a clear furrow
+    queue.push({x,y,wake:1,amp:(WAKE_A[0]+WAKE_A[1]*s)*1.1/Math.sqrt(Math.max(1,wakes.size)),r:WAKE_R*1.3});}}   // many fingers stirring: each a little softer   // the finger ploughs a clear furrow
 // circling fingers → a whirlpool: the middle is pulled down into a funnel, ripples orbit around it; let go → it springs back in rings
 function whirlFrame(dt,live){
   for(const w of wakes.values()){
@@ -1215,7 +1227,7 @@ function wakeEnd(id){const w=wakes.get(id);if(w&&w.whirl>.02){w.up=true;w.spin*=
 function waterFrame(dt){
   const wts=Math.min(.45+.55*timeScale,2.6);            // slider + finger speed → water time
   const sdt=dt*flow*wts; waterTime+=sdt;
-  wExtra=Math.max(0,wBudget/(W_BCAP*wCapK)-.8)*1.5; wBudget*=Math.exp(-(.3+wExtra*.5)*sdt);   // rough water settles faster
+  wExtra=Math.max(0,wBudget/(W_BCAP*wCapK)-.8)*1.5;wSmooth=Math.min(.06,Math.max(0,wBudget/(W_BCAP*wCapK)-.3)*.12); wBudget*=Math.exp(-(.3+wExtra*.5)*sdt);   // rough water settles faster
   const live=flow>.3;
   if(dipMode){queue.length=0;plops.length=0;updateDips(dt);}
   if(plops.length){const n=plops.length,kk=1/Math.sqrt(n);            // many stones at once: each a little softer, total energy stays calm
@@ -1965,7 +1977,7 @@ const HINTS={paint:hintTxt.innerHTML,
   dip:'<b>손 담그기</b> · 터치: 오래 누를수록 깊게, 톡 누르면 살짝<br>손: 손바닥을 화면 쪽으로 내밀어 오래 둘수록 깊게, 떼면 물이 되솟음',
   ink:'<b>랜덤</b> 붓이 스스로 그림 — 언제든 함께 그리기<br><b>터치·손가락</b> 움직이면 먹물이 스며듦 · 겹칠수록 짙어짐<br><b>엄지+검지 집기</b> 먹 한 방울 · <b>주먹</b> 멈춤<br>먹물은 천천히 옅어져 사라짐 · <b>흔들기 켜면</b> 기울인 쪽으로 번짐',
   cloud:'<b>검지</b> 지나간 구름이 부드럽게 갈라짐 · 빠르게 움직이면 흩어짐<br><b>집기</b> 회전 흐름 · <b>손 펼치기</b> 넓게 확산 · <b>주먹</b> 천천히 안정',
-  silk:'<b>검지</b> 실크가 따라 흐름 · 빠르게 움직이면 넓게 펼쳐짐<br><b>집기</b> 부드러운 소용돌이 · <b>손 펼치기</b> 활짝 펼침 · <b>주먹</b> 서서히 멈춤',
+  silk:'<b>손가락·터치를 움직이면</b> 그 방향으로 바람이 불어 실크가 날아감<br>바람이 불어오는 쪽에서 새 실크가 들어옴 · <b>주먹</b> 바람이 잦아듦',
   light:'<b>손가락</b> 빛의 흐름 밀기 · <b>검지만 펴기</b> 가리킨 방향으로 빛줄기<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 멈춤',
   wave:'<b>폰 기울이기</b> 물이 쏠려 벽에 부딪힘 · <b>흔들기</b> 출렁임<br><b>터치·손</b> 물 밀기 · <b>톡</b> 물결 · <b>주먹</b> 멈춤',
   water:'<b>톡 터치·손가락 톡 굽히기</b> 퐁당 · <b>끌며 원 그리기</b> 소용돌이<br><b>손가락</b> 움직여 물결 · <b>검지만 펴기</b> 가리킨 방향으로 물길<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 물 멈춤'};

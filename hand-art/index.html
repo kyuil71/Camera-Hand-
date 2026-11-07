@@ -126,7 +126,7 @@ body:not(.halo) #haloColRow,body:not(.halo) #beadRow{display:none}
       <button class="btn" id="install">앱 설치</button>
     </div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 81</p>
+    <p class="hint" id="ver">버전 82</p>
   </div>
 </div>
 </div><!-- #app -->
@@ -887,7 +887,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 81';
+const VER_TXT='버전 82';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -1470,7 +1470,7 @@ let haloColMode='white',haloBead=100;try{const v=localStorage.getItem('hf-halo-c
 let haloHue=Math.random(),haloHueT=Math.random(),haloSat=.75,haloSatT=.75,haloHueClock=0,haloCol=[1,.99,.97];
 const hsv2rgb=(h,s,v)=>{const f=n=>{const k=(n+h*6)%6;return v-v*s*Math.max(0,Math.min(k,4-k,1));};return [f(5),f(3),f(1)];};
 function haloColStep(dt){                           // random: drifts to a new colour every few seconds, always smoothly
-  if(haloColMode==='white'){haloCol=haloCol.map((c,i)=>c+([1,.99,.97][i]-c)*Math.min(1,dt*3));return;}
+  if(haloColMode==='white'&&!(halo&&halo.idle)){   /* left alone, it changes colour on its own too */ haloCol=haloCol.map((c,i)=>c+([1,.99,.97][i]-c)*Math.min(1,dt*3));return;}
   haloHueClock-=dt;if(haloHueClock<=0){haloHueClock=3.5+Math.random()*4;haloHueT=Math.random();haloSatT=.55+Math.random()*.35;}
   let d=haloHueT-haloHue;d-=Math.round(d);haloHue=(haloHue+d*Math.min(1,dt*.7)+1)%1;haloSat+=(haloSatT-haloSat)*Math.min(1,dt*.7);
   const c=hsv2rgb(haloHue,haloSat,1);haloCol=haloCol.map((v,i)=>v+(c[i]-v)*Math.min(1,dt*4));}
@@ -1549,12 +1549,25 @@ function haloFrame(dt){
         else if(H.hold&&H.hold.one)H.hold=null;}
       const sz=h.size||0,key='s';if(sz){const hb=H.hBase;hb[key]=hb[key]?hb[key]+(sz-hb[key])*.01:sz;tz=Math.max(-.7,Math.min(.35,-(sz/hb[key]-1)*1.6));}}}   // hand comes closer → ring pushed away
   else{H.hold=null;if(H.pinch)H.pinch=null;H.palmN=null;
-    if(isIdle()&&live&&!H.grab&&!H.two){const t=haloT;                                         // left alone: it floats about, leans, now and then turns over
-      tgtC=[home[0]+Math.sin(t*.31)*.10*aspect+Math.sin(t*.73+1.)*.04*aspect,home[1]+Math.sin(t*.27+2.)*.07+Math.sin(t*.61)*.03,0];kC=1.1;
-      tz=.12*Math.sin(t*.19);
-      H.idleT=(H.idleT||3)-dt;if(H.idleT<0){H.idleT=4+Math.random()*5;const a=Math.random()*6.283,k=Math.random()<.4?8+Math.random()*6:2+Math.random()*2.5;
-        H.w[0]+=Math.cos(a)*k;H.w[1]+=Math.sin(a)*k;if(Math.random()<.5)haloKick((Math.random()*HN)|0,.5);}
-      if(Math.random()<dt*.6){const a=Math.random()*6.283;queue.push({x:Math.random(),y:Math.random(),vx:Math.cos(a)*.25,vy:Math.sin(a)*.25,set:.5,r:.004});}}}
+    if(isIdle()&&live&&!H.grab&&!H.two){                                                   // left alone: it puts on a show — wanders, grows and shrinks, leans, rolls, turns over
+      if(!H.idle){H.userR=H.Rt;H.idle={t:0,tgt:H.C.slice(),z:0,R:H.Rt,roll:0,rollT:0,nT:null,free:0};}
+      const I=H.idle;I.t-=dt;
+      if(I.t<=0){I.t=2.8+Math.random()*3.4;const Rm=Math.min(.40,aspect*.46);
+        const r=Math.random();
+        I.R=r<.25?.11+Math.random()*.06:r<.6?.16+Math.random()*.10:Math.min(Rm,.26+Math.random()*.16);   // small, medium or large
+        const mx=Math.min(.42,I.R*.7+.04);I.tgt=[aspect<=2*mx?aspect/2:mx+Math.random()*(aspect-2*mx),mx+Math.random()*Math.max(0,1-2*mx),0];
+        I.z=-.35+Math.random()*.5;I.rollT=(Math.random()<.5?0:(Math.random()-.5)*2.4);
+        const pick=Math.random();
+        if(pick<.3){I.nT=null;I.free=2.2;const a=Math.random()*6.283,k=8+Math.random()*7;H.w[0]+=Math.cos(a)*k;H.w[1]+=Math.sin(a)*k;}   // a flip / spin
+        else if(pick<.75){const th=(.3+Math.random()*.75),ph=Math.random()*6.283;I.nT=[Math.sin(th)*Math.cos(ph),Math.sin(th)*Math.sin(ph),Math.cos(th)];I.free=0;}  // lean and hold
+        else{I.nT=[0,0,1];I.free=0;}                                                             // face you
+        if(Math.random()<.5)haloKick((Math.random()*HN)|0,.4);}
+      I.free-=dt;I.roll+=(I.rollT-I.roll)*Math.min(1,dt*.8);
+      tgtC=[I.tgt[0],I.tgt[1],0];kC=3.2;tz=I.z;H.Rt+=(I.R-H.Rt)*Math.min(1,dt*.6);
+      if(I.nT&&I.free<=0){let nn=I.nT;if(nn[0]*H.n[0]+nn[1]*H.n[1]+nn[2]*H.n[2]<0)nn=nn.map(x=>-x);tgtN=nn;kN=3.5;}
+      if(Math.abs(I.roll)>.01){const n=H.n,a=I.roll*dt,sa=Math.sin(a/2);H.q=qNorm(qMul([n[0]*sa,n[1]*sa,n[2]*sa,Math.cos(a/2)],H.q));}   // rolls around itself
+      if(Math.random()<dt*.6){const a=Math.random()*6.283;queue.push({x:Math.random(),y:Math.random(),vx:Math.cos(a)*.25,vy:Math.sin(a)*.25,set:.5,r:.004});}}
+    else if(H.idle){H.Rt=H.userR||H.Rt;H.idle=null;}}                                         // someone is back: it returns to their size
   // ---- integrate (small steps) ----
   H.R+=(H.Rt-H.R)*Math.min(1,dt*8);
   const SUB=4,h=k/SUB;
@@ -1837,7 +1850,7 @@ const bgm=new Audio();bgm.loop=true;bgm.preload='auto';
 try{bgm.preservesPitch=true;bgm.mozPreservesPitch=true;bgm.webkitPreservesPitch=true;}catch(e){}
 let musicOn=true; try{musicOn=localStorage.getItem('hf-music')!=='off';}catch(e){}
 let musicReady=null, musicVol=0, curTrack=null, trackBusy=false;
-const TRACKS={paint:'audio/where_the_stream_widens.mp3',water:'audio/glass_upon_the_lake.mp3',light:'audio/where_the_ocean_meets_sky.mp3',wave:'audio/where_the_ocean_meets_sky.mp3',halo:'audio/where_the_ocean_meets_sky.mp3',ink:'audio/silk_and_moonlight.mp3'};
+const TRACKS={halo:'audio/beneath_the_haloed_glass.mp3',paint:'audio/where_the_stream_widens.mp3',water:'audio/glass_upon_the_lake.mp3',light:'audio/where_the_ocean_meets_sky.mp3',wave:'audio/where_the_ocean_meets_sky.mp3',ink:'audio/silk_and_moonlight.mp3'};
 const trackURL={};
 function getTrack(path){ if(!trackURL[path])trackURL[path]=fetch(path).then(r=>r.blob()).then(b=>URL.createObjectURL(b)).catch(()=>null); return trackURL[path]; }
 function loadMusic(){ const path=TRACKS[mode]||TRACKS.paint;

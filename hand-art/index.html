@@ -126,7 +126,7 @@ body:not(.halo) #haloColRow,body:not(.halo) #beadRow{display:none}
       <button class="btn" id="install">앱 설치</button>
     </div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 85</p>
+    <p class="hint" id="ver">버전 86</p>
   </div>
 </div>
 </div><!-- #app -->
@@ -887,7 +887,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 85';
+const VER_TXT='버전 86';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -1539,16 +1539,19 @@ function haloFrame(dt){
   if(fistNow){H.V=[0,0,0];H.w=[0,0,0];H.zoom=null;}
   if(hh&&!fistNow&&live&&!H.grab){H.lastHand=performance.now();
     const st=haloHand(hh);
-    if(st.drag){const tip=hh.pts&&hh.pts[1];if(tip){tgtC=[tip.x*aspect,tip.y,0];kC=60;}}          // index out: the ring sits on your fingertip
-    if(st.ok&&H.lastHI!==handInfo){H.lastHI=handInfo;                                             // once per camera frame: how did the thumb move?
-      const z=H.zoom;
-      if(z){const dI=z.dI+(st.dI-z.dI)*.6,dM=z.dM+(st.dM-z.dM)*.6,gI=dI-z.dI,gM=dM-z.dM;
-        // thumb opening away from the index → bigger; thumb closing onto the index → smaller;
-        // thumb folding into the fist (it nears the middle finger faster than the index) → ignored
-        if(gI>.006)H.Rt=Math.min(.48,H.Rt*Math.exp(gI*2.3));
-        else if(gI<-.006&&-gI>-gM*.9+.002)H.Rt=Math.max(.08,H.Rt*Math.exp(gI*1.8));
-        z.dI=dI;z.dM=dM;}
-      else H.zoom={dI:st.dI,dM:st.dM};}
+    if(st.drag){const tip=hh.pts&&hh.pts[1];if(tip){tgtC=[tip.x*aspect,tip.y,0];kC=14;}}          // index out: the ring follows your fingertip, smoothly
+    if(st.ok&&H.lastHI!==handInfo){H.lastHI=handInfo;                                             // once per camera frame: what is the thumb doing?
+      const now=performance.now(),tip=hh.pts&&hh.pts[1];let mv=0;
+      if(tip&&H.zt){const dtt=Math.max(.016,(now-H.zt.t)/1000);mv=Math.hypot((tip.x-H.zt.x)*aspect,tip.y-H.zt.y)/dtt;}
+      if(tip)H.zt={x:tip.x,y:tip.y,t:now};
+      let z=H.zoom;if(!z)z=H.zoom={dI:st.dI,dM:st.dM,a:st.dI,tuck:st.dM<.42,mvT:0};
+      const pI=z.dI,pM=z.dM;z.dI+=(st.dI-z.dI)*.35;z.dM+=(st.dM-z.dM)*.35;const toMid=(pM-z.dM)>(pI-z.dI)*.9&&(pM-z.dM)>.004;   // heading for the middle finger = folding, not pinching                                             // heavy smoothing: tracking jitter never reaches the ring
+      z.mvT=mv>.30?now:z.mvT;const moving=now-z.mvT<250;                                         // the hand is travelling → no zooming (and a moment after)
+      if(z.tuck){if(z.dM>.55)z.tuck=false;}else if(z.dM<.38)z.tuck=true;                         // thumb folded into the fist (by the middle finger)?
+      const E=.06;
+      if(z.tuck||moving){z.a=z.dI;}                                                              // folded thumb or moving hand: no size change, just keep up
+      else if(z.dI>z.a+E){const d=z.dI-(z.a+E);z.a+=d;H.Rt=Math.min(.48,H.Rt*Math.exp(d*2.0));}   // thumb clearly opens away from the index → bigger
+      else if(z.dI<z.a-E){const d=z.dI-(z.a-E);z.a+=d;if(!toMid)H.Rt=Math.max(.08,H.Rt*Math.exp(d*1.3));}}  // thumb clearly closes onto the index → smaller
     else if(!st.ok)H.zoom=null;}
   else if(!hh){H.zoom=null;}
   if(!(hh&&!fistNow&&live&&!H.grab)){H.hold=null;if(H.pinch)H.pinch=null;H.palmN=null;
@@ -1575,13 +1578,14 @@ function haloFrame(dt){
   // ---- integrate (small steps) ----
   H.R+=(H.Rt-H.R)*Math.min(1,dt*8);
   const SUB=4,h=k/SUB;
-  const hp=tgtC&&kC>20?Math.min(dt,1/30)*flow/SUB:h;                 // dragging (finger or hand) follows in real time, whatever the flow speed
+  const hp=tgtC&&kC>10?Math.min(dt,1/30)*flow/SUB:h;                 // dragging (finger or hand) follows in real time, whatever the flow speed
   for(let s=0;s<SUB;s++){
     const C=H.C,V=H.V;
     if(tgtC){for(let i=0;i<2;i++)V[i]+=(tgtC[i]-C[i])*kC*hp;V[2]+=(tz-C[2])*6*hp;}
     else V[2]+=(0-C[2])*.9*h;                                                                    // stays where it was left (only its depth settles)
     const m=.6*H.R;if(C[0]<m)V[0]+=(m-C[0])*12*h;if(C[0]>aspect-m)V[0]-=(C[0]-aspect+m)*12*h;if(C[1]<m)V[1]+=(m-C[1])*12*h;if(C[1]>1-m)V[1]-=(C[1]-1+m)*12*h;
-    const dmp=Math.exp(-(tgtC?(kC>20?14:3.2):1.6)*hp);for(let i=0;i<3;i++){V[i]*=dmp;C[i]+=V[i]*hp;}
+    const dmp=Math.exp(-(tgtC?(kC>10?8:3.2):1.6)*hp);for(let i=0;i<3;i++){V[i]*=dmp;}
+    {const vm=Math.hypot(V[0],V[1]);if(vm>1.1){V[0]*=1.1/vm;V[1]*=1.1/vm;}}for(let i=0;i<3;i++)C[i]+=V[i]*hp;   // never whips across the screen
     // orientation: follow the palm, else settle face-on (whichever face is nearer)
     const n=qRot(H.q,[0,0,1]);let tn=tgtN||[0,0,n[2]<0?-1:1],kk=tgtN?kN:1.2;
     const tq=v3(n,tn);for(let i=0;i<3;i++)H.w[i]+=tq[i]*kk*h;

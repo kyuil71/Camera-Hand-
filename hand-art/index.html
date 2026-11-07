@@ -77,6 +77,7 @@ body:not(.light) #lights{display:none}
 body:not(.water) #plopRow,body:not(.water) #floors,body:not(.water) #dipRow,body:not(.water) #rainRow{display:none}
 #rainRow{margin-bottom:10px}
 #rangeRow{margin-top:10px}
+body:not(.halo) #haloColRow,body:not(.halo) #beadRow{display:none}
 #dipRow{margin-bottom:10px}
 #dipBtn.on{background:var(--ink);color:#101826}
 .chip i.sw{width:24px;height:18px;border-radius:9px;border:1px solid rgba(255,255,255,.25)}
@@ -108,6 +109,8 @@ body:not(.water) #plopRow,body:not(.water) #floors,body:not(.water) #dipRow,body
     <div class="row chips" id="inks"></div>
     <div class="row chips" id="rainRow"><button class="chip" data-r="0">비 없음</button><button class="chip" data-r="1">이슬비</button><button class="chip" data-r="2">비</button><button class="chip" data-r="3">소나기</button></div>
     <div class="row" id="dipRow"><button class="btn" id="dipBtn">손 담그기 켜기</button></div>
+    <div class="row chips" id="haloColRow"><button class="chip" data-hc="white">링 화이트</button><button class="chip" data-hc="random">링 색 랜덤</button></div>
+    <div class="speed" id="beadRow"><span>구슬 배경</span><input type="range" id="beadSize" min="20" max="100" step="1" aria-label="구슬 배경 범위"><b id="beadVal"></b></div>
     <div class="row chips" id="floors"><button class="chip" data-f="2"><i class="sw" style="background:linear-gradient(135deg,#000,#1b1d20 50%,#000)"></i>검은 유리</button><button class="chip" data-f="1"><i class="sw" style="background:linear-gradient(135deg,#1c2328,#3a464e 50%,#11171b)"></i>다크 그레이</button><button class="chip" data-f="3"><i class="sw" style="background:#1d2024;background-image:linear-gradient(#5a5f66 1.5px,transparent 1.5px),linear-gradient(90deg,#5a5f66 1.5px,transparent 1.5px);background-size:8px 8px"></i>그레이 타일</button><button class="chip" data-f="0"><i class="sw" style="background:linear-gradient(135deg,#8c8270,#c9bda4 45%,#6e675c)"></i>자갈</button></div>
     <div class="speed" id="rangeRow"><span>손 인식 범위</span><input type="range" id="handRange" min="0" max="100" step="1" aria-label="손 인식 범위"><b id="handRangeVal"></b></div>
     <div class="row chips" id="engRow"><button class="chip" data-e="tasks">새 손 인식</button><button class="chip" data-e="legacy">기존 손 인식</button></div>
@@ -123,7 +126,7 @@ body:not(.water) #plopRow,body:not(.water) #floors,body:not(.water) #dipRow,body
       <button class="btn" id="install">앱 설치</button>
     </div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 79</p>
+    <p class="hint" id="ver">버전 80</p>
   </div>
 </div>
 </div><!-- #app -->
@@ -717,7 +720,7 @@ void main(){vec2 p=vec2(vUv.x*aspect,vUv.y);float d=9.;
  float nn=smoothstep(.35,.85,n);float add=amt*exp(-d*d/.0011)*(.15+1.6*nn)+amt*.02*nn;                 /* the ring keeps breathing out smoke, a faint haze everywhere */
  vec2 q=p-puff.xy;add+=puff.w*exp(-dot(q,q)/puff.z)*(.6+.8*n);
  float s=texture(uS,vUv).x;o=vec4(min(s+add,1.6),0.,0.,1.);}`,
-haloRender: H+`uniform sampler2D uS;uniform vec4 rp[48];uniform vec3 rC,rN,pc;uniform float rR,rI,aspect,time,camF,floorY,sTx,sTy;
+haloRender: H+`uniform sampler2D uS;uniform vec4 rp[48];uniform vec3 rC,rN,pc,rCol;uniform float rR,rI,aspect,time,camF,floorY,sTx,sTy,beadH;
 float h2b(vec2 p){return hash(p+37.1);}
 void main(){
  vec2 uv=vUv;vec2 p=vec2(uv.x*aspect,uv.y);float t=time;
@@ -740,23 +743,23 @@ void main(){
   float dn=dot(R,rN);dn=abs(dn)<1e-4?1e-4:dn;float s=dot(rC-H,rN)/dn;float hl=0.,gl2=0.;
   if(s>0.){vec3 P=H+R*s;float e=abs(length(P-rC)-rR);float w=.010+.010*s;hl=exp(-e*e/(w*w))+.35*exp(-e*e/(w*w*9.));gl2=exp(-e/(.06+.08*s));}
   vec3 bead=vec3(.030,.033,.038)*(.6+1.2*pow(1.-dot(n,Np),1.5))+vec3(.04,.043,.048)*smoothstep(rb,rb*.6,dr);
-  bead+=vec3(1.,.97,.94)*hl*rI*(dr<rb?2.2:.2)+vec3(.55,.6,.68)*gl2*rI*(dr<rb?.22:.06);
+  bead+=mix(vec3(1.),rCol,.85)*hl*rI*(dr<rb?2.2:.2)+mix(vec3(.55,.6,.68),rCol*.6,.6)*gl2*rI*(dr<rb?.22:.06);
   bead*=dr<rb?1.:.55;
   bead+=vec3(.02)*smoothstep(rb*.95,rb,dr)*smoothstep(rb*1.12,rb,dr);
-  col=mix(col,bead,clamp(fade,0.,1.));}
+  col=mix(col,bead,clamp(fade,0.,1.)*smoothstep(beadH+.02,beadH-.10,uv.y));}   /* the beads cover the screen from the bottom up to beadH */
  /* smoke, lit by the ring: bright where it wraps the ring, dim far away */
  vec2 st=vec2(sTx,sTy)*1.5;
  float sm=(texture(uS,uv).x*2.+texture(uS,uv+st).x+texture(uS,uv-st).x+texture(uS,uv+vec2(st.x,-st.y)).x+texture(uS,uv+vec2(-st.x,st.y)).x)/6.;
  float inside=smoothstep(.02,-.04,sgn*d);
  float lit=(exp(-d/.05)*.9+exp(-d/.2)*.3+inside*.2)*rI;
- vec3 smoke=vec3(.80,.82,.88)*sm*(.05+lit);
+ vec3 smoke=mix(vec3(.80,.82,.88),rCol*.85,.45*smoothstep(.0,.3,lit))*sm*(.05+lit);
  col=col*(1.-clamp(sm,0.,1.)*.30)+smoke;
  /* the ring of light: a sharp white core, a warm outer and a cool inner fringe, wide soft glow */
  float w=max(th,.0012);
  float core=exp(-pow(d/w,2.))*br;
  float outer=exp(-pow((d-w*1.6)/(w*1.4),2.))*step(0.,sgn),inner=exp(-pow((d-w*1.5)/(w*1.5),2.))*step(sgn,0.);
- vec3 ring=vec3(1.,.99,.97)*core*1.6+vec3(1.,.62,.72)*outer*.55*br+vec3(.55,.80,1.)*inner*.45*br;
- ring+=vec3(.92,.90,.96)*(exp(-d/.018)*.30+exp(-d/.07)*.10)*br;
+ vec3 ring=mix(vec3(1.),rCol,.55)*core*1.6+mix(vec3(1.,.62,.72),rCol,.5)*outer*.55*br+mix(vec3(.55,.80,1.),rCol,.5)*inner*.45*br;
+ ring+=rCol*.95*(exp(-d/.018)*.30+exp(-d/.07)*.10)*br;
  col+=ring*rI*(1.-clamp(sm-.6,0.,.6)*.4);
  col*=1.-.25*pow(length(uv-vec2(.5,.55))*1.15,2.);
  col=(col*(2.51*col+.03))/(col*(2.43*col+.59)+.14);
@@ -884,7 +887,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 79';
+const VER_TXT='버전 80';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -1463,6 +1466,14 @@ function waveFrame(dt){
 }
 /* ================= Halo mode: a ring of light wrapped in smoke above a field of water beads ================= */
 // the ring is a 3D body (position, velocity, orientation, spin) with a soft elastic rim; smoke is the shared fluid; the beads mirror the ring
+let haloColMode='white',haloBead=100;try{const v=localStorage.getItem('hf-halo-col');if(v==='white'||v==='random')haloColMode=v;const b=parseInt(localStorage.getItem('hf-halo-bead'));if(b>=20&&b<=100)haloBead=b;}catch(e){}
+let haloHue=Math.random(),haloHueT=Math.random(),haloSat=.75,haloSatT=.75,haloHueClock=0,haloCol=[1,.99,.97];
+const hsv2rgb=(h,s,v)=>{const f=n=>{const k=(n+h*6)%6;return v-v*s*Math.max(0,Math.min(k,4-k,1));};return [f(5),f(3),f(1)];};
+function haloColStep(dt){                           // random: drifts to a new colour every few seconds, always smoothly
+  if(haloColMode==='white'){haloCol=haloCol.map((c,i)=>c+([1,.99,.97][i]-c)*Math.min(1,dt*3));return;}
+  haloHueClock-=dt;if(haloHueClock<=0){haloHueClock=3.5+Math.random()*4;haloHueT=Math.random();haloSatT=.55+Math.random()*.35;}
+  let d=haloHueT-haloHue;d-=Math.round(d);haloHue=(haloHue+d*Math.min(1,dt*.7)+1)%1;haloSat+=(haloSatT-haloSat)*Math.min(1,dt*.7);
+  const c=hsv2rgb(haloHue,haloSat,1);haloCol=haloCol.map((v,i)=>v+(c[i]-v)*Math.min(1,dt*4));}
 const HN=48, HALO_F=2.2, HALO_FLOOR=.55;   // floorY = how far behind the ring the bead wall stands
 let halo=null, hSmoke=null, haloT=0;
 const qMul=(a,b)=>[a[3]*b[0]+a[0]*b[3]+a[1]*b[2]-a[2]*b[1],a[3]*b[1]-a[0]*b[2]+a[1]*b[3]+a[2]*b[0],a[3]*b[2]+a[0]*b[1]-a[1]*b[0]+a[2]*b[3],a[3]*b[3]-a[0]*b[0]-a[1]*b[1]-a[2]*b[2]];
@@ -1575,6 +1586,7 @@ function haloFrame(dt){
   const pcen=haloProj(H.C);
   u=use('haloRender',[0,0]);gl.uniform1i(u.uS,hSmoke.r.bind(0));gl.uniform4fv(u.rp,rp);gl.uniform3f(u.rC,...H.C);gl.uniform3f(u.rN,...H.n);gl.uniform3f(u.pc,pcen[0],pcen[1],0);
   gl.uniform1f(u.rR,H.R);gl.uniform1f(u.rI,H.I);gl.uniform1f(u.aspect,aspect);gl.uniform1f(u.time,haloT);gl.uniform1f(u.camF,HALO_F);gl.uniform1f(u.floorY,HALO_FLOOR);
+  haloColStep(dt);gl.uniform3f(u.rCol,...haloCol);gl.uniform1f(u.beadH,haloBead/100);
   gl.uniform1f(u.sTx,hSmoke.r.tx);gl.uniform1f(u.sTy,hSmoke.r.ty);blit(null);
 }
 /* ================= Ink mode: ink soaking into hanji ================= */
@@ -2138,6 +2150,11 @@ speedEl.value=speedVal;applySpeed(speedVal);speedEl.addEventListener('input',e=>
 const rangeEl=document.getElementById('handRange'),rangeTxt=document.getElementById('handRangeVal');
 function applyRange(v){handRangeV=+v;const k=handRangeK();rangeTxt.textContent=handRangeV<8?'카메라 전체':handRangeV<35?'약하게':handRangeV<=65?'보통':handRangeV<=85?'강하게':'최대';try{localStorage.setItem('hf-range',handRangeV);}catch(e){}}
 rangeEl.value=handRangeV;applyRange(handRangeV);rangeEl.addEventListener('input',e=>applyRange(e.target.value));
+function setHaloCol(m){haloColMode=m;document.querySelectorAll('#haloColRow .chip').forEach(b=>b.setAttribute('aria-pressed',b.dataset.hc===m));try{localStorage.setItem('hf-halo-col',m);}catch(e){}}
+document.querySelectorAll('#haloColRow .chip').forEach(b=>b.onclick=()=>setHaloCol(b.dataset.hc));setHaloCol(haloColMode);
+const beadEl=document.getElementById('beadSize'),beadTxt=document.getElementById('beadVal');
+function applyBead(v){haloBead=+v;beadTxt.textContent=haloBead>=97?'화면 전체':haloBead+'%';try{localStorage.setItem('hf-halo-bead',haloBead);}catch(e){}}
+beadEl.value=haloBead;applyBead(haloBead);beadEl.addEventListener('input',e=>applyBead(e.target.value));
 const plopEl=document.getElementById('plopSize'),plopTxt=document.getElementById('plopVal');
 function applyPlop(v){plopVal=+v;plopScale=.5*Math.pow(2,(plopVal-100)/50);wCapK=Math.pow(plopScale,1.6);   // bigger plops get a bigger roughness budget
   plopTxt.textContent=plopVal<20?'아주 작게':plopVal<40?'작게':plopVal<=60?'보통':plopVal<=80?'크게':'아주 크게';try{localStorage.setItem('hf-plop2',plopVal);}catch(e){}}

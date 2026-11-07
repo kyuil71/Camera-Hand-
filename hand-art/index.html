@@ -126,7 +126,7 @@ body:not(.halo) #haloColRow,body:not(.halo) #beadRow{display:none}
       <button class="btn" id="install">앱 설치</button>
     </div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 82</p>
+    <p class="hint" id="ver">버전 83</p>
   </div>
 </div>
 </div><!-- #app -->
@@ -887,7 +887,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 82';
+const VER_TXT='버전 83';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -1846,30 +1846,38 @@ async function setGyro(on){gView=null;viewRaw=[0,0];
 }
 
 /* ================= Music: each mode's song, played as it is ================= */
-const bgm=new Audio();bgm.loop=true;bgm.preload='auto';
-try{bgm.preservesPitch=true;bgm.mozPreservesPitch=true;bgm.webkitPreservesPitch=true;}catch(e){}
+// two players so one song can fade out while the next fades in (a true crossfade when the mode changes)
+const players=[new Audio(),new Audio()];
+for(const a of players){a.loop=true;a.preload='auto';a.vol=0;a.volume=0;try{a.preservesPitch=true;a.mozPreservesPitch=true;a.webkitPreservesPitch=true;}catch(e){}}
+let bgm=players[0];
 let musicOn=true; try{musicOn=localStorage.getItem('hf-music')!=='off';}catch(e){}
-let musicReady=null, musicVol=0, curTrack=null, trackBusy=false;
+let curTrack=null, wantTrack=null;
+const MUSIC_VOL=.85, FADE_IN=2.2, FADE_OUT=1.8;          // seconds
 const TRACKS={halo:'audio/beneath_the_haloed_glass.mp3',paint:'audio/where_the_stream_widens.mp3',water:'audio/glass_upon_the_lake.mp3',light:'audio/where_the_ocean_meets_sky.mp3',wave:'audio/where_the_ocean_meets_sky.mp3',ink:'audio/silk_and_moonlight.mp3'};
 const trackURL={};
 function getTrack(path){ if(!trackURL[path])trackURL[path]=fetch(path).then(r=>r.blob()).then(b=>URL.createObjectURL(b)).catch(()=>null); return trackURL[path]; }
-function loadMusic(){ const path=TRACKS[mode]||TRACKS.paint;
-  if(curTrack===path&&musicReady)return musicReady;
-  curTrack=path; musicReady=getTrack(path).then(u=>{ if(u&&curTrack===path)bgm.src=u; }); return musicReady; }
-// switching modes: fade the current song out, then start the mode's own song
-async function switchTrack(){ const path=TRACKS[mode]||TRACKS.paint; if(path===curTrack||trackBusy)return;
-  trackBusy=true;
-  if(bgm.src&&!bgm.paused){ for(let i=0;i<12;i++){ bgm.volume=Math.max(0,bgm.volume*.7); await new Promise(r=>setTimeout(r,40)); } bgm.pause(); }
-  musicVol=0; await loadMusic(); trackBusy=false;
-  if(musicOn&&!document.hidden&&bgm.src){ bgm.currentTime=0; bgm.volume=0; bgm.play().catch(()=>{}); }
-  if((TRACKS[mode]||TRACKS.paint)!==curTrack)switchTrack(); }
-function tryMusic(){ if(!musicOn||!bgm.paused&&bgm.src)return; loadMusic().then(()=>{ if(musicOn&&!document.hidden){bgm.volume=musicVol;bgm.play().catch(()=>{});} }); }
+// change song: the playing one fades out on its own player, the new one starts silent on the other player and fades in
+async function switchTrack(){ const path=TRACKS[mode]||TRACKS.paint; wantTrack=path;
+  if(path===curTrack)return;
+  const u=await getTrack(path); if(wantTrack!==path||!u)return;            // the mode changed again meanwhile
+  const old=bgm,next=players[0]===old?players[1]:players[0];
+  if(!next.paused&&next.vol>.02){next.pause();}                           // a third quick switch: the oldest one just stops
+  next.src=u;next.vol=0;next.volume=0;try{next.currentTime=0;}catch(e){}
+  bgm=next;curTrack=path;
+  if(musicOn&&!document.hidden)next.play().catch(()=>{});}
+function tryMusic(){ if(!musicOn)return; if(!curTrack||(TRACKS[mode]||TRACKS.paint)!==curTrack){switchTrack();return;}
+  if(bgm.paused&&bgm.src&&!document.hidden)bgm.play().catch(()=>{}); }
 function updateMusic(dt){
-  if(!bgm.src||bgm.paused)return;
-  if(bgm.playbackRate!==1)bgm.playbackRate=1;              // always the original tempo
-  musicVol+=((musicOn?.85:0)-musicVol)*Math.min(1,dt*1.5);bgm.volume=Math.max(0,Math.min(1,musicVol));
+  dt=Math.min(dt,.1);
+  for(const a of players){if(a.paused||!a.src)continue;
+    if(a.playbackRate!==1)a.playbackRate=1;               // always the original tempo
+    const target=(a===bgm&&musicOn)?MUSIC_VOL:0;
+    const step=target>a.vol?dt*MUSIC_VOL/FADE_IN:-dt*MUSIC_VOL/FADE_OUT;
+    a.vol=step>0?Math.min(target,a.vol+step):Math.max(target,a.vol+step);
+    a.volume=Math.max(0,Math.min(1,a.vol*a.vol/MUSIC_VOL));            // eased curve: soft start, soft end
+    if(target===0&&a.vol<=.001){a.pause();a.vol=0;}}
 }
-document.addEventListener('visibilitychange',()=>{ if(document.hidden)bgm.pause(); else { if(musicOn&&bgm.src)bgm.play().catch(()=>{}); } });
+document.addEventListener('visibilitychange',()=>{ if(document.hidden){for(const a of players)a.pause();} else { if(musicOn&&bgm.src)bgm.play().catch(()=>{}); } });
 
 addEventListener('pointerdown',tryMusic,true);
 
@@ -2258,7 +2266,7 @@ function setFloor(v){floorType=v;document.querySelectorAll('#floors .chip').forE
 document.querySelectorAll('#floors .chip').forEach(b=>b.onclick=()=>setFloor(+b.dataset.f));setFloor(floorType);
 const musicBtn=document.getElementById('musicBtn');
 function setMusic(on){musicOn=on;musicBtn.textContent=on?'음악 끄기':'음악 켜기';try{localStorage.setItem('hf-music',on?'on':'off');}catch(e){}
-  if(on)tryMusic();else bgm.pause();}
+  if(on)tryMusic();}                                   // off: the song fades out by itself (updateMusic)
 musicBtn.onclick=()=>setMusic(!musicOn);setMusic(musicOn);
 document.getElementById('gyroBtn').onclick=()=>{const want=!gyroOn;setGyro(want);try{localStorage.setItem('hf-gyro',want?'1':'0');}catch(e){}};   // remembers the choice
 // on a phone, 흔들기 starts switched on (unless it was switched off before); iOS needs a tap first to ask permission

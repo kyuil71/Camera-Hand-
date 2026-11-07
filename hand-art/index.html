@@ -123,7 +123,7 @@ body:not(.water) #plopRow,body:not(.water) #floors,body:not(.water) #dipRow,body
       <button class="btn" id="install">앱 설치</button>
     </div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 78</p>
+    <p class="hint" id="ver">버전 79</p>
   </div>
 </div>
 </div><!-- #app -->
@@ -728,20 +728,21 @@ void main(){
  float sgn=sign(length(p-pc.xy)-length(cp-pc.xy));                  /* + outside, - inside */
  /* the room: near black */
  vec3 col=vec3(.006,.007,.009)+vec3(.010,.011,.013)*(1.-uv.y);
- /* a floor covered in glassy water beads, seen in perspective; each bead mirrors the ring as a thin crescent */
- vec3 O=vec3(aspect*.5,.66,camF);vec3 D=normalize(vec3(p.x-aspect*.5,p.y-.66,-camF));
- if(D.y<-.002){float tt=(floorY-O.y)/D.y;vec3 H=O+D*tt;
-  float S=.075;vec2 g=vec2(H.x,H.z)/S;float row=floor(g.y);g.x+=.5*mod(row,2.);
+ /* the whole backdrop: a wall of glassy water beads behind the ring, leaning back a little; each bead mirrors the ring as a thin crescent */
+ vec3 O=vec3(aspect*.5,.62,camF);vec3 D=normalize(vec3(p.x-aspect*.5,p.y-.62,-camF));
+ {vec3 Np=normalize(vec3(0.,.95,1.)),Q0=vec3(aspect*.5,.35,-floorY),U=vec3(1.,0.,0.),Vv=normalize(cross(Np,U));
+  float dn0=dot(D,Np);float tt=dot(Q0-O,Np)/min(dn0,-1e-3);vec3 H=O+D*tt;
+  float S=.07;vec2 g=vec2(dot(H-Q0,U),dot(H-Q0,Vv))/S;float row=floor(g.y);g.x+=.5*mod(row,2.);
   vec2 ip=floor(g),f=g-ip-.5;float rb=.36+.06*h2b(ip);f+=(vec2(hash(ip),hash(ip+3.))-.5)*.10;
-  float dr=length(f),fade=exp(-max(0.,-H.z)*.32)*smoothstep(.0,.08,.66-uv.y);
-  vec3 n=dr<rb?normalize(vec3(f.x,sqrt(max(rb*rb-dr*dr,0.))*.9,f.y)):vec3(0.,1.,0.);
+  float dr=length(f),fade=exp(-max(0.,tt-camF)*.35);
+  vec3 n=dr<rb?normalize(U*f.x+Vv*f.y+Np*sqrt(max(rb*rb-dr*dr,0.))*.9):Np;
   vec3 R=reflect(D,n);
   float dn=dot(R,rN);dn=abs(dn)<1e-4?1e-4:dn;float s=dot(rC-H,rN)/dn;float hl=0.,gl2=0.;
   if(s>0.){vec3 P=H+R*s;float e=abs(length(P-rC)-rR);float w=.010+.010*s;hl=exp(-e*e/(w*w))+.35*exp(-e*e/(w*w*9.));gl2=exp(-e/(.06+.08*s));}
-  vec3 bead=vec3(.030,.033,.038)*(.6+1.2*pow(1.-n.y,1.5))+vec3(.04,.043,.048)*smoothstep(rb,rb*.6,dr);
+  vec3 bead=vec3(.030,.033,.038)*(.6+1.2*pow(1.-dot(n,Np),1.5))+vec3(.04,.043,.048)*smoothstep(rb,rb*.6,dr);
   bead+=vec3(1.,.97,.94)*hl*rI*(dr<rb?2.2:.2)+vec3(.55,.6,.68)*gl2*rI*(dr<rb?.22:.06);
   bead*=dr<rb?1.:.55;
-  bead+=vec3(.02)*smoothstep(rb*.95,rb,dr)*smoothstep(rb*1.12,rb,dr);  /* a fine dark contact rim around each bead */
+  bead+=vec3(.02)*smoothstep(rb*.95,rb,dr)*smoothstep(rb*1.12,rb,dr);
   col=mix(col,bead,clamp(fade,0.,1.));}
  /* smoke, lit by the ring: bright where it wraps the ring, dim far away */
  vec2 st=vec2(sTx,sTy)*1.5;
@@ -883,7 +884,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 78';
+const VER_TXT='버전 79';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -1462,7 +1463,7 @@ function waveFrame(dt){
 }
 /* ================= Halo mode: a ring of light wrapped in smoke above a field of water beads ================= */
 // the ring is a 3D body (position, velocity, orientation, spin) with a soft elastic rim; smoke is the shared fluid; the beads mirror the ring
-const HN=48, HALO_F=2.2, HALO_FLOOR=.16;
+const HN=48, HALO_F=2.2, HALO_FLOOR=.55;   // floorY = how far behind the ring the bead wall stands
 let halo=null, hSmoke=null, haloT=0;
 const qMul=(a,b)=>[a[3]*b[0]+a[0]*b[3]+a[1]*b[2]-a[2]*b[1],a[3]*b[1]-a[0]*b[2]+a[1]*b[3]+a[2]*b[0],a[3]*b[2]+a[0]*b[1]-a[1]*b[0]+a[2]*b[3],a[3]*b[3]-a[0]*b[0]-a[1]*b[1]-a[2]*b[2]];
 function qRot(q,v){const [x,y,z,w]=q,ix=w*v[0]+y*v[2]-z*v[1],iy=w*v[1]+z*v[0]-x*v[2],iz=w*v[2]+x*v[1]-y*v[0],iw=-x*v[0]-y*v[1]-z*v[2];
@@ -1470,7 +1471,7 @@ function qRot(q,v){const [x,y,z,w]=q,ix=w*v[0]+y*v[2]-z*v[1],iy=w*v[1]+z*v[0]-x*
 const qNorm=q=>{const l=Math.hypot(...q)||1;return q.map(v=>v/l);};
 const v3=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
 const haloR0=()=>Math.min(.30,aspect*.38);
-function haloHome(){return [aspect/2,.52,0];}
+function haloHome(){return [aspect/2,.55,0];}
 function haloInit(){const R=haloR0();
   halo={C:haloHome(),V:[0,0,0],q:[0,0,0,1],w:[0,0,0],R,Rt:R,a:new Float32Array(HN),av:new Float32Array(HN),b:new Float32Array(HN),bv:new Float32Array(HN),
     pul:[],el:0,elA:0,sad:0,grab:null,pinch:null,hold:null,two:null,P:[],pv:[],I:1,lastHand:0,hBase:{}};
@@ -1480,12 +1481,13 @@ function haloInit(){const R=haloR0();
   haloNodes();}
 function haloNodes(){const H=halo,e1=qRot(H.q,[1,0,0]),e2=qRot(H.q,[0,1,0]),n=qRot(H.q,[0,0,1]);
   const P=[];for(let i=0;i<HN;i++){const th=i/HN*6.2832,c=Math.cos(th),s=Math.sin(th);
-    const ell=1+H.el*Math.cos(2*(th-H.elA)),r=H.R*ell+H.a[i],z=H.b[i]+H.sad*Math.sin(2*(th-H.elA))*H.R;
+    const r=H.R,z=0;                                                   // always a perfect circle — it can tilt, turn and flip, never bend
     P.push([H.C[0]+(e1[0]*c+e2[0]*s)*r+n[0]*z,H.C[1]+(e1[1]*c+e2[1]*s)*r+n[1]*z,H.C[2]+(e1[2]*c+e2[2]*s)*r+n[2]*z]);}
   if(H.P.length===HN)H.pv=H.P;H.P=P;H.n=n;}
-const haloProj=v=>{const s=HALO_F/Math.max(.3,HALO_F-v[2]);return [aspect/2+(v[0]-aspect/2)*s,.66+(v[1]-.66)*s,s];};
+const haloProj=v=>{const s=HALO_F/Math.max(.3,HALO_F-v[2]);return [aspect/2+(v[0]-aspect/2)*s,.62+(v[1]-.62)*s,s];};
 function haloNear(x,y){let best=9,bi=0;for(let i=0;i<HN;i++){const p=haloProj(halo.P[i]),d=Math.hypot(p[0]-x*aspect,p[1]-y);if(d<best){best=d;bi=i;}}return [best,bi];}
-function haloKick(i,amt){for(let k=-3;k<=3;k++){const j=(i+k+HN)%HN;halo.bv[j]+=amt*Math.exp(-k*k/3);}
+function haloKick(i,amt){const th=i/HN*6.2832,e1=qRot(halo.q,[Math.cos(th),Math.sin(th),0]),ax=v3(e1,[0,0,-1]);   // a tap rocks the whole ring a little (no bending)
+  for(let k=0;k<3;k++)halo.w[k]+=ax[k]*Math.abs(amt)*2.2;
   halo.pul.push({i,t:0,a:Math.min(1.2,.5+Math.abs(amt)*3)});if(halo.pul.length>6)halo.pul.shift();}
 let haloPuff=[0,0,1,0];
 // ---- touch ----
@@ -1496,7 +1498,7 @@ function haloMove(id,x,y,t){const g=halo&&halo.grab;if(!g||g.id!==id)return;g.hi
 function haloUp(id){const g=halo&&halo.grab;if(!g||g.id!==id)return;halo.grab=null;
   const h=g.hist,a=h[0],b=h[h.length-1],dt=Math.max(.016,(b[2]-a[2])/1000),vx=(b[0]-a[0])*aspect/dt,vy=(b[1]-a[1])/dt,sp=Math.hypot(vx,vy);
   const moved=Math.hypot((b[0]-g.x0)*aspect,b[1]-g.y0),dur=(b[2]-g.t0)/1000;
-  if(moved<.02&&dur<.35){haloKick(g.i,-.9);haloPuff=[b[0]*aspect,b[1],.006,.35];return;}   // tap: the rim rings like a bell
+  if(moved<.02&&dur<.35){haloKick(g.i,-.9);haloPuff=[b[0]*aspect,b[1],.006,.35];return;}   // tap: the ring rocks and a pulse of light runs round it
   if(sp>.35){const k=Math.min(sp,4)*5.5;halo.w[0]+=-vy/sp*k;halo.w[1]+=vx/sp*k;          // flick: spins like a coin about the axis across the flick
     halo.V[0]+=vx*.35;halo.V[1]+=vy*.35;haloKick(g.i,.4);}}
 // ---- the frame ----
@@ -1515,11 +1517,12 @@ function haloFrame(dt){
   const hands=handInfo.filter(h=>!h.fist&&h.palm);
   if(hands.length&&live&&!H.grab){H.lastHand=performance.now();
     const h=hands[0];const W=h.W;
-    if(hands.length>=2&&hands[0].open&&hands[1].open){const A=hands[0].palm,B=hands[1].palm,dx=(B.x-A.x)*aspect,dy=B.y-A.y,dd=Math.hypot(dx,dy);   // two open hands: stretch / twist
-      if(!H.hold){H.hold={d:dd,dy:dy};}H.el+=(Math.max(-.3,Math.min(.5,dd/H.hold.d-1))-H.el)*Math.min(1,dt*6);H.elA=Math.atan2(dy,dx);
-      H.sad+=(Math.max(-.35,Math.min(.35,(dy-H.hold.dy)*2.2))-H.sad)*Math.min(1,dt*6);
-      tgtC=[(A.x+B.x)/2*aspect,(A.y+B.y)/2,0];kC=6;}
-    else{H.hold=null;
+    if(hands.length>=2){const A=hands[0].palm,B=hands[1].palm,dx=(B.x-A.x)*aspect,dy=B.y-A.y,dd=Math.hypot(dx,dy),an=Math.atan2(dy,dx);   // two hands = two fingers: spread → bigger, closer → smaller, turn → turns
+      if(H.hold&&H.hold.two){const r=dd/H.hold.d;if(Math.abs(r-1)>.003)H.Rt=Math.min(.48,Math.max(.10,H.Rt*r));let da=an-H.hold.a;da-=Math.round(da/6.2832)*6.2832;
+        if(Math.abs(da)>.003){const dq=[0,0,Math.sin(da/2),Math.cos(da/2)];H.q=qNorm(qMul(dq,H.q));}}
+      const sd=H.hold&&H.hold.two?H.hold.d+(dd-H.hold.d)*.6:dd,sa=an;H.hold={two:true,d:sd,a:sa};
+      tgtC=[(A.x+B.x)/2*aspect,(A.y+B.y)/2,0];kC=5;}
+    else{if(H.hold&&H.hold.two)H.hold=null;
       if(h.pinch&&h.mid){const m=[h.mid.x*aspect,h.mid.y];if(!H.pinch)H.pinch={hist:[]};H.pinch.hist.push([m[0],m[1],performance.now()]);if(H.pinch.hist.length>6)H.pinch.hist.shift();
         tgtC=[m[0],m[1],0];kC=30;}                                                               // pinch = hold it
       else{if(H.pinch){const hs=H.pinch.hist,a=hs[0],b=hs[hs.length-1],ddt=Math.max(.03,(b[2]-a[2])/1000),vx=(b[0]-a[0])/ddt,vy=(b[1]-a[1])/ddt,sp=Math.hypot(vx,vy);   // let go = throw
@@ -1528,9 +1531,13 @@ function haloFrame(dt){
       if(W){const a=W[0],b=W[5],c=W[17];                                                         // palm facing → ring facing (turn your hand over → it flips)
         const u=[-(b.x-a.x),-(b.y-a.y),-(b.z-a.z)],v=[-(c.x-a.x),-(c.y-a.y),-(c.z-a.z)];let nn=v3(u,v);const l=Math.hypot(...nn)||1;nn=nn.map(x=>x/l);
         const ref=H.palmN||H.n;if(nn[0]*ref[0]+nn[1]*ref[1]+nn[2]*ref[2]<0)nn=nn.map(x=>-x);H.palmN=nn;tgtN=nn;kN=45;}   // follows the hand's turn continuously, so a full turn of the hand = a full flip
+      if(W&&h.bends&&!h.pinch){const R=Math.PI/180,zp=h.bends[1]<60*R&&[2,3,4].every(i=>h.bends[i]>75*R);
+        if(zp){const d=Math.hypot(W[4].x-W[8].x,W[4].y-W[8].y,W[4].z-W[8].z);
+          if(H.hold&&H.hold.one){const ds=H.hold.d+(d-H.hold.d)*.5,r=ds/H.hold.d;if(Math.abs(r-1)>.004)H.Rt=Math.min(.48,Math.max(.10,H.Rt*r));H.hold.d=ds;}
+          else H.hold={one:true,d};}
+        else if(H.hold&&H.hold.one)H.hold=null;}
       const sz=h.size||0,key='s';if(sz){const hb=H.hBase;hb[key]=hb[key]?hb[key]+(sz-hb[key])*.01:sz;tz=Math.max(-.7,Math.min(.35,-(sz/hb[key]-1)*1.6));}}}   // hand comes closer → ring pushed away
   else{H.hold=null;if(H.pinch)H.pinch=null;H.palmN=null;}
-  if(!hands.length||!H.hold){H.el*=Math.exp(-dt*2.5);H.sad*=Math.exp(-dt*2.5);}
   // ---- integrate (small steps) ----
   H.R+=(H.Rt-H.R)*Math.min(1,dt*8);
   const SUB=4,h=k/SUB;
@@ -1546,12 +1553,6 @@ function haloFrame(dt){
     const wd=Math.exp(-(tgtN?12:.55)*h);for(let i=0;i<3;i++)H.w[i]*=wd;
     const wm=Math.hypot(...H.w);if(wm>40)for(let i=0;i<3;i++)H.w[i]*=40/wm;
     H.q=qNorm(H.q.map((v,i)=>v+.5*h*qMul([...H.w,0],H.q)[i]));
-    // the rim: a soft elastic loop — ripples run around it and die out
-    const c2=900,kr=60,dmp2=Math.exp(-2.2*h);
-    for(let i=0;i<HN;i++){const l=(i+HN-1)%HN,r=(i+1)%HN;
-      H.av[i]=(H.av[i]+(c2*(H.a[l]+H.a[r]-2*H.a[i])*.0025-kr*H.a[i])*h)*dmp2;H.bv[i]=(H.bv[i]+(c2*(H.b[l]+H.b[r]-2*H.b[i])*.0025-kr*H.b[i])*h)*dmp2;}
-    for(let i=0;i<HN;i++){H.a[i]=Math.max(-.08,Math.min(.08,H.a[i]+H.av[i]*h));H.b[i]=Math.max(-.12,Math.min(.12,H.b[i]+H.bv[i]*h));}
-    {const sp=Math.hypot(...H.V);if(sp>.6){const j=(Math.random()*HN)|0;H.bv[j]+=(sp-.6)*.04*(Math.random()-.5);}}   // moving fast through the air makes the rim shiver
   }
   haloNodes();
   for(const p of H.pul)p.t+=dt;H.pul=H.pul.filter(p=>p.t<2.2);
@@ -1931,7 +1932,7 @@ function onHands(res){
     pinchState[pk]=pinch;
     const open=!fist&&!pinch&&!pointing&&(W?[1,2,3,4].every(i=>bends[i]<60*Math.PI/180):[8,12,16,20].every(i=>d2(lm[i],lm[0])>size*1.55));
     if(W)fingerTaps(lm.slot??h,lm,bends,fist,now);
-    handInfo.push({pts,fist,pinch,mid,point,open,palm:{x:lm[9].x,y:1-lm[9].y},virt:!!W,W,size});
+    handInfo.push({pts,fist,pinch,mid,point,open,palm:{x:lm[9].x,y:1-lm[9].y},virt:!!W,W,size,bends});
     if(W)vList.push([lm.slot??h,lm,fist]);
     // 손 담그기 gesture: palm moves toward the screen relative to its resting size
     const hs=handSize[h]||(handSize[h]={base:size,dipping:false}),palm={x:lm[9].x,y:1-lm[9].y};seenH[h]=1;
@@ -2149,7 +2150,7 @@ const HINTS={paint:hintTxt.innerHTML,
   silk:'<b>손가락·터치를 움직이면</b> 그 방향으로 바람이 불어 실크가 날아감<br>바람이 불어오는 쪽에서 새 실크가 들어옴 · <b>주먹</b> 바람이 잦아듦',
   light:'<b>손가락</b> 빛의 흐름 밀기 · <b>검지만 펴기</b> 가리킨 방향으로 빛줄기<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 멈춤',
   wave:'<b>폰 기울이기</b> 물이 쏠려 벽에 부딪힘 · <b>흔들기</b> 출렁임<br><b>터치·손</b> 물 밀기 · <b>톡</b> 물결 · <b>주먹</b> 멈춤',
-  halo:'<b>터치</b> 링 끌기 · <b>튕기기</b> 동전처럼 뒤집힘 · <b>톡</b> 링이 떨며 빛이 돎 · <b>두 손가락</b> 크기·회전<br><b>손</b> 자석처럼 따라옴 · <b>손바닥 기울이기·뒤집기</b> 링도 같이 · <b>가까이</b> 밀려남 · <b>집기</b> 잡고 던지기 · <b>두 손</b> 늘이기·비틀기',
+  halo:'<b>터치</b> 링 끌기 · <b>튕기기</b> 동전처럼 뒤집힘 · <b>톡</b> 빛이 돎 · <b>두 손가락</b> 확대·축소·회전<br><b>손</b> 자석처럼 따라옴 · <b>손바닥 뒤집기</b> 링도 뒤집힘 · <b>집기</b> 잡고 던지기 · <b>두 손 벌리기 / 엄지·검지 벌리기</b> 확대·축소',
   water:'<b>톡 터치·손가락 톡 굽히기</b> 퐁당 · <b>끌며 원 그리기</b> 소용돌이<br><b>손가락</b> 움직여 물결 · <b>검지만 펴기</b> 가리킨 방향으로 물길<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 물 멈춤'};
 function setMode(m){mode=m;document.body.classList.toggle('water',m==='water');document.body.classList.toggle('wave',m==='wave');document.body.classList.toggle('halo',m==='halo');document.body.classList.toggle('light',m==='light');document.body.classList.toggle('silk',m==='silk');document.body.classList.toggle('cloud',m==='cloud');document.body.classList.toggle('ink',m==='ink');
   if(m==='halo')halo=null;   // starts fresh (built on the next frame)

@@ -68,7 +68,7 @@ body.menu .dock{transform:translate(-50%,0)}
 .seg::-webkit-scrollbar{display:none}
 .seg button{flex:1 0 auto;padding:0 10px;min-height:42px;border:0;border-radius:11px;background:transparent;color:var(--mute);font:inherit;font-size:16px;font-weight:600}
 .seg button[aria-pressed=true]{background:var(--ink);color:#101826}
-body.water #palettes,body.wave #palettes,body.light #palettes,body.silk #palettes,body.cloud #palettes{display:none}
+body.water #palettes,body.wave #palettes,body.halo #palettes,body.light #palettes,body.silk #palettes,body.cloud #palettes{display:none}
 body:not(.cloud) #clouds{display:none}
 body:not(.ink) #inks{display:none}
 body.ink #palettes{display:none}
@@ -98,7 +98,7 @@ body:not(.water) #plopRow,body:not(.water) #floors,body:not(.water) #dipRow,body
 <div class="dock" id="sheet">
   <div class="panel">
     <div class="head" id="sheetHead"><span class="bar"></span><div id="status">손 인식 꺼짐 · 화면을 문질러 보세요</div></div>
-    <div class="row seg" id="modeSeg"><button data-m="paint">Pigment</button><button data-m="water">Ripple</button><button data-m="wave">Wave</button><button data-m="light">Aurora</button><button data-m="silk">Silk</button><button data-m="cloud">Cloud</button><button data-m="ink">Ink</button></div>
+    <div class="row seg" id="modeSeg"><button data-m="paint">Pigment</button><button data-m="water">Ripple</button><button data-m="wave">Wave</button><button data-m="light">Aurora</button><button data-m="silk">Silk</button><button data-m="cloud">Cloud</button><button data-m="halo">Halo</button><button data-m="ink">Ink</button></div>
     <div class="speed"><span>흐름 속도</span><input type="range" id="speed" min="0" max="100" step="1"><b id="speedVal"></b></div>
     <div class="speed" id="plopRow"><span>퐁당 크기</span><input type="range" id="plopSize" min="0" max="100" step="1" aria-label="퐁당 크기"><b id="plopVal"></b></div>
     <div class="row chips" id="palettes"></div>
@@ -123,7 +123,7 @@ body:not(.water) #plopRow,body:not(.water) #floors,body:not(.water) #dipRow,body
       <button class="btn" id="install">앱 설치</button>
     </div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 77</p>
+    <p class="hint" id="ver">버전 78</p>
   </div>
 </div>
 </div><!-- #app -->
@@ -710,6 +710,56 @@ void main(){
  col*=1.-.12*pow(length(uv-.5)*1.25,2.);
  col=(col*(2.51*col+.03))/(col*(2.43*col+.59)+.14);
  o=vec4(clamp(col,0.,1.),1.);}`,
+haloEmit: H+`uniform sampler2D uS;uniform vec4 rp[48];uniform float aspect,amt,t;uniform vec4 puff;
+void main(){vec2 p=vec2(vUv.x*aspect,vUv.y);float d=9.;
+ for(int i=0;i<48;i++){vec2 a=rp[i].xy,b=rp[i==47?0:i+1].xy,pa=p-a,ba=b-a;float h=clamp(dot(pa,ba)/max(dot(ba,ba),1e-8),0.,1.);d=min(d,length(pa-ba*h));}
+ float n=vn(p*7.+vec2(t*.13,-t*.09))*.7+vn(p*19.-t*.2)*.3;
+ float nn=smoothstep(.35,.85,n);float add=amt*exp(-d*d/.0011)*(.15+1.6*nn)+amt*.02*nn;                 /* the ring keeps breathing out smoke, a faint haze everywhere */
+ vec2 q=p-puff.xy;add+=puff.w*exp(-dot(q,q)/puff.z)*(.6+.8*n);
+ float s=texture(uS,vUv).x;o=vec4(min(s+add,1.6),0.,0.,1.);}`,
+haloRender: H+`uniform sampler2D uS;uniform vec4 rp[48];uniform vec3 rC,rN,pc;uniform float rR,rI,aspect,time,camF,floorY,sTx,sTy;
+float h2b(vec2 p){return hash(p+37.1);}
+void main(){
+ vec2 uv=vUv;vec2 p=vec2(uv.x*aspect,uv.y);float t=time;
+ /* distance to the ring as you see it (projected), its brightness and thickness there */
+ float d=9.,br=1.,th=.004;vec2 cp=vec2(0.);
+ for(int i=0;i<48;i++){vec4 a=rp[i],b=rp[i==47?0:i+1];vec2 pa=p-a.xy,ba=b.xy-a.xy;float h=clamp(dot(pa,ba)/max(dot(ba,ba),1e-8),0.,1.);
+  vec2 c=a.xy+ba*h;float dd=length(p-c);if(dd<d){d=dd;br=mix(a.z,b.z,h);th=mix(a.w,b.w,h);cp=c;}}
+ float sgn=sign(length(p-pc.xy)-length(cp-pc.xy));                  /* + outside, - inside */
+ /* the room: near black */
+ vec3 col=vec3(.006,.007,.009)+vec3(.010,.011,.013)*(1.-uv.y);
+ /* a floor covered in glassy water beads, seen in perspective; each bead mirrors the ring as a thin crescent */
+ vec3 O=vec3(aspect*.5,.66,camF);vec3 D=normalize(vec3(p.x-aspect*.5,p.y-.66,-camF));
+ if(D.y<-.002){float tt=(floorY-O.y)/D.y;vec3 H=O+D*tt;
+  float S=.075;vec2 g=vec2(H.x,H.z)/S;float row=floor(g.y);g.x+=.5*mod(row,2.);
+  vec2 ip=floor(g),f=g-ip-.5;float rb=.36+.06*h2b(ip);f+=(vec2(hash(ip),hash(ip+3.))-.5)*.10;
+  float dr=length(f),fade=exp(-max(0.,-H.z)*.32)*smoothstep(.0,.08,.66-uv.y);
+  vec3 n=dr<rb?normalize(vec3(f.x,sqrt(max(rb*rb-dr*dr,0.))*.9,f.y)):vec3(0.,1.,0.);
+  vec3 R=reflect(D,n);
+  float dn=dot(R,rN);dn=abs(dn)<1e-4?1e-4:dn;float s=dot(rC-H,rN)/dn;float hl=0.,gl2=0.;
+  if(s>0.){vec3 P=H+R*s;float e=abs(length(P-rC)-rR);float w=.010+.010*s;hl=exp(-e*e/(w*w))+.35*exp(-e*e/(w*w*9.));gl2=exp(-e/(.06+.08*s));}
+  vec3 bead=vec3(.030,.033,.038)*(.6+1.2*pow(1.-n.y,1.5))+vec3(.04,.043,.048)*smoothstep(rb,rb*.6,dr);
+  bead+=vec3(1.,.97,.94)*hl*rI*(dr<rb?2.2:.2)+vec3(.55,.6,.68)*gl2*rI*(dr<rb?.22:.06);
+  bead*=dr<rb?1.:.55;
+  bead+=vec3(.02)*smoothstep(rb*.95,rb,dr)*smoothstep(rb*1.12,rb,dr);  /* a fine dark contact rim around each bead */
+  col=mix(col,bead,clamp(fade,0.,1.));}
+ /* smoke, lit by the ring: bright where it wraps the ring, dim far away */
+ vec2 st=vec2(sTx,sTy)*1.5;
+ float sm=(texture(uS,uv).x*2.+texture(uS,uv+st).x+texture(uS,uv-st).x+texture(uS,uv+vec2(st.x,-st.y)).x+texture(uS,uv+vec2(-st.x,st.y)).x)/6.;
+ float inside=smoothstep(.02,-.04,sgn*d);
+ float lit=(exp(-d/.05)*.9+exp(-d/.2)*.3+inside*.2)*rI;
+ vec3 smoke=vec3(.80,.82,.88)*sm*(.05+lit);
+ col=col*(1.-clamp(sm,0.,1.)*.30)+smoke;
+ /* the ring of light: a sharp white core, a warm outer and a cool inner fringe, wide soft glow */
+ float w=max(th,.0012);
+ float core=exp(-pow(d/w,2.))*br;
+ float outer=exp(-pow((d-w*1.6)/(w*1.4),2.))*step(0.,sgn),inner=exp(-pow((d-w*1.5)/(w*1.5),2.))*step(sgn,0.);
+ vec3 ring=vec3(1.,.99,.97)*core*1.6+vec3(1.,.62,.72)*outer*.55*br+vec3(.55,.80,1.)*inner*.45*br;
+ ring+=vec3(.92,.90,.96)*(exp(-d/.018)*.30+exp(-d/.07)*.10)*br;
+ col+=ring*rI*(1.-clamp(sm-.6,0.,.6)*.4);
+ col*=1.-.25*pow(length(uv-vec2(.5,.55))*1.15,2.);
+ col=(col*(2.51*col+.03))/(col*(2.43*col+.59)+.14);
+ o=vec4(clamp(col,0.,1.),1.);}`,
 };
 
 function compile(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);
@@ -833,7 +883,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 77';
+const VER_TXT='버전 78';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -1148,7 +1198,7 @@ function cloudFrame(dt){
 }
 
 /* ================= Water mode (lake) ================= */
-let mode='paint'; try{const m=localStorage.getItem('hf-mode');if(m==='water'||m==='wave'||m==='light'||m==='silk'||m==='cloud'||m==='ink')mode=m;}catch(e){}
+let mode='paint'; try{const m=localStorage.getItem('hf-mode');if(m==='water'||m==='wave'||m==='halo'||m==='light'||m==='silk'||m==='cloud'||m==='ink')mode=m;}catch(e){}
 let waterTime=0, wAcc=0, dropClock=0, glideClock=0; const gliders=[];
 const W_C=250, W_H=1/540, W_NK=.24, SUN=(()=>{const v=[.12,.82,.56],l=Math.hypot(...v);return v.map(x=>x/l);})();
 // strength budget: however hard and often the water is struck, it never gets rougher than ~3 plops at once
@@ -1410,6 +1460,122 @@ function waveFrame(dt){
    const sx=SUN[0]-tx*.55,sy=SUN[1]-ty*.55,sz=SUN[2],l=Math.hypot(sx,sy,sz);gl.uniform3f(u.sunDir,sx/l,sy/l,sz/l);}
   blit(null);drawSpray();
 }
+/* ================= Halo mode: a ring of light wrapped in smoke above a field of water beads ================= */
+// the ring is a 3D body (position, velocity, orientation, spin) with a soft elastic rim; smoke is the shared fluid; the beads mirror the ring
+const HN=48, HALO_F=2.2, HALO_FLOOR=.16;
+let halo=null, hSmoke=null, haloT=0;
+const qMul=(a,b)=>[a[3]*b[0]+a[0]*b[3]+a[1]*b[2]-a[2]*b[1],a[3]*b[1]-a[0]*b[2]+a[1]*b[3]+a[2]*b[0],a[3]*b[2]+a[0]*b[1]-a[1]*b[0]+a[2]*b[3],a[3]*b[3]-a[0]*b[0]-a[1]*b[1]-a[2]*b[2]];
+function qRot(q,v){const [x,y,z,w]=q,ix=w*v[0]+y*v[2]-z*v[1],iy=w*v[1]+z*v[0]-x*v[2],iz=w*v[2]+x*v[1]-y*v[0],iw=-x*v[0]-y*v[1]-z*v[2];
+  return [ix*w+iw*-x+iy*-z-iz*-y,iy*w+iw*-y+iz*-x-ix*-z,iz*w+iw*-z+ix*-y-iy*-x];}
+const qNorm=q=>{const l=Math.hypot(...q)||1;return q.map(v=>v/l);};
+const v3=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+const haloR0=()=>Math.min(.30,aspect*.38);
+function haloHome(){return [aspect/2,.52,0];}
+function haloInit(){const R=haloR0();
+  halo={C:haloHome(),V:[0,0,0],q:[0,0,0,1],w:[0,0,0],R,Rt:R,a:new Float32Array(HN),av:new Float32Array(HN),b:new Float32Array(HN),bv:new Float32Array(HN),
+    pul:[],el:0,elA:0,sad:0,grab:null,pinch:null,hold:null,two:null,P:[],pv:[],I:1,lastHand:0,hBase:{}};
+  const [sw,sh]=res(190);if(!hSmoke||hSmoke.r.w!==sw||hSmoke.r.h!==sh)hSmoke=dfbo(sw,sh);
+  for(const t of [hSmoke.r,hSmoke.w]){gl.bindFramebuffer(gl.FRAMEBUFFER,t.f);gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT);}
+  if(vel){const u=use('waterClear',[0,0]);blit(vel.w);vel.swap();blit(vel.w);vel.swap();}
+  haloNodes();}
+function haloNodes(){const H=halo,e1=qRot(H.q,[1,0,0]),e2=qRot(H.q,[0,1,0]),n=qRot(H.q,[0,0,1]);
+  const P=[];for(let i=0;i<HN;i++){const th=i/HN*6.2832,c=Math.cos(th),s=Math.sin(th);
+    const ell=1+H.el*Math.cos(2*(th-H.elA)),r=H.R*ell+H.a[i],z=H.b[i]+H.sad*Math.sin(2*(th-H.elA))*H.R;
+    P.push([H.C[0]+(e1[0]*c+e2[0]*s)*r+n[0]*z,H.C[1]+(e1[1]*c+e2[1]*s)*r+n[1]*z,H.C[2]+(e1[2]*c+e2[2]*s)*r+n[2]*z]);}
+  if(H.P.length===HN)H.pv=H.P;H.P=P;H.n=n;}
+const haloProj=v=>{const s=HALO_F/Math.max(.3,HALO_F-v[2]);return [aspect/2+(v[0]-aspect/2)*s,.66+(v[1]-.66)*s,s];};
+function haloNear(x,y){let best=9,bi=0;for(let i=0;i<HN;i++){const p=haloProj(halo.P[i]),d=Math.hypot(p[0]-x*aspect,p[1]-y);if(d<best){best=d;bi=i;}}return [best,bi];}
+function haloKick(i,amt){for(let k=-3;k<=3;k++){const j=(i+k+HN)%HN;halo.bv[j]+=amt*Math.exp(-k*k/3);}
+  halo.pul.push({i,t:0,a:Math.min(1.2,.5+Math.abs(amt)*3)});if(halo.pul.length>6)halo.pul.shift();}
+let haloPuff=[0,0,1,0];
+// ---- touch ----
+function haloDown(id,x,y,t){if(!halo)return;const [d,i]=haloNear(x,y);
+  if(d<.07){halo.grab={id,i,ox:halo.C[0]-x*aspect,oy:halo.C[1]-y,x0:x,y0:y,t0:t,hist:[[x,y,t]]};}
+  else haloPuff=[x*aspect,y,.004,.25];}
+function haloMove(id,x,y,t){const g=halo&&halo.grab;if(!g||g.id!==id)return;g.hist.push([x,y,t]);if(g.hist.length>6)g.hist.shift();}
+function haloUp(id){const g=halo&&halo.grab;if(!g||g.id!==id)return;halo.grab=null;
+  const h=g.hist,a=h[0],b=h[h.length-1],dt=Math.max(.016,(b[2]-a[2])/1000),vx=(b[0]-a[0])*aspect/dt,vy=(b[1]-a[1])/dt,sp=Math.hypot(vx,vy);
+  const moved=Math.hypot((b[0]-g.x0)*aspect,b[1]-g.y0),dur=(b[2]-g.t0)/1000;
+  if(moved<.02&&dur<.35){haloKick(g.i,-.9);haloPuff=[b[0]*aspect,b[1],.006,.35];return;}   // tap: the rim rings like a bell
+  if(sp>.35){const k=Math.min(sp,4)*5.5;halo.w[0]+=-vy/sp*k;halo.w[1]+=vx/sp*k;          // flick: spins like a coin about the axis across the flick
+    halo.V[0]+=vx*.35;halo.V[1]+=vy*.35;haloKick(g.i,.4);}}
+// ---- the frame ----
+function haloFrame(dt){
+  if(!halo)haloInit();
+  const H=halo,live=flow>.3,k=Math.min(dt,1/30)*flow*(.4+.6*Math.min(timeScale,1.5));haloT+=k;
+  const home=haloHome();
+  // targets from touch (drag) / hands (magnet, palm angle, depth, pinch-carry, two-hand stretch)
+  let tgtC=null,tgtN=null,kC=0,kN=0,tz=0;
+  const real=[...pointers.entries()].filter(([,p])=>!p.virt);
+  if(real.length>=2){const [a,b]=[real[0][1],real[1][1]],dx=(b.x-a.x)*aspect,dy=b.y-a.y,dd=Math.hypot(dx,dy),an=Math.atan2(dy,dx);   // two fingers: size + turn in the screen plane
+    if(H.two&&H.two.ids===real[0][0]+':'+real[1][0]){H.Rt=Math.min(.45,Math.max(.12,H.Rt*dd/H.two.d));const da=an-H.two.a,dq=[0,0,Math.sin(da/2),Math.cos(da/2)];H.q=qNorm(qMul(dq,H.q));}
+    H.two={ids:real[0][0]+':'+real[1][0],d:dd,a:an};H.grab=null;}
+  else H.two=null;
+  if(H.grab){const p=pointers.get(H.grab.id);if(p){tgtC=[p.x*aspect+H.grab.ox,p.y+H.grab.oy,0];kC=40;}else H.grab=null;}
+  const hands=handInfo.filter(h=>!h.fist&&h.palm);
+  if(hands.length&&live&&!H.grab){H.lastHand=performance.now();
+    const h=hands[0];const W=h.W;
+    if(hands.length>=2&&hands[0].open&&hands[1].open){const A=hands[0].palm,B=hands[1].palm,dx=(B.x-A.x)*aspect,dy=B.y-A.y,dd=Math.hypot(dx,dy);   // two open hands: stretch / twist
+      if(!H.hold){H.hold={d:dd,dy:dy};}H.el+=(Math.max(-.3,Math.min(.5,dd/H.hold.d-1))-H.el)*Math.min(1,dt*6);H.elA=Math.atan2(dy,dx);
+      H.sad+=(Math.max(-.35,Math.min(.35,(dy-H.hold.dy)*2.2))-H.sad)*Math.min(1,dt*6);
+      tgtC=[(A.x+B.x)/2*aspect,(A.y+B.y)/2,0];kC=6;}
+    else{H.hold=null;
+      if(h.pinch&&h.mid){const m=[h.mid.x*aspect,h.mid.y];if(!H.pinch)H.pinch={hist:[]};H.pinch.hist.push([m[0],m[1],performance.now()]);if(H.pinch.hist.length>6)H.pinch.hist.shift();
+        tgtC=[m[0],m[1],0];kC=30;}                                                               // pinch = hold it
+      else{if(H.pinch){const hs=H.pinch.hist,a=hs[0],b=hs[hs.length-1],ddt=Math.max(.03,(b[2]-a[2])/1000),vx=(b[0]-a[0])/ddt,vy=(b[1]-a[1])/ddt,sp=Math.hypot(vx,vy);   // let go = throw
+          H.V[0]+=vx*.8;H.V[1]+=vy*.8;if(sp>.3){H.w[0]+=-vy/sp*Math.min(sp,3)*4;H.w[1]+=vx/sp*Math.min(sp,3)*4;}H.pinch=null;}
+        tgtC=[h.palm.x*aspect,h.palm.y,0];kC=3.5;}                                             // a magnet: follows the hand softly
+      if(W){const a=W[0],b=W[5],c=W[17];                                                         // palm facing → ring facing (turn your hand over → it flips)
+        const u=[-(b.x-a.x),-(b.y-a.y),-(b.z-a.z)],v=[-(c.x-a.x),-(c.y-a.y),-(c.z-a.z)];let nn=v3(u,v);const l=Math.hypot(...nn)||1;nn=nn.map(x=>x/l);
+        const ref=H.palmN||H.n;if(nn[0]*ref[0]+nn[1]*ref[1]+nn[2]*ref[2]<0)nn=nn.map(x=>-x);H.palmN=nn;tgtN=nn;kN=45;}   // follows the hand's turn continuously, so a full turn of the hand = a full flip
+      const sz=h.size||0,key='s';if(sz){const hb=H.hBase;hb[key]=hb[key]?hb[key]+(sz-hb[key])*.01:sz;tz=Math.max(-.7,Math.min(.35,-(sz/hb[key]-1)*1.6));}}}   // hand comes closer → ring pushed away
+  else{H.hold=null;if(H.pinch)H.pinch=null;H.palmN=null;}
+  if(!hands.length||!H.hold){H.el*=Math.exp(-dt*2.5);H.sad*=Math.exp(-dt*2.5);}
+  // ---- integrate (small steps) ----
+  H.R+=(H.Rt-H.R)*Math.min(1,dt*8);
+  const SUB=4,h=k/SUB;
+  for(let s=0;s<SUB;s++){
+    const C=H.C,V=H.V;
+    if(tgtC){for(let i=0;i<2;i++)V[i]+=(tgtC[i]-C[i])*kC*h;V[2]+=(tz-C[2])*6*h;}
+    else{for(let i=0;i<3;i++)V[i]+=(home[i]-C[i])*.9*h;}                                         // drifts back to the middle when left alone
+    const m=.6*H.R;if(C[0]<m)V[0]+=(m-C[0])*12*h;if(C[0]>aspect-m)V[0]-=(C[0]-aspect+m)*12*h;if(C[1]<m)V[1]+=(m-C[1])*12*h;if(C[1]>1-m)V[1]-=(C[1]-1+m)*12*h;
+    const dmp=Math.exp(-(tgtC?(kC>20?9:3.2):1.6)*h);for(let i=0;i<3;i++){V[i]*=dmp;C[i]+=V[i]*h;}
+    // orientation: follow the palm, else settle face-on (whichever face is nearer)
+    const n=qRot(H.q,[0,0,1]);let tn=tgtN||[0,0,n[2]<0?-1:1],kk=tgtN?kN:1.2;
+    const tq=v3(n,tn);for(let i=0;i<3;i++)H.w[i]+=tq[i]*kk*h;
+    const wd=Math.exp(-(tgtN?12:.55)*h);for(let i=0;i<3;i++)H.w[i]*=wd;
+    const wm=Math.hypot(...H.w);if(wm>40)for(let i=0;i<3;i++)H.w[i]*=40/wm;
+    H.q=qNorm(H.q.map((v,i)=>v+.5*h*qMul([...H.w,0],H.q)[i]));
+    // the rim: a soft elastic loop — ripples run around it and die out
+    const c2=900,kr=60,dmp2=Math.exp(-2.2*h);
+    for(let i=0;i<HN;i++){const l=(i+HN-1)%HN,r=(i+1)%HN;
+      H.av[i]=(H.av[i]+(c2*(H.a[l]+H.a[r]-2*H.a[i])*.0025-kr*H.a[i])*h)*dmp2;H.bv[i]=(H.bv[i]+(c2*(H.b[l]+H.b[r]-2*H.b[i])*.0025-kr*H.b[i])*h)*dmp2;}
+    for(let i=0;i<HN;i++){H.a[i]=Math.max(-.08,Math.min(.08,H.a[i]+H.av[i]*h));H.b[i]=Math.max(-.12,Math.min(.12,H.b[i]+H.bv[i]*h));}
+    {const sp=Math.hypot(...H.V);if(sp>.6){const j=(Math.random()*HN)|0;H.bv[j]+=(sp-.6)*.04*(Math.random()-.5);}}   // moving fast through the air makes the rim shiver
+  }
+  haloNodes();
+  for(const p of H.pul)p.t+=dt;H.pul=H.pul.filter(p=>p.t<2.2);
+  // ---- smoke: the moving ring pushes the air; fingers stir it; the ring keeps breathing out more ----
+  const P=H.P,pv=H.pv.length===HN?H.pv:P,rp=new Float32Array(HN*4);
+  for(let i=0;i<HN;i++){const pr=haloProj(P[i]);let b=.75+.35*Math.max(-.6,Math.min(1,P[i][2]*3));   // the near side of the ring is a little brighter
+    for(const q of H.pul){const dd=Math.min(Math.abs(i-q.i),HN-Math.abs(i-q.i)),front=q.t*26;b+=q.a*Math.exp(-Math.pow(dd-front,2)/6)*Math.exp(-q.t*1.6);}   // a pulse of light runs round the ring
+    rp.set([pr[0],pr[1],b,.0034*pr[2]*(1+.4*Math.min(1,Math.hypot(...H.w)/15))],i*4);}
+  if(live&&dt>0)for(let i=0;i<HN;i+=6){const a=haloProj(P[i]),b=haloProj(pv[i]),vx=(a[0]-b[0])/aspect/Math.max(dt,.008),vy=(a[1]-b[1])/Math.max(dt,.008);
+    if(Math.abs(vx)+Math.abs(vy)>.05)splatVel(a[0]/aspect,a[1],vx*vel.r.w*.55,vy*vel.r.h*.55,.0035);}
+  for(const s of queue.splice(0)){if(!live)continue;
+    if(s.set)splatVelSet(s.x,s.y,s.vx*vel.r.w*.6,s.vy*vel.r.h*.6,s.r*3,s.set*.7);else splatVel(s.x,s.y,s.dx*.3,s.dy*.3,s.r*2);}
+  if(Math.abs(motionF[0])+Math.abs(motionF[1])>.02&&live)splatVel(.5,.5,motionF[0]*40,motionF[1]*40,.25);
+  if(flow>.02){simTime+=k;stepVel(k,6,3.5,0);}
+  let u=use('haloEmit',[hSmoke.r.tx,hSmoke.r.ty]);gl.uniform1i(u.uS,hSmoke.r.bind(0));gl.uniform4fv(u.rp,rp);gl.uniform1f(u.aspect,aspect);
+  gl.uniform1f(u.amt,.55*k);gl.uniform1f(u.t,haloT);gl.uniform4f(u.puff,...haloPuff);blit(hSmoke.w);hSmoke.swap();haloPuff=[0,0,1,0];
+  u=use('maccormack',[hSmoke.r.tx,hSmoke.r.ty]);gl.uniform2f(u.simTexel,vel.r.tx,vel.r.ty);gl.uniform2f(u.srcTexel,hSmoke.r.tx,hSmoke.r.ty);gl.uniform1f(u.dt,k);gl.uniform1f(u.sharp,.5);
+  gl.uniform1i(u.uVel,vel.r.bind(0));gl.uniform1i(u.uSrc,hSmoke.r.bind(1));gl.uniform4f(u.diss,.35,0,0,0);blit(hSmoke.w);hSmoke.swap();
+  // ---- draw ----
+  const pcen=haloProj(H.C);
+  u=use('haloRender',[0,0]);gl.uniform1i(u.uS,hSmoke.r.bind(0));gl.uniform4fv(u.rp,rp);gl.uniform3f(u.rC,...H.C);gl.uniform3f(u.rN,...H.n);gl.uniform3f(u.pc,pcen[0],pcen[1],0);
+  gl.uniform1f(u.rR,H.R);gl.uniform1f(u.rI,H.I);gl.uniform1f(u.aspect,aspect);gl.uniform1f(u.time,haloT);gl.uniform1f(u.camF,HALO_F);gl.uniform1f(u.floorY,HALO_FLOOR);
+  gl.uniform1f(u.sTx,hSmoke.r.tx);gl.uniform1f(u.sTy,hSmoke.r.ty);blit(null);
+}
 /* ================= Ink mode: ink soaking into hanji ================= */
 // water spreads through the paper's fibres (porous flow, faster along fibres), carries the ink and drops it where it thins;
 // settled ink builds up where strokes overlap and slowly fades away
@@ -1641,7 +1807,7 @@ const bgm=new Audio();bgm.loop=true;bgm.preload='auto';
 try{bgm.preservesPitch=true;bgm.mozPreservesPitch=true;bgm.webkitPreservesPitch=true;}catch(e){}
 let musicOn=true; try{musicOn=localStorage.getItem('hf-music')!=='off';}catch(e){}
 let musicReady=null, musicVol=0, curTrack=null, trackBusy=false;
-const TRACKS={paint:'audio/where_the_stream_widens.mp3',water:'audio/glass_upon_the_lake.mp3',light:'audio/where_the_ocean_meets_sky.mp3',wave:'audio/where_the_ocean_meets_sky.mp3',ink:'audio/silk_and_moonlight.mp3'};
+const TRACKS={paint:'audio/where_the_stream_widens.mp3',water:'audio/glass_upon_the_lake.mp3',light:'audio/where_the_ocean_meets_sky.mp3',wave:'audio/where_the_ocean_meets_sky.mp3',halo:'audio/where_the_ocean_meets_sky.mp3',ink:'audio/silk_and_moonlight.mp3'};
 const trackURL={};
 function getTrack(path){ if(!trackURL[path])trackURL[path]=fetch(path).then(r=>r.blob()).then(b=>URL.createObjectURL(b)).catch(()=>null); return trackURL[path]; }
 function loadMusic(){ const path=TRACKS[mode]||TRACKS.paint;
@@ -1674,17 +1840,19 @@ const pickColor=(i)=>{const p=pal();const c=p[(i+colorTick)%p.length];const k=.9
 const pointers=new Map();
 // 화면 터치와 손가락 터치(새 손 인식: 펴진 손가락 끝 = 누름)가 똑같은 길을 탐. virt = 손가락(카메라)
 function tDown(id,x,y,t,virt){pointers.set(id,{x,y,t,c:pickColor(pointers.size+(Math.random()*6|0)),virt});
+  if(mode==='halo'&&!virt)haloDown(id,x,y,t);
   if(mode==='water'&&dipMode){if(!virt)dipStart('t'+id,x,y,.005);}
   else if(mode==='water'){if(!virt)addPlop(x,y,1);wakeEnd('t'+id);}          // 손가락은 '톡 굽히기'가 퐁당 (펴기만 해서는 퐁당 안 함)
   else if(mode==='wave'&&wvH&&flow>.3){if(!virt)wavePoke(x,y,.5);}
   else if(mode==='ink'&&flow>.3){const p=pointers.get(id);p.ink=inkNext++;if(inkA&&!virt)inkDrop(p.x,p.y,p.ink,1);}}   // each finger that lands = one 퐁당
 function tMove(id,x,y,t){const p=pointers.get(id);if(!p)return;
+  if(mode==='halo'&&halo&&halo.grab&&halo.grab.id===id){haloMove(id,x,y,t);p.x=x;p.y=y;p.t=t;return;}   // holding the ring: it carries the smoke itself
   const dtR=Math.min(Math.max((t-p.t)/1000,.008),.1);feelFinger(Math.hypot((x-p.x)*aspect,y-p.y)/dtR);
   if(mode==='ink'){if(inkA&&flow>.3)inkStroke(p.x,p.y,x,y,p.ink||0,1);}
   else if(mode==='water'&&!dipMode)wakeStep('t'+id,x,y,Math.hypot((x-p.x)*aspect,y-p.y)/dtR,t);
   else if(mode!=='water')queue.push({x,y,vx:(x-p.x)/dtR,vy:(y-p.y)/dtR,set:.85,c:p.c,r:.0042,s:.9});p.x=x;p.y=y;p.t=t;
   if(dipMode&&!p.virt)dipMove('t'+id,x,y);}
-function tUp(id){pointers.delete(id);dipEnd('t'+id);wakeEnd('t'+id);}
+function tUp(id){if(mode==='halo')haloUp(id);pointers.delete(id);dipEnd('t'+id);wakeEnd('t'+id);}
 canvas.addEventListener('pointerdown',e=>{if(document.body.classList.contains('menu')){openMenu(false);return;}const [ex,ey]=loc(e);wake();tDown(e.pointerId,ex,1-ey,e.timeStamp,false);});
 canvas.addEventListener('pointermove',e=>{if(!pointers.has(e.pointerId))return;const [lx0,ly0]=loc(e);tMove(e.pointerId,lx0,1-ly0,e.timeStamp);});
 ['pointerup','pointercancel','pointerleave'].forEach(t=>canvas.addEventListener(t,e=>tUp(e.pointerId)));
@@ -1763,7 +1931,7 @@ function onHands(res){
     pinchState[pk]=pinch;
     const open=!fist&&!pinch&&!pointing&&(W?[1,2,3,4].every(i=>bends[i]<60*Math.PI/180):[8,12,16,20].every(i=>d2(lm[i],lm[0])>size*1.55));
     if(W)fingerTaps(lm.slot??h,lm,bends,fist,now);
-    handInfo.push({pts,fist,pinch,mid,point,open,palm:{x:lm[9].x,y:1-lm[9].y},virt:!!W});
+    handInfo.push({pts,fist,pinch,mid,point,open,palm:{x:lm[9].x,y:1-lm[9].y},virt:!!W,W,size});
     if(W)vList.push([lm.slot??h,lm,fist]);
     // 손 담그기 gesture: palm moves toward the screen relative to its resting size
     const hs=handSize[h]||(handSize[h]={base:size,dipping:false}),palm={x:lm[9].x,y:1-lm[9].y};seenH[h]=1;
@@ -1856,6 +2024,7 @@ function fingerTap(x,y,fi){
   if(mode==='water'){if(!dipMode)addPlop(x,y,.9);}
   else if(mode==='ink'){if(inkA)inkDrop(x,y,inkNext++,.9);}
   else if(mode==='wave'){if(wvH)wavePoke(x,y,.45);}
+  else if(mode==='halo'&&halo){const [d,i]=haloNear(x,y);if(d<.08)haloKick(i,-.8);else haloPuff=[x*aspect,y,.005,.3];}
   else if(mode==='paint'){colorTick++;for(let i=0;i<6;i++){const a=i/6*Math.PI*2;queue.push({x:x+Math.cos(a)*.012,y:y+Math.sin(a)*.012*aspect,dx:Math.cos(a)*600,dy:Math.sin(a)*600,c:pickColor(i+fi),r:.0022,s:.9,t:.8,hand:1});}}
 }
 function setEngine(e){ENGINE=e;try{localStorage.setItem('hf-engine',e);}catch(_){}
@@ -1918,7 +2087,7 @@ function frame(now){
   resize();
   flow+=(flowTarget-flow)*Math.min(1,dt*(flowTarget>flow?2.5:6));
   updateGyro(dt);updateTimeScale(dt);
-  if(mode==='water'){ waterFrame(dt); } else if(mode==='wave'){ waveFrame(dt); } else if(mode==='light'){ lightFrame(dt); } else if(mode==='silk'){ queue.length=0; silkFrame(dt); } else if(mode==='cloud'){ cloudFrame(dt); } else if(mode==='ink'){ inkFrame(dt); } else {
+  if(mode==='water'){ waterFrame(dt); } else if(mode==='wave'){ waveFrame(dt); } else if(mode==='halo'){ haloFrame(dt); } else if(mode==='light'){ lightFrame(dt); } else if(mode==='silk'){ queue.length=0; silkFrame(dt); } else if(mode==='cloud'){ cloudFrame(dt); } else if(mode==='ink'){ inkFrame(dt); } else {
   // ambient life: drifting color drops keep the canvas evolving
   ambientClock+=dt*flow*Math.max(timeScale,.15);
   if(ambientClock>.6){ambientClock=0;const x=Math.random(),y=Math.random(),a=Math.random()*6.28;
@@ -1980,8 +2149,10 @@ const HINTS={paint:hintTxt.innerHTML,
   silk:'<b>손가락·터치를 움직이면</b> 그 방향으로 바람이 불어 실크가 날아감<br>바람이 불어오는 쪽에서 새 실크가 들어옴 · <b>주먹</b> 바람이 잦아듦',
   light:'<b>손가락</b> 빛의 흐름 밀기 · <b>검지만 펴기</b> 가리킨 방향으로 빛줄기<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 멈춤',
   wave:'<b>폰 기울이기</b> 물이 쏠려 벽에 부딪힘 · <b>흔들기</b> 출렁임<br><b>터치·손</b> 물 밀기 · <b>톡</b> 물결 · <b>주먹</b> 멈춤',
+  halo:'<b>터치</b> 링 끌기 · <b>튕기기</b> 동전처럼 뒤집힘 · <b>톡</b> 링이 떨며 빛이 돎 · <b>두 손가락</b> 크기·회전<br><b>손</b> 자석처럼 따라옴 · <b>손바닥 기울이기·뒤집기</b> 링도 같이 · <b>가까이</b> 밀려남 · <b>집기</b> 잡고 던지기 · <b>두 손</b> 늘이기·비틀기',
   water:'<b>톡 터치·손가락 톡 굽히기</b> 퐁당 · <b>끌며 원 그리기</b> 소용돌이<br><b>손가락</b> 움직여 물결 · <b>검지만 펴기</b> 가리킨 방향으로 물길<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 물 멈춤'};
-function setMode(m){mode=m;document.body.classList.toggle('water',m==='water');document.body.classList.toggle('wave',m==='wave');document.body.classList.toggle('light',m==='light');document.body.classList.toggle('silk',m==='silk');document.body.classList.toggle('cloud',m==='cloud');document.body.classList.toggle('ink',m==='ink');
+function setMode(m){mode=m;document.body.classList.toggle('water',m==='water');document.body.classList.toggle('wave',m==='wave');document.body.classList.toggle('halo',m==='halo');document.body.classList.toggle('light',m==='light');document.body.classList.toggle('silk',m==='silk');document.body.classList.toggle('cloud',m==='cloud');document.body.classList.toggle('ink',m==='ink');
+  if(m==='halo')halo=null;   // starts fresh (built on the next frame)
   if(m==='cloud'&&vel){const u=use('waterClear',[0,0]);blit(vel.w);vel.swap();blit(vel.w);vel.swap();}   // start calm: no leftover swirls from other modes
   document.querySelectorAll('#modeSeg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.m===m));
   seedBtn.textContent=(m==='water'||m==='wave')?'잔잔하게':m==='ink'?'새 한지':'새 캔버스';hintTxt.innerHTML=(m==='water'&&dipMode)?HINTS.dip:HINTS[m];
@@ -1990,7 +2161,7 @@ function setMode(m){mode=m;document.body.classList.toggle('water',m==='water');d
   if(curTrack)switchTrack();}
 document.querySelectorAll('#modeSeg button').forEach(b=>b.onclick=()=>setMode(b.dataset.m));
 setMode(mode);
-seedBtn.onclick=()=>{if(mode==='ink'){inkSeed=Math.random()*50;inkClear();}else if(mode==='wave'){waveInit();}else if(mode==='water'){waterClear();gliders.length=0;}else if(mode==='light'){lightSeedAll();}else if(mode==='silk'){silkInit();}else if(mode==='cloud'){cloudReset();}else seed();drops.length=0;};
+seedBtn.onclick=()=>{if(mode==='ink'){inkSeed=Math.random()*50;inkClear();}else if(mode==='wave'){waveInit();}else if(mode==='halo'){halo=null;}else if(mode==='water'){waterClear();gliders.length=0;}else if(mode==='light'){lightSeedAll();}else if(mode==='silk'){silkInit();}else if(mode==='cloud'){cloudReset();}else seed();drops.length=0;};
 const lightWrap=document.getElementById('lights');
 function renderLights(){lightWrap.innerHTML='';for(const name in LIGHTS){const b=document.createElement('button');b.className='chip';
   b.setAttribute('aria-pressed',name===lightName);b.innerHTML='<i>'+LIGHTS[name].map(c=>`<span style="background:${c}"></span>`).join('')+'</i>'+name;

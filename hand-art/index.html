@@ -126,7 +126,7 @@ body:not(.halo) #haloColRow,body:not(.halo) #beadRow{display:none}
       <button class="btn" id="install">앱 설치</button>
     </div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 84</p>
+    <p class="hint" id="ver">버전 85</p>
   </div>
 </div>
 </div><!-- #app -->
@@ -887,7 +887,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 84';
+const VER_TXT='버전 85';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -1497,19 +1497,15 @@ function haloNodes(){const H=halo,e1=qRot(H.q,[1,0,0]),e2=qRot(H.q,[0,1,0]),n=qR
   if(H.P.length===HN)H.pv=H.P;H.P=P;H.n=n;}
 const haloProj=v=>{const s=HALO_F/Math.max(.3,HALO_F-v[2]);return [aspect/2+(v[0]-aspect/2)*s,.62+(v[1]-.62)*s,s];};
 function haloNear(x,y){let best=9,bi=0;for(let i=0;i<HN;i++){const p=haloProj(halo.P[i]),d=Math.hypot(p[0]-x*aspect,p[1]-y);if(d<best){best=d;bi=i;}}return [best,bi];}
-// which of the three hand shapes is this? one = index out (others folded, thumb tucked) · two = thumb out with the index (others folded) · else nothing
-function haloPose(h,H){let idx=false,others=false,thumbOut=false;
-  if(h.W&&h.bends){const R=Math.PI/180,W=h.W,sc=d3(W[0],W[9])||.09,b=h.bends;
-    idx=b[1]<65*R;others=[2,3,4].filter(i=>b[i]>70*R).length>=2&&[2,3,4].every(i=>b[i]>45*R);
-    const th=d3(W[4],W[5])/sc;thumbOut=H.pose==='two'?th>.55:th>.72;}
-  else if(h.lm){const lm=h.lm,sz=h.size||.1;idx=d2(lm[8],lm[0])>sz*1.45;others=[12,16,20].every(i=>d2(lm[i],lm[0])<sz*1.3);
-    const th=d2(lm[4],lm[5])/sz;thumbOut=H.pose==='two'?th>.5:th>.62;}
-  const p=others?(thumbOut?'two':idx?'one':null):null;
-  const now=performance.now();if(p!==H.poseC){H.poseC=p;H.poseT=now;}
-  if(now-H.poseT>110)H.pose=p;                                     // a shape must hold ~0.1 s → no flicker between gestures
-  return H.pose;}
-function haloSpread(h){if(h.W){const W=h.W;return d3(W[4],W[8])/(d3(W[0],W[9])||.09);}
-  const lm=h.lm;return lm?d2(lm[4],lm[8])/(h.size||.1):1;}
+// the hand for Halo: middle, ring and little finger folded = the 'control' hand; index out = drag;
+// thumb–index-tip distance (dI) and thumb–middle-finger distance (dM), both relative to the hand's size, steer the zoom
+function haloHand(h){
+  if(h.W&&h.bends){const R=Math.PI/180,W=h.W,b=h.bends,sc=d3(W[0],W[9])||.09;
+    const ok=[2,3,4].filter(i=>b[i]>65*R).length>=2&&[2,3,4].every(i=>b[i]>40*R);
+    return {ok,drag:ok&&b[1]<70*R,dI:d3(W[4],W[8])/sc,dM:Math.min(d3(W[4],W[10]),d3(W[4],W[11]),d3(W[4],W[14]))/sc};}
+  const lm=h.lm;if(!lm)return {ok:false,drag:false,dI:0,dM:0};const sz=h.size||.1;
+  const ok=[12,16,20].every(i=>d2(lm[i],lm[0])<sz*1.3);
+  return {ok,drag:ok&&d2(lm[8],lm[0])>sz*1.4,dI:d2(lm[4],lm[8])/sz,dM:Math.min(d2(lm[4],lm[10]),d2(lm[4],lm[11]),d2(lm[4],lm[14]))/sz};}
 function haloKick(i,amt){const th=i/HN*6.2832,e1=qRot(halo.q,[Math.cos(th),Math.sin(th),0]),ax=v3(e1,[0,0,-1]);   // a tap rocks the whole ring a little (no bending)
   for(let k=0;k<3;k++)halo.w[k]+=ax[k]*Math.abs(amt)*2.2;
   halo.pul.push({i,t:0,a:Math.min(1.2,.5+Math.abs(amt)*3)});if(halo.pul.length>6)halo.pul.shift();}
@@ -1540,15 +1536,21 @@ function haloFrame(dt){
   if(H.grab){const p=pointers.get(H.grab.id);if(p){tgtC=[p.x*aspect+H.grab.ox,p.y+H.grab.oy,0];kC=40;}else H.grab=null;}
   // hands: just three gestures — one finger drags the ring, two fingers (thumb + index) open/close = zoom, a fist = stop
   const hands=handInfo.filter(h=>h.palm),fistNow=hands.some(h=>h.fist),hh=hands.find(h=>!h.fist);
-  if(fistNow){H.V=[0,0,0];H.w=[0,0,0];H.zoom=null;H.pose=H.poseC=null;}
+  if(fistNow){H.V=[0,0,0];H.w=[0,0,0];H.zoom=null;}
   if(hh&&!fistNow&&live&&!H.grab){H.lastHand=performance.now();
-    const pose=haloPose(hh,H);
-    if(pose==='one'){const tip=hh.pts&&hh.pts[1];if(tip){tgtC=[tip.x*aspect,tip.y,0];kC=60;}H.zoom=null;}    // the ring sits on your fingertip and goes where it goes
-    else if(pose==='two'){const dn=haloSpread(hh);                                                  // like two fingers on glass: the ratio of the spread scales the ring
-      if(H.zoom){const f=H.zoom.d+(dn-H.zoom.d)*.55,r=f/H.zoom.d;if(Math.abs(r-1)>.002)H.Rt=Math.min(.48,Math.max(.08,H.Rt*Math.pow(r,1.5)));H.zoom.d=f;}
-      else H.zoom={d:Math.max(dn,.05)};}
-    else H.zoom=null;}
-  else if(!hh){H.zoom=null;H.pose=H.poseC=null;}
+    const st=haloHand(hh);
+    if(st.drag){const tip=hh.pts&&hh.pts[1];if(tip){tgtC=[tip.x*aspect,tip.y,0];kC=60;}}          // index out: the ring sits on your fingertip
+    if(st.ok&&H.lastHI!==handInfo){H.lastHI=handInfo;                                             // once per camera frame: how did the thumb move?
+      const z=H.zoom;
+      if(z){const dI=z.dI+(st.dI-z.dI)*.6,dM=z.dM+(st.dM-z.dM)*.6,gI=dI-z.dI,gM=dM-z.dM;
+        // thumb opening away from the index → bigger; thumb closing onto the index → smaller;
+        // thumb folding into the fist (it nears the middle finger faster than the index) → ignored
+        if(gI>.006)H.Rt=Math.min(.48,H.Rt*Math.exp(gI*2.3));
+        else if(gI<-.006&&-gI>-gM*.9+.002)H.Rt=Math.max(.08,H.Rt*Math.exp(gI*1.8));
+        z.dI=dI;z.dM=dM;}
+      else H.zoom={dI:st.dI,dM:st.dM};}
+    else if(!st.ok)H.zoom=null;}
+  else if(!hh){H.zoom=null;}
   if(!(hh&&!fistNow&&live&&!H.grab)){H.hold=null;if(H.pinch)H.pinch=null;H.palmN=null;
 
     if(isIdle()&&live&&!H.grab&&!H.two){                                                   // left alone: it puts on a show — wanders, grows and shrinks, leans, rolls, turns over
@@ -2223,7 +2225,7 @@ const HINTS={paint:hintTxt.innerHTML,
   silk:'<b>손가락·터치를 움직이면</b> 그 방향으로 바람이 불어 실크가 날아감<br>바람이 불어오는 쪽에서 새 실크가 들어옴 · <b>주먹</b> 바람이 잦아듦',
   light:'<b>손가락</b> 빛의 흐름 밀기 · <b>검지만 펴기</b> 가리킨 방향으로 빛줄기<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 멈춤',
   wave:'<b>폰 기울이기</b> 물이 쏠려 벽에 부딪힘 · <b>흔들기</b> 출렁임<br><b>터치·손</b> 물 밀기 · <b>톡</b> 물결 · <b>주먹</b> 멈춤',
-  halo:'<b>터치</b> 링 끌기 · <b>튕기기</b> 동전처럼 뒤집힘 · <b>톡</b> 빛이 돎 · <b>두 손가락</b> 확대·축소·회전<br><b>손</b> 검지 하나 = 링 끌고 다니기 · <b>엄지와 검지 벌리기/오므리기</b> = 확대·축소 · <b>주먹</b> = 멈춤',
+  halo:'<b>터치</b> 링 끌기 · <b>튕기기</b> 동전처럼 뒤집힘 · <b>톡</b> 빛이 돎 · <b>두 손가락</b> 확대·축소·회전<br><b>손</b> 검지 = 링 끌기 · <b>엄지를 펴면</b> 확대 · <b>엄지를 검지 끝에 붙이면</b> 축소 · <b>주먹</b> = 멈춤',
   water:'<b>톡 터치·손가락 톡 굽히기</b> 퐁당 · <b>끌며 원 그리기</b> 소용돌이<br><b>손가락</b> 움직여 물결 · <b>검지만 펴기</b> 가리킨 방향으로 물길<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 물 멈춤'};
 function setMode(m){mode=m;document.body.classList.toggle('water',m==='water');document.body.classList.toggle('wave',m==='wave');document.body.classList.toggle('halo',m==='halo');document.body.classList.toggle('light',m==='light');document.body.classList.toggle('silk',m==='silk');document.body.classList.toggle('cloud',m==='cloud');document.body.classList.toggle('ink',m==='ink');
   if(m==='halo')halo=null;   // starts fresh (built on the next frame)

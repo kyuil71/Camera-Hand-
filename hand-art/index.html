@@ -126,7 +126,7 @@ body:not(.halo) #haloColRow,body:not(.halo) #beadRow{display:none}
       <button class="btn" id="install">앱 설치</button>
     </div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 80</p>
+    <p class="hint" id="ver">버전 81</p>
   </div>
 </div>
 </div><!-- #app -->
@@ -332,7 +332,7 @@ vec3 hanji(vec2 p,out float crease){
  c=mix(c,vec3(.89,.82,.70),smoothstep(.45,.85,fbm(p*1.6+3.))*.45);          /* uneven, slightly aged tone */
  c*=.955+.07*fbm(p*4.5+8.);
  vec3 A=crumple(p*2.6,1.3),B=crumple(p*6.5,7.7);
- c*=1.+A.x*.085+B.x*.05;                                                /* each facet catches the light a little differently */
+ c*=1.+A.x*.13+B.x*.075;                                                /* each facet catches the light a little differently */
  float w1=.012+.02*A.z,w2=.016+.02*B.z;
  float k1=(1.-smoothstep(0.,w1,A.y))*(.25+.75*A.z),k2=(1.-smoothstep(0.,w2,B.y))*(.15+.6*B.z);
  // fine wrinkles: thin wandering ridge lines at three sizes, each with a lit side and a shaded side
@@ -341,8 +341,8 @@ vec3 hanji(vec2 p,out float crease){
   float r=1.-abs(2.*fbm(p*sc+o)-1.),r2=1.-abs(2.*fbm((p+vec2(-.0025,.0035)/sc*3.)*sc+o)-1.);
   wr+=pow(r,14.)*am;wl+=(pow(r2,14.)-pow(r,14.))*am;}
  crease=max(k1,min(1.,wr));
- c*=1.-.09*k1-.05*k2-.14*wr;c+=vec3(.10,.095,.08)*clamp(wl,0.,1.);      /* crease shadows and lit lips */
- c+=vec3(.05,.048,.04)*(1.-smoothstep(0.,.015,abs(A.y-w1-.012)))*A.z;   /* a bright lip beside the deep creases */
+ c*=1.-.135*k1-.075*k2-.21*wr;c+=vec3(.15,.143,.12)*clamp(wl,0.,1.);      /* crease shadows and lit lips */
+ c+=vec3(.075,.072,.06)*(1.-smoothstep(0.,.015,abs(A.y-w1-.012)))*A.z;   /* a bright lip beside the deep creases */
  float f1=smoothstep(.70,.95,fib(p*4.,.4)),f2=smoothstep(.70,.95,fib(p*5.3+3.,1.9)),f3=smoothstep(.75,.97,fib(p*7.1+9.,2.8)),f4=smoothstep(.80,.98,fib(p*11.+2.,.9));
  c+=vec3(.035,.031,.022)*max(f1,f2);c-=vec3(.045,.05,.055)*f3+vec3(.03,.04,.05)*f4;   /* long mulberry fibres, light and dark */
  float pulp=vn(p*120.)*.6+vn(p*260.)*.4;c*=.92+.16*pulp;                /* rough pulp: clumps and pits */
@@ -887,7 +887,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 80';
+const VER_TXT='버전 81';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -1548,7 +1548,13 @@ function haloFrame(dt){
           else H.hold={one:true,d};}
         else if(H.hold&&H.hold.one)H.hold=null;}
       const sz=h.size||0,key='s';if(sz){const hb=H.hBase;hb[key]=hb[key]?hb[key]+(sz-hb[key])*.01:sz;tz=Math.max(-.7,Math.min(.35,-(sz/hb[key]-1)*1.6));}}}   // hand comes closer → ring pushed away
-  else{H.hold=null;if(H.pinch)H.pinch=null;H.palmN=null;}
+  else{H.hold=null;if(H.pinch)H.pinch=null;H.palmN=null;
+    if(isIdle()&&live&&!H.grab&&!H.two){const t=haloT;                                         // left alone: it floats about, leans, now and then turns over
+      tgtC=[home[0]+Math.sin(t*.31)*.10*aspect+Math.sin(t*.73+1.)*.04*aspect,home[1]+Math.sin(t*.27+2.)*.07+Math.sin(t*.61)*.03,0];kC=1.1;
+      tz=.12*Math.sin(t*.19);
+      H.idleT=(H.idleT||3)-dt;if(H.idleT<0){H.idleT=4+Math.random()*5;const a=Math.random()*6.283,k=Math.random()<.4?8+Math.random()*6:2+Math.random()*2.5;
+        H.w[0]+=Math.cos(a)*k;H.w[1]+=Math.sin(a)*k;if(Math.random()<.5)haloKick((Math.random()*HN)|0,.5);}
+      if(Math.random()<dt*.6){const a=Math.random()*6.283;queue.push({x:Math.random(),y:Math.random(),vx:Math.cos(a)*.25,vy:Math.sin(a)*.25,set:.5,r:.004});}}}
   // ---- integrate (small steps) ----
   H.R+=(H.Rt-H.R)*Math.min(1,dt*8);
   const SUB=4,h=k/SUB;
@@ -1608,7 +1614,8 @@ function inkBotStep(dt){const b=inkBot;b.t-=dt;b.ph+=dt;
     if(cx<m*aspect||cx>(1-m)*aspect||cy<m||cy>1-m){const ta=Math.atan2(.5-cy,(.5-b.x)*aspect);let da=ta-b.a;da=Math.atan2(Math.sin(da),Math.cos(da));b.a+=da*Math.min(1,dt*4);}
     const nx=b.x+Math.cos(b.a)*spd*dt/aspect,ny=b.y+Math.sin(b.a)*spd*dt;
     const life=Math.max(0,Math.min(1,(b.t0-b.t)/.35,b.t/.6));                           // brush lands, presses, lifts off thin
-    inkStroke(b.x,b.y,nx,ny,b.ci,b.k*(.8+.3*Math.sin(b.ph*2.))*(.55+.45*life),b.rw*(.75+.35*Math.sin(b.ph*1.5+2.))*(.5+.5*life));
+    const lt=b.t<.6?Math.pow(Math.max(0,b.t/.6),1.4):1,ls=Math.min(1,(b.t0-b.t)/.35);   // presses in at the start, lifts off to a point at the end
+    inkStroke(b.x,b.y,nx,ny,b.ci,b.k*(.8+.3*Math.sin(b.ph*2.))*(.45+.55*Math.min(ls,lt)),b.rw*(.75+.35*Math.sin(b.ph*1.5+2.))*(.04+.96*Math.min(.5+.5*ls,lt)));
     b.lx=b.x;b.ly=b.y;b.x=nx;b.y=ny;
     if(b.t<0){b.down=false;b.t=.6+Math.random()*1.8;}}
   else if(b.t<0){                                                                      // put the brush down again: often back into the ink, to deepen it
@@ -1627,13 +1634,23 @@ function inkAlloc(){const [w,h]=res(INK_RES);
   inkA={r:mk(),w:mk(),swap(){const x=this.r;this.r=this.w;this.w=x;}};inkS={r:mk(),w:mk(),swap(){const x=this.r;this.r=this.w;this.w=x;}};inkK=fbo(w,h);inkClear();}
 function inkClear(){if(!inkA)return;const u=use('inkClear',[0,0]);for(const t of [inkA,inkS]){blit(t.w);t.swap();blit(t.w);t.swap();}
   const p=use('inkPerm',[inkK.tx,inkK.ty]);gl.uniform1f(p.aspect,aspect);gl.uniform1f(p.seed,inkSeed);blit(inkK);}
-function inkSplat(x,y,r,water,a,k){if(inkSplats++>36)return;               // a few dozen per frame at most
+function inkSplat(x,y,r,water,a,k){if(inkSplats++>60)return;               // a few dozen per frame at most
   const u=use('inkSplat',[inkA.r.tx,inkA.r.ty]);gl.uniform1i(u.uT,inkA.r.bind(0));gl.uniform2f(u.point,x,y);gl.uniform1f(u.aspect,aspect);
   gl.uniform1f(u.radius,r*(aspect>1?aspect:1));gl.uniform1f(u.water,water);gl.uniform3f(u.pig,a[0]*k,a[1]*k,a[2]*k);blit(inkA.w);inkA.swap();}
 function inkDrop(x,y,ci,k){inkSplat(x,y,.0009*(.7+.6*k),1.2*k,inkAbs(ci),.42*k);}
-function inkStroke(x0,y0,x1,y1,ci,k,rw){rw=rw||1;const d=Math.hypot((x1-x0)*aspect,y1-y0);if(d<1e-4||d>.3)return;
+function inkStroke(x0,y0,x1,y1,ci,k,rw,rw1){rw=rw||1;rw1=rw1==null?rw:rw1;const d=Math.hypot((x1-x0)*aspect,y1-y0);if(d<1e-4||d>.3)return;
   const n=Math.min(8,Math.ceil(d/.012)),a=inkAbs(ci),kk=k*Math.min(1,d/.012/n*1.1+.25);
-  for(let i=1;i<=n;i++){const t=i/n;inkSplat(x0+(x1-x0)*t,y0+(y1-y0)*t,.00045*rw,.55*kk*Math.sqrt(rw),a,.09*kk);}}
+  for(let i=1;i<=n;i++){const t=i/n,w=rw+(rw1-rw)*t;inkSplat(x0+(x1-x0)*t,y0+(y1-y0)*t,.00045*w,.55*kk*Math.sqrt(w),a,.09*kk);}}
+// the brush lifts off: the waiting last stretch is painted thinning to a sharp point, and runs on a touch in the same direction
+const INK_LAG=.07;
+function inkLift(p){const B=p.ib;p.ib=null;if(!B||B.length<2)return;
+  const moving=Math.hypot(p.ivx||0,p.ivy||0)>.04&&(p.imoved||0)>.025;
+  if(moving){const l=Math.hypot((p.ivx)*aspect,p.ivy)||1,dx=p.ivx*aspect/l,dy=p.ivy/l,last=B[B.length-1],ext=Math.min(.05,.02+l*.02);
+    for(let i=1;i<=3;i++)B.push({x:last.x+dx*ext*i/3/aspect,y:last.y+dy*ext*i/3,w:last.w});}
+  let T=0;const c=[0];for(let i=1;i<B.length;i++){T+=Math.hypot((B[i].x-B[i-1].x)*aspect,B[i].y-B[i-1].y);c.push(T);}
+  const tap=t=>moving?Math.pow(Math.max(0,1-t),1.5)*.97+.03:1-.5*t;   // width along the lift: full → a needle point
+  for(let i=1;i<B.length;i++){const a=B[i-1],b=B[i],ta=c[i-1]/(T||1),tb=c[i]/(T||1);
+    inkStroke(a.x,a.y,b.x,b.y,p.ink||0,1-.35*tb,a.w*tap(ta),b.w*tap(tb));}}
 const inkTips={};
 function inkFrame(dt){
   if(!inkA)inkAlloc();
@@ -1847,25 +1864,34 @@ addEventListener('pointerdown',tryMusic,true);
 const fx=document.getElementById('fx');const fxc=fx.getContext('2d');
 const queue=[];           // deferred GPU splats
 let ambientClock=0, colorTick=0;
+const ghosts=[{x:.3,y:.35,a:.4,ph:0,s:1.3,c:0},{x:.7,y:.65,a:3.6,ph:2,s:4.1,c:3}];
 const pickColor=(i)=>{const p=pal();const c=p[(i+colorTick)%p.length];const k=.9+Math.random()*.25;return c.map(v=>Math.min(1,v*k));};
 
 // touch fallback
 const pointers=new Map();
 // 화면 터치와 손가락 터치(새 손 인식: 펴진 손가락 끝 = 누름)가 똑같은 길을 탐. virt = 손가락(카메라)
-function tDown(id,x,y,t,virt){pointers.set(id,{x,y,t,c:pickColor(pointers.size+(Math.random()*6|0)),virt});
+let lastAct=0;const isIdle=()=>performance.now()-lastAct>4000&&!handInfo.length&&!pointers.size;
+function tDown(id,x,y,t,virt){lastAct=performance.now();pointers.set(id,{x,y,t,c:pickColor(pointers.size+(Math.random()*6|0)),virt});
   if(mode==='halo'&&!virt)haloDown(id,x,y,t);
   if(mode==='water'&&dipMode){if(!virt)dipStart('t'+id,x,y,.005);}
   else if(mode==='water'){if(!virt)addPlop(x,y,1);wakeEnd('t'+id);}          // 손가락은 '톡 굽히기'가 퐁당 (펴기만 해서는 퐁당 안 함)
   else if(mode==='wave'&&wvH&&flow>.3){if(!virt)wavePoke(x,y,.5);}
   else if(mode==='ink'&&flow>.3){const p=pointers.get(id);p.ink=inkNext++;if(inkA&&!virt)inkDrop(p.x,p.y,p.ink,1);}}   // each finger that lands = one 퐁당
-function tMove(id,x,y,t){const p=pointers.get(id);if(!p)return;
+function tMove(id,x,y,t){const p=pointers.get(id);if(!p)return;lastAct=performance.now();
   if(mode==='halo'&&halo&&halo.grab&&halo.grab.id===id){haloMove(id,x,y,t);p.x=x;p.y=y;p.t=t;return;}   // holding the ring: it carries the smoke itself
   const dtR=Math.min(Math.max((t-p.t)/1000,.008),.1);feelFinger(Math.hypot((x-p.x)*aspect,y-p.y)/dtR);
-  if(mode==='ink'){if(inkA&&flow>.3)inkStroke(p.x,p.y,x,y,p.ink||0,1);}
+  if(mode==='ink'){if(inkA&&flow>.3){const sp=Math.hypot((x-p.x)*aspect,y-p.y)/dtR;   // a quick stroke is a thinner, drier line — like a real brush
+      const rw=Math.max(.45,Math.min(1.25,1.25-sp*.35));p.ivx=(p.ivx||0)*.6+(x-p.x)/dtR*.4;p.ivy=(p.ivy||0)*.6+(y-p.y)/dtR*.4;
+      if(!p.ib)p.ib=[{x:p.x,y:p.y,w:rw}];p.ib.push({x,y,w:rw});p.imoved=(p.imoved||0)+Math.hypot((x-p.x)*aspect,y-p.y);
+      // the brush paints a little behind the finger: the last stretch waits, so when it lifts that stretch can thin out to a point
+      let L=0;for(let i=1;i<p.ib.length;i++)L+=Math.hypot((p.ib[i].x-p.ib[i-1].x)*aspect,p.ib[i].y-p.ib[i-1].y);
+      while(p.ib.length>2&&L>INK_LAG){const a=p.ib[0],b=p.ib[1];inkStroke(a.x,a.y,b.x,b.y,p.ink||0,1,a.w,b.w);L-=Math.hypot((b.x-a.x)*aspect,b.y-a.y);p.ib.shift();}}}
   else if(mode==='water'&&!dipMode)wakeStep('t'+id,x,y,Math.hypot((x-p.x)*aspect,y-p.y)/dtR,t);
   else if(mode!=='water')queue.push({x,y,vx:(x-p.x)/dtR,vy:(y-p.y)/dtR,set:.85,c:p.c,r:.0042,s:.9});p.x=x;p.y=y;p.t=t;
   if(dipMode&&!p.virt)dipMove('t'+id,x,y);}
-function tUp(id){if(mode==='halo')haloUp(id);pointers.delete(id);dipEnd('t'+id);wakeEnd('t'+id);}
+function tUp(id){if(mode==='halo')haloUp(id);
+  {const p=pointers.get(id);if(p&&mode==='ink'&&inkA&&p.ib)inkLift(p);}
+  pointers.delete(id);dipEnd('t'+id);wakeEnd('t'+id);}
 canvas.addEventListener('pointerdown',e=>{if(document.body.classList.contains('menu')){openMenu(false);return;}const [ex,ey]=loc(e);wake();tDown(e.pointerId,ex,1-ey,e.timeStamp,false);});
 canvas.addEventListener('pointermove',e=>{if(!pointers.has(e.pointerId))return;const [lx0,ly0]=loc(e);tMove(e.pointerId,lx0,1-ly0,e.timeStamp);});
 ['pointerup','pointercancel','pointerleave'].forEach(t=>canvas.addEventListener(t,e=>tUp(e.pointerId)));
@@ -1892,7 +1918,7 @@ function onHands(res){
   if(viewAng)list=list.map(lm=>{const m=lm.map(p=>{const [u,v]=locXY(p.x*innerWidth,p.y*innerHeight);return {x:u,y:v,z:p.z};});m.world=lm.world;m.slot=lm.slot;return m;});   // 화면이 돌아가 있어도 손 좌표는 기기 기준으로
   if(!list.length){ for(const id of [...pointers.keys()])if(typeof id==='string'&&id[0]==='v')tUp(id);
     if(now-lastSeen>250){for(const k in tracks)delete tracks[k];for(const k in pointState)delete pointState[k];} handInfo=[]; setDetect(false); if(camOn)status('손 인식 켜짐 · 손을 카메라에 보여주세요'); fistSince=0; return; }
-  lastSeen=now; handInfo=[]; setDetect(true);
+  lastSeen=now; handInfo=[]; setDetect(true); lastAct=now;
   const seenH={},vSeen=new Set(),vList=[];
   let anyFist=false;
   list.forEach((lm,h)=>{
@@ -2101,6 +2127,12 @@ function frame(now){
   flow+=(flowTarget-flow)*Math.min(1,dt*(flowTarget>flow?2.5:6));
   updateGyro(dt);updateTimeScale(dt);
   if(mode==='water'){ waterFrame(dt); } else if(mode==='wave'){ waveFrame(dt); } else if(mode==='halo'){ haloFrame(dt); } else if(mode==='light'){ lightFrame(dt); } else if(mode==='silk'){ queue.length=0; silkFrame(dt); } else if(mode==='cloud'){ cloudFrame(dt); } else if(mode==='ink'){ inkFrame(dt); } else {
+  // left alone: two invisible brushes wander and stir the colours on their own
+  if(isIdle()&&flow>.3){for(const g of ghosts){g.ph+=dt;g.a+=(Math.sin(g.ph*.7+g.s)*1.1+Math.sin(g.ph*1.9+g.s*2.)*.6)*dt;
+      const m=.12;if(g.x<m||g.x>1-m||g.y<m||g.y>1-m){const ta=Math.atan2(.5-g.y,(.5-g.x)*aspect);let da=ta-g.a;da=Math.atan2(Math.sin(da),Math.cos(da));g.a+=da*Math.min(1,dt*2.5);}
+      const sp=.16+.10*Math.sin(g.ph*.9+g.s),vx=Math.cos(g.a)*sp/aspect,vy=Math.sin(g.a)*sp;g.x+=vx*dt;g.y+=vy*dt;
+      if(Math.random()<dt*.25)g.c=(g.c+1)%6;
+      queue.push({x:g.x,y:g.y,vx,vy,set:.6,c:pickColor(g.c),r:.0034,s:.55});}}
   // ambient life: drifting color drops keep the canvas evolving
   ambientClock+=dt*flow*Math.max(timeScale,.15);
   if(ambientClock>.6){ambientClock=0;const x=Math.random(),y=Math.random(),a=Math.random()*6.28;

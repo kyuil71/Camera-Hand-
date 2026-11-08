@@ -126,7 +126,7 @@ body:not(.halo) #haloColRow,body:not(.halo) #beadRow{display:none}
       <button class="btn" id="install">앱 설치</button>
     </div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 85</p>
+    <p class="hint" id="ver">버전 88</p>
   </div>
 </div>
 </div><!-- #app -->
@@ -887,7 +887,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 85';
+const VER_TXT='버전 88';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -1502,10 +1502,12 @@ function haloNear(x,y){let best=9,bi=0;for(let i=0;i<HN;i++){const p=haloProj(ha
 function haloHand(h){
   if(h.W&&h.bends){const R=Math.PI/180,W=h.W,b=h.bends,sc=d3(W[0],W[9])||.09;
     const ok=[2,3,4].filter(i=>b[i]>65*R).length>=2&&[2,3,4].every(i=>b[i]>40*R);
-    return {ok,drag:ok&&b[1]<70*R,dI:d3(W[4],W[8])/sc,dM:Math.min(d3(W[4],W[10]),d3(W[4],W[11]),d3(W[4],W[14]))/sc};}
+    const rel=(i)=>[(W[i].x-W[5].x)/sc,(W[i].y-W[5].y)/sc,(W[i].z-W[5].z)/sc];   // fingertip positions measured on the hand itself (from the index knuckle)
+    return {ok,drag:ok&&b[1]<70*R,dI:d3(W[4],W[8])/sc,dM:Math.min(d3(W[4],W[10]),d3(W[4],W[11]),d3(W[4],W[14]))/sc,t4:rel(4),t8:rel(8)};}
   const lm=h.lm;if(!lm)return {ok:false,drag:false,dI:0,dM:0};const sz=h.size||.1;
   const ok=[12,16,20].every(i=>d2(lm[i],lm[0])<sz*1.3);
-  return {ok,drag:ok&&d2(lm[8],lm[0])>sz*1.4,dI:d2(lm[4],lm[8])/sz,dM:Math.min(d2(lm[4],lm[10]),d2(lm[4],lm[11]),d2(lm[4],lm[14]))/sz};}
+  const rel=(i)=>[(lm[i].x-lm[5].x)/sz,(lm[i].y-lm[5].y)/sz,0];
+  return {ok,drag:ok&&d2(lm[8],lm[0])>sz*1.4,dI:d2(lm[4],lm[8])/sz,dM:Math.min(d2(lm[4],lm[10]),d2(lm[4],lm[11]),d2(lm[4],lm[14]))/sz,t4:rel(4),t8:rel(8)};}
 function haloKick(i,amt){const th=i/HN*6.2832,e1=qRot(halo.q,[Math.cos(th),Math.sin(th),0]),ax=v3(e1,[0,0,-1]);   // a tap rocks the whole ring a little (no bending)
   for(let k=0;k<3;k++)halo.w[k]+=ax[k]*Math.abs(amt)*2.2;
   halo.pul.push({i,t:0,a:Math.min(1.2,.5+Math.abs(amt)*3)});if(halo.pul.length>6)halo.pul.shift();}
@@ -1543,12 +1545,20 @@ function haloFrame(dt){
     if(st.ok&&H.lastHI!==handInfo){H.lastHI=handInfo;                                             // once per camera frame: how did the thumb move?
       const z=H.zoom;
       if(z){const dI=z.dI+(st.dI-z.dI)*.6,dM=z.dM+(st.dM-z.dM)*.6,gI=dI-z.dI,gM=dM-z.dM;
+        // only the two fingertips count, and only when the THUMB tip itself moves (opens / closes) on the hand:
+        // the index moving, the hand travelling or tilting, tracking jitter → no zoom
+        const sm=(a,b)=>a.map((v,i)=>v+(b[i]-v)*.4);z.t4=sm(z.t4,st.t4);z.t8=sm(z.t8,st.t8);   // smoothed tip positions
+        z.h4.push(z.t4);z.h8.push(z.t8);z.hI.push(dI);if(z.h4.length>7){z.h4.shift();z.h8.shift();z.hI.shift();}
+        const D=(h)=>{const a=h[0],b=h[h.length-1];return Math.hypot(b[0]-a[0],b[1]-a[1],b[2]-a[2]);};   // how far each tip really travelled over ~0.2 s
+        const m4=D(z.h4),m8=D(z.h8);
+        const wI=z.hI[z.hI.length-1]-z.hI[0];                                                   // and the gap between the tips really opened / closed over that time
+        const thumbActs=z.h4.length>=5&&m4>.12&&m4>m8*1.5&&Math.abs(wI)>.10&&Math.sign(wI)===Math.sign(gI);
         // thumb opening away from the index → bigger; thumb closing onto the index → smaller;
         // thumb folding into the fist (it nears the middle finger faster than the index) → ignored
-        if(gI>.006)H.Rt=Math.min(.48,H.Rt*Math.exp(gI*2.3));
-        else if(gI<-.006&&-gI>-gM*.9+.002)H.Rt=Math.max(.08,H.Rt*Math.exp(gI*1.8));
+        if(thumbActs&&gI>.006)H.Rt=Math.min(.48,H.Rt*Math.exp(gI*2.3));
+        else if(thumbActs&&gI<-.006&&-gI>-gM*.9+.002)H.Rt=Math.max(.08,H.Rt*Math.exp(gI*1.8));
         z.dI=dI;z.dM=dM;}
-      else H.zoom={dI:st.dI,dM:st.dM};}
+      else H.zoom={dI:st.dI,dM:st.dM,t4:st.t4,t8:st.t8,h4:[],h8:[],hI:[]};}
     else if(!st.ok)H.zoom=null;}
   else if(!hh){H.zoom=null;}
   if(!(hh&&!fistNow&&live&&!H.grab)){H.hold=null;if(H.pinch)H.pinch=null;H.palmN=null;

@@ -189,7 +189,7 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
     </div>
     <div class="row"><button class="btn" id="pinBtn">비밀번호 바꾸기</button></div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 94</p>
+    <p class="hint" id="ver">버전 95</p>
   </div>
 </div>
 <!-- 마음 남기기: write over the flowing art, then keep it (locked with a 4-digit PIN, on this phone only) or let it flow away -->
@@ -963,7 +963,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 94';
+const VER_TXT='버전 95';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -2473,8 +2473,7 @@ function wrapLines(ctx,text,maxW){const out=[];for(const para of text.split('\n'
 async function mindFont(text){try{await document.fonts.load('400 40px "Gowun Batang"',text+fmtDate(Date.now())+'Hand Flow Art · 마음 남기기');}catch(e){}}
 function composeMind(art,text,t){const W=art.width,H=art.height,c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d');
   x.drawImage(art,0,0);
-  const g=x.createLinearGradient(0,0,0,H);g.addColorStop(0,'rgba(0,0,0,.42)');g.addColorStop(.35,'rgba(0,0,0,.16)');g.addColorStop(.7,'rgba(0,0,0,.16)');g.addColorStop(1,'rgba(0,0,0,.42)');
-  x.fillStyle=g;x.fillRect(0,0,W,H);
+  x.fillStyle='rgba(0,0,0,.68)';x.fillRect(0,0,W,H);                    // the same dim veil as on screen while writing (art at ~30%) → the words stand out
   const u=Math.min(W,H),pad=u*.085,ff='"Gowun Batang","Noto Serif KR","Noto Serif CJK KR",serif';
   x.fillStyle='rgba(255,255,255,.80)';x.font=`400 ${Math.round(u*.034)}px ${ff}`;x.textBaseline='top';
   x.shadowColor='rgba(0,0,0,.45)';x.shadowBlur=u*.012;x.fillText(fmtDate(t),pad,H*.12);

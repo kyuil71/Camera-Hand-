@@ -134,6 +134,10 @@ body.mind #grab,body.mind #cap,body.mind .dock{display:none}
 .mpad button.x{border:0;background:transparent;font-size:20px}
 .mlink{border:0;background:transparent;color:rgba(255,255,255,.66);font:inherit;font-size:15px;padding:10px;text-decoration:underline;text-underline-offset:3px}
 .mlist{display:flex;flex-direction:column;gap:10px;text-align:left;margin-bottom:14px}
+.mcard.klist{display:flex;flex-direction:column;overflow:hidden}
+.mcard.klist .mlist{flex:1 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain}
+.mcard.klist .mbtns{flex:0 0 auto}
+#mCard.arming{pointer-events:none}   /* a tap that was meant for the button underneath never lands on what just appeared */
 .mitem{display:flex;gap:12px;align-items:center;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.06);border-radius:16px;padding:8px;color:#fff;font:inherit;text-align:left}
 .mitem .mthumb{width:52px;height:52px;border-radius:14px;flex:0 0 auto;object-fit:cover;background:#111;box-shadow:0 0 0 1px rgba(255,255,255,.22)}
 .mrow{position:relative}
@@ -204,7 +208,7 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
     </div>
     <div class="row"><button class="btn" id="pinBtn">비밀번호 바꾸기</button></div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 99</p>
+    <p class="hint" id="ver">버전 100</p>
   </div>
 </div>
 <!-- 마음 남기기: write over the flowing art, then keep it (locked with a 4-digit PIN, on this phone only) or let it flow away -->
@@ -978,7 +982,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 99';
+const VER_TXT='버전 100';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -2459,6 +2463,7 @@ swipe(document.getElementById('sheetHead'),-1,()=>openMenu(false));   // swipe d
 /* ================= 마음 남기기: write, then keep (locked, on this phone only) or let it flow away ================= */
 const mindEl=document.getElementById('mind'),mText=document.getElementById('mText'),mFly=document.getElementById('mFly'),mModal=document.getElementById('mModal'),mCard=document.getElementById('mCard'),mToastEl=document.getElementById('mToast');
 const writing=()=>document.body.classList.contains('mind');
+let mArmT=0;function mShow(list){mCard.classList.toggle('klist',!!list);mModal.classList.add('on');mCard.classList.add('arming');clearTimeout(mArmT);mArmT=setTimeout(()=>mCard.classList.remove('arming'),550);}
 const fmtDate=t=>{const d=new Date(t),h=d.getHours();return d.getFullYear()+'년 '+(d.getMonth()+1)+'월 '+d.getDate()+'일 '+(h<12?'AM':'PM')+' '+((h%12)||12)+':'+String(d.getMinutes()).padStart(2,'0');};   // e.g. 2026년 11월 9일 PM 7:46
 let mindToastT=0;function mToast(t){mToastEl.textContent=t;mToastEl.classList.add('on');clearTimeout(mindToastT);mindToastT=setTimeout(()=>mToastEl.classList.remove('on'),2200);}
 function openMind(){openMenu(false);document.body.classList.add('mind');mindEl.setAttribute('aria-hidden','false');document.getElementById('mDate').textContent=fmtDate(Date.now());
@@ -2554,7 +2559,7 @@ function askPin(kind,opt){opt=opt||{};return new Promise(done=>{let entered='',f
     const m=mindMeta();if(!m)return fin(null);
     try{const key=await pinKey(entered,m.salt,m.it);const ok=await decJ(key,{iv:m.iv,ct:new Uint8Array(m.ct)});if(ok&&ok.ok==='hand-flow')return fin(key);}catch(e){}
     shake('번호가 맞지 않아요');}
-  draw(...T());mModal.classList.add('on');});}
+  draw(...T());mShow();});}
 // the box has a lock pair: notes are sealed with the public half (no PIN needed to put one in),
 // and only the private half — itself locked by the PIN — can open them
 const RSA={name:'RSA-OAEP',hash:'SHA-256'};
@@ -2583,7 +2588,7 @@ async function changePin(){openMenu(false);if(!mindMeta())return mToast('아직 
   await mindWrapPriv(priv,r.key,r.salt,mindMeta().pub);mindKey=null;mToast('비밀번호를 바꿨어요');}
 // a small menu card (after writing, or confirmations)
 function mMenu(title,sub,items){return new Promise(done=>{mCard.innerHTML=`<h3>${title}</h3>${sub?`<p>${sub}</p>`:''}<div class="mbtns">${items.map((it,i)=>`<button class="mbtn ${it.cls||''}" data-i="${i}">${it.t}</button>`).join('')}</div>`;
-  mCard.querySelectorAll('[data-i]').forEach(b=>b.onclick=()=>{mModal.classList.remove('on');done(items[+b.dataset.i].v);});mModal.classList.add('on');});}
+  mCard.querySelectorAll('[data-i]').forEach(b=>b.onclick=()=>{mModal.classList.remove('on');done(items[+b.dataset.i].v);});mShow();});}
 
 // ---- keep ----
 document.getElementById('mKeep').onclick=async()=>{const text=mText.value.trim();if(!text){mText.focus();return mToast('먼저 마음을 적어 주세요');}
@@ -2645,7 +2650,7 @@ async function openKept(){let recs=[];try{recs=await dbDo('readonly',st=>st.getA
     b.parentNode.querySelector('.mtrash').onclick=async()=>{const ok=await mMenu('이 마음을 지울까요?','지우면 다시 꺼낼 수 없어요',[{t:'지우기',v:1,cls:'danger'},{t:'취소',v:0}]);
       if(ok){try{await dbDo('readwrite',st=>st.delete(it.r.id));}catch(e){}mToast('지웠어요');}openKept();};});
   document.getElementById('mLc').onclick=()=>{mModal.classList.remove('on');viewRestore();};
-  mModal.classList.add('on');}
+  mShow(true);}
 // reading a kept note: the mode it was written in comes back underneath (with its music), the words over it
 let viewPrevMode=null;
 function viewRestore(){if(viewPrevMode!=null){if(viewPrevMode!==mode)setMode(viewPrevMode);viewPrevMode=null;}}
@@ -2664,8 +2669,9 @@ function viewKept(it,back){const v=document.getElementById('mView');
     vT.value=text;foot();try{vT.blur();}catch(e){}mToast('고친 마음을 간직했어요');return true;};
   vSave.onclick=save;
   v.classList.add('on');v.setAttribute('aria-hidden','false');
-  const close=(again)=>{v.classList.remove('on');v.setAttribute('aria-hidden','true');document.body.classList.remove('mview');
-    if(again)back();else if(viewPrevMode!=null){if(viewPrevMode!==mode)setMode(viewPrevMode);viewPrevMode=null;}};
+  const close=async(again)=>{if(again){await back();}
+    v.classList.remove('on');v.setAttribute('aria-hidden','true');document.body.classList.remove('mview');
+    if(again);else if(viewPrevMode!=null){if(viewPrevMode!==mode)setMode(viewPrevMode);viewPrevMode=null;}};
   document.getElementById('vBack').onclick=async()=>{if(dirty()){try{vT.blur();}catch(e){}
       const v2=await mMenu('고친 마음을 간직할까요?','',[{t:'간직하기',v:'keep'},{t:'고치지 않고 닫기',v:'drop'},{t:'계속 고치기',v:'stay'}]);
       if(v2==='stay'){try{vT.focus();}catch(e){}return;}if(v2==='keep'&&!(await save()))return;}

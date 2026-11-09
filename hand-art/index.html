@@ -187,13 +187,14 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
       <button class="btn" id="fsBtn">전체화면</button>
       <button class="btn" id="install">앱 설치</button>
     </div>
+    <div class="row"><button class="btn" id="pinBtn">비밀번호 바꾸기</button></div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 93</p>
+    <p class="hint" id="ver">버전 94</p>
   </div>
 </div>
 <!-- 마음 남기기: write over the flowing art, then keep it (locked with a 4-digit PIN, on this phone only) or let it flow away -->
 <div id="mind" aria-hidden="true">
-  <div class="mhead"><button id="mBack" aria-label="닫기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button><span></span></div>
+  <div class="mhead"><button id="mBack" aria-label="닫기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button><button id="mShot" aria-label="이미지로 저장"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.6-2.2h6.8L17 8h3v11H4z"/><circle cx="12" cy="13.2" r="3.6"/></svg></button></div>
   <div class="mbody"><div id="mDate" class="mdate"></div><div class="mwrap"><textarea id="mText" placeholder="지금 마음을 적어 보세요" maxlength="3000"></textarea><div id="mFly"></div></div></div>
   <div class="mfoot"><button class="mbtn" id="mLet">흘려보내기</button><button class="mbtn" id="mKeep">간직하기</button></div>
 </div>
@@ -962,7 +963,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 93';
+const VER_TXT='버전 94';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -2448,6 +2449,11 @@ function openMind(){openMenu(false);document.body.classList.add('mind');mindEl.s
   for(const id of [...pointers.keys()])tUp(id);mFly.innerHTML='';mText.style.visibility='';setTimeout(()=>{try{mText.focus();}catch(e){}},250);}
 function closeMind(){document.body.classList.remove('mind');mindEl.setAttribute('aria-hidden','true');try{mText.blur();}catch(e){}}
 document.getElementById('mBack').onclick=closeMind;
+// capture while writing: the art + the words only (never the keyboard or the buttons)
+document.getElementById('mShot').onclick=async()=>{const text=mText.value.replace(/\s+$/,'');const art=await grabArt();await mindFont(text);
+  const pic=composeMind(art,text,Date.now());pic.toBlob(b=>{if(b)saveBlob(b,'jpg');},'image/jpeg',.92);
+  flashEl.style.zIndex='12';flashEl.style.transition='none';flashEl.style.opacity='.45';requestAnimationFrame(()=>{flashEl.style.transition='opacity .35s';flashEl.style.opacity='0';});
+  setTimeout(()=>{flashEl.style.zIndex='';},450);mToast('이미지로 저장했어요');};
 // keep the bottom buttons above the phone keyboard (the art underneath never resizes)
 function mindKb(){const vv=window.visualViewport;if(!vv)return;const kb=Math.max(0,innerHeight-vv.height-vv.offsetTop);
   const on=viewAng===0;mindEl.style.bottom=(on?kb:0)+'px';document.getElementById('mView').style.bottom=(on?kb:0)+'px';}
@@ -2497,12 +2503,12 @@ async function dbDo(mode,fn){const db=await mindDB();return new Promise((res,rej
   tx.oncomplete=()=>{res(q&&q.result);db.close();};tx.onerror=()=>{rej(tx.error);db.close();};});}
 document.addEventListener('visibilitychange',()=>{if(document.hidden)mindKey=null;});   // leaving the app locks the box again
 // PIN pad: 'create' (twice) or 'unlock' → resolves with the key, or null
-function askPin(kind){return new Promise(done=>{let entered='',first=null;
+function askPin(kind,opt){opt=opt||{};return new Promise(done=>{let entered='',first=null;
   const draw=(title,sub)=>{mCard.innerHTML=`<h3>${title}</h3><p>${sub}</p><div class="mdots">${[0,1,2,3].map(i=>`<i class="${i<entered.length?'f':''}"></i>`).join('')}</div>
     <div class="mpad">${[1,2,3,4,5,6,7,8,9].map(n=>`<button data-k="${n}">${n}</button>`).join('')}<button class="x" data-k="c">취소</button><button data-k="0">0</button><button class="x" data-k="b">⌫</button></div>
     ${kind==='unlock'?'<button class="mlink" data-k="f">비밀번호를 잊었어요</button>':''}`;
     mCard.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>press(b.dataset.k));};
-  const T=()=>kind==='create'?(first?['한 번 더 입력해 주세요','확인을 위해 같은 번호를 입력해 주세요']:['비밀번호 4자리를 만들어 주세요','간직한 마음은 이 휴대폰에만 잠겨 저장되고,<br>이 번호로만 꺼낼 수 있어요']):['비밀번호 4자리','간직한 마음을 여는 번호를 입력해 주세요'];
+  const T=()=>kind==='create'?(first?['한 번 더 입력해 주세요','확인을 위해 같은 번호를 입력해 주세요']:(opt.title?[opt.title,opt.sub||'']:['비밀번호 4자리를 만들어 주세요','간직한 마음은 이 휴대폰에만 잠겨 저장되고,<br>이 번호로만 꺼낼 수 있어요'])):(opt.title?[opt.title,opt.sub||'']:['비밀번호 4자리','간직한 마음을 여는 번호를 입력해 주세요']);
   const shake=msg=>{entered='';draw(...T());const d=mCard.querySelector('.mdots');d.classList.add('shake');if(msg)mCard.querySelector('p').innerHTML=msg;};
   const fin=k=>{mModal.classList.remove('on');done(k);};
   async function press(k){
@@ -2517,14 +2523,38 @@ function askPin(kind){return new Promise(done=>{let entered='',first=null;
     if(kind==='create'){
       if(!first){first=entered;entered='';return draw(...T());}
       if(first!==entered){first=null;return shake('번호가 달라요. 처음부터 다시 만들어 주세요');}
-      const salt=[...crypto.getRandomValues(new Uint8Array(16))],key=await pinKey(entered,salt),chk=await encJ(key,{ok:'hand-flow'});
-      try{localStorage.setItem(MIND_META,JSON.stringify({salt,it:MIND_ITERS,iv:chk.iv,ct:[...chk.ct]}));}catch(e){}
-      return fin(key);}
+      const salt=[...crypto.getRandomValues(new Uint8Array(16))],key=await pinKey(entered,salt);
+      return fin({key,salt});}
     const m=mindMeta();if(!m)return fin(null);
     try{const key=await pinKey(entered,m.salt,m.it);const ok=await decJ(key,{iv:m.iv,ct:new Uint8Array(m.ct)});if(ok&&ok.ok==='hand-flow')return fin(key);}catch(e){}
     shake('번호가 맞지 않아요');}
   draw(...T());mModal.classList.add('on');});}
-async function mindUnlock(){if(mindKey)return mindKey;const k=await askPin(mindMeta()?'unlock':'create');if(k)mindKey=k;return k;}
+// the box has a lock pair: notes are sealed with the public half (no PIN needed to put one in),
+// and only the private half — itself locked by the PIN — can open them
+const RSA={name:'RSA-OAEP',hash:'SHA-256'};
+async function mindWrapPriv(priv,pinK,salt,pub){const pk=new Uint8Array(await crypto.subtle.exportKey('pkcs8',priv)),iv=crypto.getRandomValues(new Uint8Array(12));
+  const pct=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv},pinK,pk)),chk=await encJ(pinK,{ok:'hand-flow'});
+  localStorage.setItem(MIND_META,JSON.stringify({v:2,salt,it:MIND_ITERS,iv:chk.iv,ct:[...chk.ct],pub,piv:[...iv],pct:[...pct]}));}
+async function mindSetup(pinK,salt){const kp=await crypto.subtle.generateKey({...RSA,modulusLength:2048,publicExponent:new Uint8Array([1,0,1])},true,['encrypt','decrypt']);
+  const pub=[...new Uint8Array(await crypto.subtle.exportKey('spki',kp.publicKey))];await mindWrapPriv(kp.privateKey,pinK,salt,pub);return kp.privateKey;}
+async function mindPriv(pinK){const m=mindMeta();
+  if(m&&m.pub){const pk=await crypto.subtle.decrypt({name:'AES-GCM',iv:new Uint8Array(m.piv)},pinK,new Uint8Array(m.pct));return crypto.subtle.importKey('pkcs8',pk,RSA,true,['decrypt']);}
+  const priv=await mindSetup(pinK,m.salt);await mindMigrate(pinK);return priv;}                     // an older box: give it the lock pair once
+async function sealNote(obj){const m=mindMeta(),pub=await crypto.subtle.importKey('spki',new Uint8Array(m.pub),RSA,false,['encrypt']);
+  const k=await crypto.subtle.generateKey({name:'AES-GCM',length:256},true,['encrypt']),r=await encJ(k,obj);
+  const wk=new Uint8Array(await crypto.subtle.encrypt({name:'RSA-OAEP'},pub,await crypto.subtle.exportKey('raw',k)));return {iv:r.iv,ct:r.ct,wk};}
+async function openNote(K,r){if(r.wk){const raw=await crypto.subtle.decrypt({name:'RSA-OAEP'},K.priv,r.wk);return decJ(await crypto.subtle.importKey('raw',raw,'AES-GCM',false,['decrypt']),r);}
+  return decJ(K.pin,r);}
+async function mindMigrate(pinK){let recs=[];try{recs=await dbDo('readonly',st=>st.getAll());}catch(e){}
+  for(const r of recs){if(r.wk)continue;try{const d=await decJ(pinK,r);const n=await sealNote(d);await dbDo('readwrite',st=>st.put({id:r.id,...n}));}catch(e){}}}
+async function mindUnlock(){if(mindKey)return mindKey;
+  if(!mindMeta()){const r=await askPin('create');if(!r)return null;const priv=await mindSetup(r.key,r.salt);return mindKey={pin:r.key,priv};}
+  const pin=await askPin('unlock');if(!pin)return null;return mindKey={pin,priv:await mindPriv(pin)};}
+async function changePin(){openMenu(false);if(!mindMeta())return mToast('아직 만든 비밀번호가 없어요');
+  const pin=await askPin('unlock',{title:'지금 비밀번호','sub':'먼저 지금 쓰는 번호를 입력해 주세요'});if(!pin)return;
+  const priv=await mindPriv(pin);await mindMigrate(pin);
+  const r=await askPin('create',{title:'새 비밀번호 4자리','sub':'새로 쓸 번호를 입력해 주세요'});if(!r)return;
+  await mindWrapPriv(priv,r.key,r.salt,mindMeta().pub);mindKey=null;mToast('비밀번호를 바꿨어요');}
 // a small menu card (after writing, or confirmations)
 function mMenu(title,sub,items){return new Promise(done=>{mCard.innerHTML=`<h3>${title}</h3>${sub?`<p>${sub}</p>`:''}<div class="mbtns">${items.map((it,i)=>`<button class="mbtn ${it.cls||''}" data-i="${i}">${it.t}</button>`).join('')}</div>`;
   mCard.querySelectorAll('[data-i]').forEach(b=>b.onclick=()=>{mModal.classList.remove('on');done(items[+b.dataset.i].v);});mModal.classList.add('on');});}
@@ -2532,9 +2562,9 @@ function mMenu(title,sub,items){return new Promise(done=>{mCard.innerHTML=`<h3>$
 // ---- keep ----
 document.getElementById('mKeep').onclick=async()=>{const text=mText.value.trim();if(!text){mText.focus();return mToast('먼저 마음을 적어 주세요');}
   try{mText.blur();}catch(e){}
-  const art=await grabArt();const key=await mindUnlock();if(!key)return;
+  const art=await grabArt();const m0=mindMeta();if(!m0||!m0.pub){if(!await mindUnlock())return;}   // the PIN is asked only the very first time (or once to upgrade an older box)
   const t=Date.now();
-  try{const rec=await encJ(key,{text,t,mode});await dbDo('readwrite',st=>st.put({id:t,iv:rec.iv,ct:rec.ct}));}   // only the words (locked) and which mode it was written in
+  try{const n=await sealNote({text,t,mode});await dbDo('readwrite',st=>st.put({id:t,...n}));}   // only the words (sealed) and which mode it was written in
   catch(e){console.warn(e);return mToast('저장하지 못했어요');}
   await mindFont(text);const pic=composeMind(art,text,t);mText.value='';
   for(;;){const v=await mMenu('마음을 간직했어요','이 휴대폰에만, 비밀번호로 잠겨 있어요',[{t:'공유하기',v:'share',cls:'solid'},{t:'간직한 마음 보기',v:'list'},{t:'닫기',v:'close'}]);
@@ -2580,7 +2610,7 @@ async function openKept(){let recs=[];try{recs=await dbDo('readonly',st=>st.getA
   if(!recs||!recs.length)return mToast('아직 간직한 마음이 없어요');
   const key=await mindUnlock();if(!key)return;
   for(const r of recs)if(r.img){delete r.img;try{await dbDo('readwrite',st=>st.put(r));}catch(e){}}   // older notes carried a picture: keep only the words now
-  const items=[];for(const r of recs.sort((a,b)=>b.id-a.id)){try{items.push({r,d:await decJ(key,r)});}catch(e){}}
+  const items=[];for(const r of recs.sort((a,b)=>b.id-a.id)){try{items.push({r,d:await openNote(key,r)});}catch(e){}}
   mCard.innerHTML=`<h3>간직한 마음</h3><p>${items.length}개 · 이 휴대폰에만 있어요</p><div class="mlist">${items.map((it,i)=>{const m=it.d.mode||'paint';
       return `<button class="mitem" data-i="${i}"><i class="mbadge" style="background:${MODE_TINT[m]||'#888'}">${(MODE_NAME_K[m]||m)[0]}</i><div><b>${fmtDate(it.d.t)} · ${MODE_NAME_K[m]||m}</b><span></span></div></button>`;}).join('')}</div>
     <div class="mbtns"><button class="mbtn" id="mLc">닫기</button></div>`;
@@ -2604,6 +2634,7 @@ document.getElementById('vDel').onclick=async()=>{const ok=await mMenu('이 마�
     if(!ok)return;try{await dbDo('readwrite',st=>st.delete(it.r.id));}catch(e){}close(false);mToast('지웠어요');
     try{const left=await dbDo('readonly',st=>st.count());if(left)back();}catch(e){}};}
 capPress(document.getElementById('penBtn'),openMind);
+document.getElementById('pinBtn').onclick=changePin;
 capPress(document.getElementById('bookBtn'),()=>{openMenu(false);openKept();});
 
 // PWA install

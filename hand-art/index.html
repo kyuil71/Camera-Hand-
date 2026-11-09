@@ -208,7 +208,7 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
     </div>
     <div class="row"><button class="btn" id="pinBtn">비밀번호 바꾸기</button></div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 100</p>
+    <p class="hint" id="ver">버전 101</p>
   </div>
 </div>
 <!-- 마음 남기기: write over the flowing art, then keep it (locked with a 4-digit PIN, on this phone only) or let it flow away -->
@@ -982,7 +982,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 100';
+const VER_TXT='버전 101';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -2013,7 +2013,13 @@ function tDown(id,x,y,t,virt){lastAct=performance.now();pointers.set(id,{x,y,t,c
   else if(mode==='ink'&&flow>.3){const p=pointers.get(id);p.ink=inkNext++;if(inkA&&!virt)inkDrop(p.x,p.y,p.ink,1);}}   // each finger that lands = one 퐁당
 function tMove(id,x,y,t){const p=pointers.get(id);if(!p)return;lastAct=performance.now();
   if(mode==='halo'&&halo&&halo.grab&&halo.grab.id===id){haloMove(id,x,y,t);p.x=x;p.y=y;p.t=t;return;}   // holding the ring: it carries the smoke itself
-  const dtR=Math.min(Math.max((t-p.t)/1000,.008),.1);feelFinger(Math.hypot((x-p.x)*aspect,y-p.y)/dtR);
+  const dtR=Math.min(Math.max((t-p.t)/1000,.008),.1);
+  const vp=p.virt&&mode==='paint';   // a camera fingertip in Pigment: made to feel like a finger on the glass
+  if(vp){const ds=Math.min(.1,Math.max(.005,(t-(p.ft??p.t))/1000));p.ft=t;const a=1-Math.exp(-ds/.09);   // smooth out the tracking tremble (≈90 ms)
+    p.fx=(p.fx??p.x)+(x-(p.fx??p.x))*a;p.fy=(p.fy??p.y)+(y-(p.fy??p.y))*a;x=p.fx;y=p.fy;
+    const dd=Math.hypot((x-p.x)*aspect,y-p.y);p.vs=(p.vs||0)*.7+.3*dd/ds;
+    if(dd<.004)return;}              // a fingertip held (nearly) still draws nothing — like a resting touch, which sends no moves
+  feelFinger(Math.hypot((x-p.x)*aspect,y-p.y)/dtR*(vp?.5:1));
   if(mode==='ink'){if(inkA&&flow>.3){const sp=Math.hypot((x-p.x)*aspect,y-p.y)/dtR;   // a quick stroke is a thinner, drier line — like a real brush
       const rw=Math.max(.45,Math.min(1.25,1.25-sp*.35));p.ivx=(p.ivx||0)*.6+(x-p.x)/dtR*.4;p.ivy=(p.ivy||0)*.6+(y-p.y)/dtR*.4;
       if(!p.ib)p.ib=[{x:p.x,y:p.y,w:rw}];p.ib.push({x,y,w:rw});p.imoved=(p.imoved||0)+Math.hypot((x-p.x)*aspect,y-p.y);
@@ -2021,7 +2027,9 @@ function tMove(id,x,y,t){const p=pointers.get(id);if(!p)return;lastAct=performan
       let L=0;for(let i=1;i<p.ib.length;i++)L+=Math.hypot((p.ib[i].x-p.ib[i-1].x)*aspect,p.ib[i].y-p.ib[i-1].y);
       while(p.ib.length>2&&L>INK_LAG){const a=p.ib[0],b=p.ib[1];inkStroke(a.x,a.y,b.x,b.y,p.ink||0,1,a.w,b.w);L-=Math.hypot((b.x-a.x)*aspect,b.y-a.y);p.ib.shift();}}}
   else if(mode==='water'&&!dipMode)wakeStep('t'+id,x,y,Math.hypot((x-p.x)*aspect,y-p.y)/dtR,t);
-  else if(mode!=='water')queue.push({x,y,vx:(x-p.x)/dtR,vy:(y-p.y)/dtR,set:.85,c:p.c,r:.0042,s:.9});p.x=x;p.y=y;p.t=t;
+  else if(mode!=='water'){if(vp){let n=0;for(const q of pointers.values())if(q.virt)n++;const k=Math.max(.55,1/Math.sqrt(n||1));   // several fingertips share the push, as one hand
+      queue.push({x,y,vx:(x-p.x)/dtR*.7,vy:(y-p.y)/dtR*.7,set:.85*k,c:p.c,r:.0042,s:.9*k});}
+    else queue.push({x,y,vx:(x-p.x)/dtR,vy:(y-p.y)/dtR,set:.85,c:p.c,r:.0042,s:.9});}p.x=x;p.y=y;p.t=t;
   if(dipMode&&!p.virt)dipMove('t'+id,x,y);}
 function tUp(id){if(mode==='halo')haloUp(id);
   {const p=pointers.get(id);if(p&&mode==='ink'&&inkA&&p.ib)inkLift(p);}
@@ -2278,7 +2286,8 @@ function frame(now){
   if(Math.random()<dt*.15)colorTick++;
   // pointing jets: paint streams out of the fingertip in the pointed direction
   for(const h of handInfo){const p=h.point;if(!p)continue;
-    const js=1/Math.max(timeScale,.35);
+    let js=1/Math.max(timeScale,.35);
+    if(h.W){const vq=pointers.get('v'+(h.lm.slot??0)+'1');const sp=vq?vq.vs||0:0;if(sp>.12)continue;js*=.45;}
     if(flow>.3){splatVel(p.x,p.y,p.dx*1500*js*dt*60*.5,p.dy*1500*js*dt*60*.5,.0032);
       for(let k=1;k<=3;k++)splatVel(p.x+p.dx/aspect*.04*k,p.y+p.dy*.04*k,p.dx*(1250-k*180)*js*dt*30,p.dy*(1250-k*180)*js*dt*30,.0042);}
     splatDye(p.x,p.y,pickColor(p.c),.0024,.45,.55);

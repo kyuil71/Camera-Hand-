@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <style>
-:root{--bg:#000;--glass:rgba(12,20,38,.62);--line:rgba(255,255,255,.14);--ink:#f4efe4;--mute:rgba(244,239,228,.66);--accent:#f7c844}
+:root{--mtxt:#fff;--bg:#000;--glass:rgba(12,20,38,.62);--line:rgba(255,255,255,.14);--ink:#f4efe4;--mute:rgba(244,239,228,.66);--accent:#f7c844}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;background:var(--bg);color:var(--ink);font:16px/1.4 -apple-system,"Pretendard","Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
 #app{position:fixed;left:50%;top:50%;width:100vw;height:100vh;overflow:hidden;transform:translate(-50%,-50%);transform-origin:50% 50%}
@@ -90,14 +90,14 @@ body:not(.halo) #haloColRow,body:not(.halo) #beadRow{display:none}
 body.mind #mind{display:flex}
 body.mind #grab,body.mind #cap,body.mind .dock{display:none}
 .mhead{display:flex;align-items:center;justify-content:space-between;padding:calc(env(safe-area-inset-top) + 8px) 8px 4px}
-.mhead button{width:52px;height:52px;border:0;background:transparent;color:#fff;display:flex;align-items:center;justify-content:center}
-.mhead svg{width:28px;height:28px;filter:drop-shadow(0 1px 4px rgba(0,0,0,.4))}
+.mhead button{width:52px;height:52px;border:0;background:transparent;color:var(--mtxt);display:flex;align-items:center;justify-content:center}
+.mhead svg{width:28px;height:28px;filter:drop-shadow(0 1px 3px rgba(0,0,0,.35)) drop-shadow(0 2px 8px rgba(0,0,0,.35))}   /* the same white and the same soft shadow as the letters */
 #mMusic.off{opacity:.45}
 .mtitle{font-size:22px;font-weight:600;color:#fff;letter-spacing:.02em;text-shadow:0 1px 10px rgba(0,0,0,.45)}
 .mbody{flex:1;display:flex;flex-direction:column;padding:28px 28px 0;min-height:0}
 #mind .mdate,#mView .mdate{font-family:"Gowun Batang","Noto Serif KR","Nanum Myeongjo","Noto Serif CJK KR",serif;color:rgba(255,255,255,.78);font-size:16px;margin-bottom:16px;text-shadow:0 1px 6px rgba(0,0,0,.5)}
 .mwrap{position:relative;flex:1;min-height:0}
-#mText,#mFly{position:absolute;inset:0;width:100%;height:100%;padding:0;border:0;outline:0;resize:none;background:transparent;color:#fff;
+#mText,#mFly{position:absolute;inset:0;width:100%;height:100%;padding:0;border:0;outline:0;resize:none;background:transparent;color:var(--mtxt);
   font:400 25px/1.8 "Gowun Batang","Noto Serif KR","Nanum Myeongjo","Noto Serif CJK KR",serif;letter-spacing:.01em;
   text-shadow:0 1px 3px rgba(0,0,0,.35),0 2px 16px rgba(0,0,0,.35);white-space:pre-wrap;word-break:keep-all;overflow-wrap:anywhere;caret-color:#fff}
 #mText{overflow:auto}
@@ -138,7 +138,7 @@ body.mind #grab,body.mind #cap,body.mind .dock{display:none}
 #mView .mveil{position:absolute;inset:0;background:rgba(0,0,0,.68)}
 body.mview #grab,body.mview #cap,body.mview .dock{display:none}
 #mView > *:not(.mveil){position:relative}
-#mView .mread{flex:1;overflow:auto;color:#fff;font:400 25px/1.8 "Gowun Batang","Noto Serif KR","Nanum Myeongjo","Noto Serif CJK KR",serif;white-space:pre-wrap;word-break:keep-all;overflow-wrap:anywhere;
+#mView .mread{flex:1;overflow:auto;color:var(--mtxt);font:400 25px/1.8 "Gowun Batang","Noto Serif KR","Nanum Myeongjo","Noto Serif CJK KR",serif;white-space:pre-wrap;word-break:keep-all;overflow-wrap:anywhere;
   text-shadow:0 1px 3px rgba(0,0,0,.35),0 2px 16px rgba(0,0,0,.35);user-select:text;-webkit-user-select:text}
 #mToast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 96px);transform:translate(-50%,20px);z-index:12;opacity:0;pointer-events:none;
   background:rgba(18,26,36,.86);color:#fff;border-radius:20px;padding:11px 18px;font-size:15px;transition:opacity .3s,transform .3s;white-space:nowrap}
@@ -189,17 +189,17 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
     </div>
     <div class="row"><button class="btn" id="pinBtn">비밀번호 바꾸기</button></div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 95</p>
+    <p class="hint" id="ver">버전 96</p>
   </div>
 </div>
 <!-- 마음 남기기: write over the flowing art, then keep it (locked with a 4-digit PIN, on this phone only) or let it flow away -->
 <div id="mind" aria-hidden="true">
-  <div class="mhead"><button id="mBack" aria-label="닫기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button><button id="mShot" aria-label="이미지로 저장"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.6-2.2h6.8L17 8h3v11H4z"/><circle cx="12" cy="13.2" r="3.6"/></svg></button></div>
+  <div class="mhead"><button id="mBack" aria-label="닫기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button><button id="mShot" aria-label="이미지로 저장"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.6-2.2h6.8L17 8h3v11H4z"/><circle cx="12" cy="13.2" r="3.6"/></svg></button></div>
   <div class="mbody"><div id="mDate" class="mdate"></div><div class="mwrap"><textarea id="mText" placeholder="지금 마음을 적어 보세요" maxlength="3000"></textarea><div id="mFly"></div></div></div>
   <div class="mfoot"><button class="mbtn" id="mLet">흘려보내기</button><button class="mbtn" id="mKeep">간직하기</button></div>
 </div>
 <div id="mView" aria-hidden="true"><div class="mveil"></div>
-  <div class="mhead"><button id="vBack" aria-label="닫기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button><span></span></div>
+  <div class="mhead"><button id="vBack" aria-label="닫기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button><button id="vShot" aria-label="이미지로 저장"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.6-2.2h6.8L17 8h3v11H4z"/><circle cx="12" cy="13.2" r="3.6"/></svg></button></div>
   <div class="mbody"><div id="vDate" class="mdate"></div><div class="mread" id="vText"></div></div>
   <div class="mfoot"><button class="mbtn" id="vDel">지우기</button><button class="mbtn" id="vShare">공유하기</button></div>
 </div>
@@ -963,7 +963,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 95';
+const VER_TXT='버전 96';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -2452,8 +2452,9 @@ document.getElementById('mBack').onclick=closeMind;
 // capture while writing: the art + the words only (never the keyboard or the buttons)
 document.getElementById('mShot').onclick=async()=>{const text=mText.value.replace(/\s+$/,'');const art=await grabArt();await mindFont(text);
   const pic=composeMind(art,text,Date.now());pic.toBlob(b=>{if(b)saveBlob(b,'jpg');},'image/jpeg',.92);
-  flashEl.style.zIndex='12';flashEl.style.transition='none';flashEl.style.opacity='.45';requestAnimationFrame(()=>{flashEl.style.transition='opacity .35s';flashEl.style.opacity='0';});
-  setTimeout(()=>{flashEl.style.zIndex='';},450);mToast('이미지로 저장했어요');};
+  mindFlash();mToast('이미지로 저장했어요');};
+function mindFlash(){flashEl.style.zIndex='12';flashEl.style.transition='none';flashEl.style.opacity='.45';requestAnimationFrame(()=>{flashEl.style.transition='opacity .35s';flashEl.style.opacity='0';});
+  setTimeout(()=>{flashEl.style.zIndex='';},450);}
 // keep the bottom buttons above the phone keyboard (the art underneath never resizes)
 function mindKb(){const vv=window.visualViewport;if(!vv)return;const kb=Math.max(0,innerHeight-vv.height-vv.offsetTop);
   const on=viewAng===0;mindEl.style.bottom=(on?kb:0)+'px';document.getElementById('mView').style.bottom=(on?kb:0)+'px';}
@@ -2628,6 +2629,7 @@ function viewKept(it,back){const v=document.getElementById('mView');
   const close=(again)=>{v.classList.remove('on');v.setAttribute('aria-hidden','true');document.body.classList.remove('mview');
     if(again)back();else if(viewPrevMode!=null){if(viewPrevMode!==mode)setMode(viewPrevMode);viewPrevMode=null;}};
   document.getElementById('vBack').onclick=()=>close(false);
+  document.getElementById('vShot').onclick=async()=>{const art=await grabArt();await mindFont(it.d.text);composeMind(art,it.d.text,it.d.t).toBlob(b=>{if(b)saveBlob(b,'jpg');},'image/jpeg',.92);mindFlash();mToast('이미지로 저장했어요');};
   document.getElementById('vShare').onclick=async()=>{const art=await grabArt();await mindFont(it.d.text);await shareMind(composeMind(art,it.d.text,it.d.t),it.d.text);};
 document.getElementById('vDel').onclick=async()=>{const ok=await mMenu('이 마음을 지울까요?','지우면 다시 꺼낼 수 없어요',[{t:'지우기',v:1,cls:'danger'},{t:'취소',v:0}]);
     if(!ok)return;try{await dbDo('readwrite',st=>st.delete(it.r.id));}catch(e){}close(false);mToast('지웠어요');

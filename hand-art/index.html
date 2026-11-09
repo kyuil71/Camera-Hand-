@@ -86,7 +86,7 @@ body:not(.halo) #haloColRow,body:not(.halo) #beadRow{display:none}
 .hint b{color:var(--ink);font-weight:600}
 /* ---- 마음 남기기 ---- */
 #mind{position:fixed;left:0;right:0;top:0;bottom:0;z-index:9;display:none;flex-direction:column;touch-action:auto;user-select:text;-webkit-user-select:text;
-  background:linear-gradient(rgba(0,0,0,.30),rgba(0,0,0,.10) 34%,rgba(0,0,0,.10) 70%,rgba(0,0,0,.30))}
+  background:rgba(0,0,0,.68)}                                  /* the art keeps flowing underneath at about 30% */
 body.mind #mind{display:flex}
 body.mind #grab,body.mind #cap,body.mind .dock{display:none}
 .mhead{display:flex;align-items:center;justify-content:space-between;padding:calc(env(safe-area-inset-top) + 8px) 8px 4px}
@@ -130,12 +130,13 @@ body.mind #grab,body.mind #cap,body.mind .dock{display:none}
 .mlink{border:0;background:transparent;color:rgba(255,255,255,.66);font:inherit;font-size:15px;padding:10px;text-decoration:underline;text-underline-offset:3px}
 .mlist{display:flex;flex-direction:column;gap:10px;text-align:left;margin-bottom:14px}
 .mitem{display:flex;gap:12px;align-items:center;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.06);border-radius:16px;padding:8px;color:#fff;font:inherit;text-align:left}
-.mitem img{width:56px;height:56px;border-radius:12px;object-fit:cover;flex:0 0 auto}
+.mitem .mbadge{width:48px;height:48px;border-radius:14px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-style:normal;font-weight:700;font-size:20px;color:rgba(255,255,255,.92);box-shadow:inset 0 0 0 1px rgba(255,255,255,.25)}
 .mitem b{display:block;font-size:13px;font-weight:500;color:rgba(255,255,255,.65);margin-bottom:3px}
 .mitem span{display:block;font-size:16px;line-height:1.35;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
-#mView{position:fixed;inset:0;z-index:10;display:none;flex-direction:column;background:#000 center/cover no-repeat;touch-action:auto}
+#mView{position:fixed;inset:0;z-index:10;display:none;flex-direction:column;background:transparent;touch-action:auto}
 #mView.on{display:flex}
-#mView .mveil{position:absolute;inset:0;background:linear-gradient(rgba(0,0,0,.35),rgba(0,0,0,.12) 35%,rgba(0,0,0,.12) 70%,rgba(0,0,0,.40))}
+#mView .mveil{position:absolute;inset:0;background:rgba(0,0,0,.68)}
+body.mview #grab,body.mview #cap,body.mview .dock{display:none}
 #mView > *:not(.mveil){position:relative}
 #mView .mread{flex:1;overflow:auto;color:#fff;font:400 25px/1.8 "Gowun Batang","Noto Serif KR","Nanum Myeongjo","Noto Serif CJK KR",serif;white-space:pre-wrap;word-break:keep-all;overflow-wrap:anywhere;
   text-shadow:0 1px 3px rgba(0,0,0,.35),0 2px 16px rgba(0,0,0,.35);user-select:text;-webkit-user-select:text}
@@ -187,19 +188,17 @@ body.mind #grab,body.mind #cap,body.mind .dock{display:none}
       <button class="btn" id="install">앱 설치</button>
     </div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 92</p>
+    <p class="hint" id="ver">버전 93</p>
   </div>
 </div>
 <!-- 마음 남기기: write over the flowing art, then keep it (locked with a 4-digit PIN, on this phone only) or let it flow away -->
 <div id="mind" aria-hidden="true">
-  <div class="mhead"><button id="mBack" aria-label="닫기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
-    <div class="mtitle">마음 남기기</div>
-    <button id="mMusic" aria-label="음악"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg></button></div>
+  <div class="mhead"><button id="mBack" aria-label="닫기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button><span></span></div>
   <div class="mbody"><div id="mDate" class="mdate"></div><div class="mwrap"><textarea id="mText" placeholder="지금 마음을 적어 보세요" maxlength="3000"></textarea><div id="mFly"></div></div></div>
   <div class="mfoot"><button class="mbtn" id="mLet">흘려보내기</button><button class="mbtn" id="mKeep">간직하기</button></div>
 </div>
 <div id="mView" aria-hidden="true"><div class="mveil"></div>
-  <div class="mhead"><button id="vBack" aria-label="닫기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button><div class="mtitle">간직한 마음</div><span style="width:52px"></span></div>
+  <div class="mhead"><button id="vBack" aria-label="닫기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button><span></span></div>
   <div class="mbody"><div id="vDate" class="mdate"></div><div class="mread" id="vText"></div></div>
   <div class="mfoot"><button class="mbtn" id="vDel">지우기</button><button class="mbtn" id="vShare">공유하기</button></div>
 </div>
@@ -963,7 +962,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 92';
+const VER_TXT='버전 93';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -2446,11 +2445,9 @@ const writing=()=>document.body.classList.contains('mind');
 const fmtDate=t=>{const d=new Date(t);return d.getFullYear()+'년 '+(d.getMonth()+1)+'월 '+d.getDate()+'일';};
 let mindToastT=0;function mToast(t){mToastEl.textContent=t;mToastEl.classList.add('on');clearTimeout(mindToastT);mindToastT=setTimeout(()=>mToastEl.classList.remove('on'),2200);}
 function openMind(){openMenu(false);document.body.classList.add('mind');mindEl.setAttribute('aria-hidden','false');document.getElementById('mDate').textContent=fmtDate(Date.now());
-  for(const id of [...pointers.keys()])tUp(id);mFly.innerHTML='';mText.style.visibility='';mindMusicBtn();setTimeout(()=>{try{mText.focus();}catch(e){}},250);}
+  for(const id of [...pointers.keys()])tUp(id);mFly.innerHTML='';mText.style.visibility='';setTimeout(()=>{try{mText.focus();}catch(e){}},250);}
 function closeMind(){document.body.classList.remove('mind');mindEl.setAttribute('aria-hidden','true');try{mText.blur();}catch(e){}}
-function mindMusicBtn(){document.getElementById('mMusic').classList.toggle('off',!musicOn);}
 document.getElementById('mBack').onclick=closeMind;
-document.getElementById('mMusic').onclick=()=>{setMusic(!musicOn);mindMusicBtn();};
 // keep the bottom buttons above the phone keyboard (the art underneath never resizes)
 function mindKb(){const vv=window.visualViewport;if(!vv)return;const kb=Math.max(0,innerHeight-vv.height-vv.offsetTop);
   const on=viewAng===0;mindEl.style.bottom=(on?kb:0)+'px';document.getElementById('mView').style.bottom=(on?kb:0)+'px';}
@@ -2536,8 +2533,8 @@ function mMenu(title,sub,items){return new Promise(done=>{mCard.innerHTML=`<h3>$
 document.getElementById('mKeep').onclick=async()=>{const text=mText.value.trim();if(!text){mText.focus();return mToast('먼저 마음을 적어 주세요');}
   try{mText.blur();}catch(e){}
   const art=await grabArt();const key=await mindUnlock();if(!key)return;
-  const t=Date.now(),img=await new Promise(r=>art.toBlob(r,'image/jpeg',.86));
-  try{const rec=await encJ(key,{text,t,mode});await dbDo('readwrite',st=>st.put({id:t,iv:rec.iv,ct:rec.ct,img}));}
+  const t=Date.now();
+  try{const rec=await encJ(key,{text,t,mode});await dbDo('readwrite',st=>st.put({id:t,iv:rec.iv,ct:rec.ct}));}   // only the words (locked) and which mode it was written in
   catch(e){console.warn(e);return mToast('저장하지 못했어요');}
   await mindFont(text);const pic=composeMind(art,text,t);mText.value='';
   for(;;){const v=await mMenu('마음을 간직했어요','이 휴대폰에만, 비밀번호로 잠겨 있어요',[{t:'공유하기',v:'share',cls:'solid'},{t:'간직한 마음 보기',v:'list'},{t:'닫기',v:'close'}]);
@@ -2577,26 +2574,33 @@ function mindDissolve(text){return new Promise(done=>{
     if(k>=6)clearInterval(fx);},420);
   setTimeout(done,3300);});}
 // ---- the kept ones ----
+const MODE_NAME_K={paint:'Pigment',water:'Ripple',wave:'Wave',light:'Aurora',silk:'Silk',cloud:'Cloud',ink:'Ink',halo:'Halo'};
+const MODE_TINT={paint:'#e85d8a',water:'#2fa4c4',wave:'#2b7fd6',light:'#7a5cff',silk:'#d79ad0',cloud:'#9fb6d8',ink:'#3a3a3a',halo:'#e8e4f0'};
 async function openKept(){let recs=[];try{recs=await dbDo('readonly',st=>st.getAll());}catch(e){}
   if(!recs||!recs.length)return mToast('아직 간직한 마음이 없어요');
   const key=await mindUnlock();if(!key)return;
+  for(const r of recs)if(r.img){delete r.img;try{await dbDo('readwrite',st=>st.put(r));}catch(e){}}   // older notes carried a picture: keep only the words now
   const items=[];for(const r of recs.sort((a,b)=>b.id-a.id)){try{items.push({r,d:await decJ(key,r)});}catch(e){}}
-  mCard.innerHTML=`<h3>간직한 마음</h3><p>${items.length}개 · 이 휴대폰에만 있어요</p><div class="mlist">${items.map((it,i)=>`<button class="mitem" data-i="${i}"><img alt="" data-i="${i}"><div><b>${fmtDate(it.d.t)}</b><span></span></div></button>`).join('')}</div>
+  mCard.innerHTML=`<h3>간직한 마음</h3><p>${items.length}개 · 이 휴대폰에만 있어요</p><div class="mlist">${items.map((it,i)=>{const m=it.d.mode||'paint';
+      return `<button class="mitem" data-i="${i}"><i class="mbadge" style="background:${MODE_TINT[m]||'#888'}">${(MODE_NAME_K[m]||m)[0]}</i><div><b>${fmtDate(it.d.t)} · ${MODE_NAME_K[m]||m}</b><span></span></div></button>`;}).join('')}</div>
     <div class="mbtns"><button class="mbtn" id="mLc">닫기</button></div>`;
-  const urls=[];mCard.querySelectorAll('.mitem').forEach((b,i)=>{const it=items[i];b.querySelector('span').textContent=it.d.text.split('\n')[0];
-    if(it.r.img){const u=URL.createObjectURL(it.r.img);urls.push(u);b.querySelector('img').src=u;}
+  mCard.querySelectorAll('.mitem').forEach((b,i)=>{const it=items[i];b.querySelector('span').textContent=it.d.text.split('\n')[0];
     b.onclick=()=>{mModal.classList.remove('on');viewKept(it,()=>openKept());};});
-  document.getElementById('mLc').onclick=()=>{mModal.classList.remove('on');urls.forEach(u=>URL.revokeObjectURL(u));};
+  document.getElementById('mLc').onclick=()=>mModal.classList.remove('on');
   mModal.classList.add('on');}
-function viewKept(it,back){const v=document.getElementById('mView');let url=null;
-  if(it.r.img){url=URL.createObjectURL(it.r.img);v.style.backgroundImage=`url(${url})`;}else v.style.backgroundImage='';
+// reading a kept note: the mode it was written in comes back underneath (with its music), the words over it
+let viewPrevMode=null;
+function viewKept(it,back){const v=document.getElementById('mView');
+  if(viewPrevMode==null)viewPrevMode=mode;
+  const m=it.d.mode;if(m&&m!==mode&&MODE_NAME_K[m])setMode(m);
+  document.body.classList.add('mview');for(const id of [...pointers.keys()])tUp(id);
   document.getElementById('vDate').textContent=fmtDate(it.d.t);document.getElementById('vText').textContent=it.d.text;
   v.classList.add('on');v.setAttribute('aria-hidden','false');
-  const close=(again)=>{v.classList.remove('on');v.setAttribute('aria-hidden','true');if(url)URL.revokeObjectURL(url);if(again)back();};
-  document.getElementById('vBack').onclick=()=>close(true);
-  document.getElementById('vShare').onclick=async()=>{let art;if(it.r.img){const bm=await createImageBitmap(it.r.img);art=document.createElement('canvas');art.width=bm.width;art.height=bm.height;art.getContext('2d').drawImage(bm,0,0);}
-    else art=await grabArt();await mindFont(it.d.text);await shareMind(composeMind(art,it.d.text,it.d.t),it.d.text);};
-  document.getElementById('vDel').onclick=async()=>{const ok=await mMenu('이 마음을 지울까요?','지우면 다시 꺼낼 수 없어요',[{t:'지우기',v:1,cls:'danger'},{t:'취소',v:0}]);
+  const close=(again)=>{v.classList.remove('on');v.setAttribute('aria-hidden','true');document.body.classList.remove('mview');
+    if(again)back();else if(viewPrevMode!=null){if(viewPrevMode!==mode)setMode(viewPrevMode);viewPrevMode=null;}};
+  document.getElementById('vBack').onclick=()=>close(false);
+  document.getElementById('vShare').onclick=async()=>{const art=await grabArt();await mindFont(it.d.text);await shareMind(composeMind(art,it.d.text,it.d.t),it.d.text);};
+document.getElementById('vDel').onclick=async()=>{const ok=await mMenu('이 마음을 지울까요?','지우면 다시 꺼낼 수 없어요',[{t:'지우기',v:1,cls:'danger'},{t:'취소',v:0}]);
     if(!ok)return;try{await dbDo('readwrite',st=>st.delete(it.r.id));}catch(e){}close(false);mToast('지웠어요');
     try{const left=await dbDo('readonly',st=>st.count());if(left)back();}catch(e){}};}
 capPress(document.getElementById('penBtn'),openMind);

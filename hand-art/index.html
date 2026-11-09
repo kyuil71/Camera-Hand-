@@ -6,6 +6,7 @@
 <title>Hand Flow Art</title>
 <meta name="theme-color" content="#000000">
 <link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="fonts/gowun-batang.css">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -20,7 +21,7 @@ canvas#fx{pointer-events:none}
 .bar{display:block;width:56px;height:5px;border-radius:3px;background:rgba(190,196,206,.55);transition:background .35s,box-shadow .35s}
 body.detect .bar{background:#fff;box-shadow:0 0 12px rgba(255,255,255,.95)}
 #cap{position:fixed;top:env(safe-area-inset-top);right:env(safe-area-inset-right);z-index:8;display:flex;gap:0;align-items:center;padding:2px 2px 10px 10px}
-#cap button{width:68px;height:68px;border:0;background:transparent;padding:0;color:#fff;touch-action:none;-webkit-tap-highlight-color:transparent;
+#cap button{width:62px;height:68px;border:0;background:transparent;padding:0;color:#fff;touch-action:none;-webkit-tap-highlight-color:transparent;
   display:flex;align-items:center;justify-content:center;cursor:pointer}            /* big invisible touch area around each round button */
 #cap .ring{width:48px;height:48px;border-radius:24px;border:1px solid rgba(255,255,255,.3);background:rgba(10,12,16,.40);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
   display:flex;align-items:center;justify-content:center;transition:transform .12s}
@@ -94,10 +95,10 @@ body.mind #grab,body.mind #cap,body.mind .dock{display:none}
 #mMusic.off{opacity:.45}
 .mtitle{font-size:22px;font-weight:600;color:#fff;letter-spacing:.02em;text-shadow:0 1px 10px rgba(0,0,0,.45)}
 .mbody{flex:1;display:flex;flex-direction:column;padding:28px 28px 0;min-height:0}
-#mind .mdate,#mView .mdate{color:rgba(255,255,255,.78);font-size:16px;margin-bottom:16px;text-shadow:0 1px 6px rgba(0,0,0,.5)}
+#mind .mdate,#mView .mdate{font-family:"Gowun Batang","Noto Serif KR","Nanum Myeongjo","Noto Serif CJK KR",serif;color:rgba(255,255,255,.78);font-size:16px;margin-bottom:16px;text-shadow:0 1px 6px rgba(0,0,0,.5)}
 .mwrap{position:relative;flex:1;min-height:0}
 #mText,#mFly{position:absolute;inset:0;width:100%;height:100%;padding:0;border:0;outline:0;resize:none;background:transparent;color:#fff;
-  font:400 25px/1.75 -apple-system,"Pretendard","Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif;letter-spacing:.01em;
+  font:400 25px/1.8 "Gowun Batang","Noto Serif KR","Nanum Myeongjo","Noto Serif CJK KR",serif;letter-spacing:.01em;
   text-shadow:0 1px 3px rgba(0,0,0,.35),0 2px 16px rgba(0,0,0,.35);white-space:pre-wrap;word-break:keep-all;overflow-wrap:anywhere;caret-color:#fff}
 #mText{overflow:auto}
 #mText::placeholder{color:rgba(255,255,255,.55)}
@@ -136,7 +137,7 @@ body.mind #grab,body.mind #cap,body.mind .dock{display:none}
 #mView.on{display:flex}
 #mView .mveil{position:absolute;inset:0;background:linear-gradient(rgba(0,0,0,.35),rgba(0,0,0,.12) 35%,rgba(0,0,0,.12) 70%,rgba(0,0,0,.40))}
 #mView > *:not(.mveil){position:relative}
-#mView .mread{flex:1;overflow:auto;color:#fff;font:400 25px/1.75 -apple-system,"Pretendard","Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif;white-space:pre-wrap;word-break:keep-all;overflow-wrap:anywhere;
+#mView .mread{flex:1;overflow:auto;color:#fff;font:400 25px/1.8 "Gowun Batang","Noto Serif KR","Nanum Myeongjo","Noto Serif CJK KR",serif;white-space:pre-wrap;word-break:keep-all;overflow-wrap:anywhere;
   text-shadow:0 1px 3px rgba(0,0,0,.35),0 2px 16px rgba(0,0,0,.35);user-select:text;-webkit-user-select:text}
 #mToast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 96px);transform:translate(-50%,20px);z-index:12;opacity:0;pointer-events:none;
   background:rgba(18,26,36,.86);color:#fff;border-radius:20px;padding:11px 18px;font-size:15px;transition:opacity .3s,transform .3s;white-space:nowrap}
@@ -150,7 +151,9 @@ body.mind #grab,body.mind #cap,body.mind .dock{display:none}
 <video id="video" playsinline muted style="display:none"></video>
 
 <div id="cap"><span id="recTime">0:00</span><button id="recBtn" aria-label="녹화"><span class="ring"><span class="dot"></span></span></button>
-  <button id="shotBtn" aria-label="캡처"><span class="ring"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.6-2.2h6.8L17 8h3v11H4z"/><circle cx="12" cy="13.2" r="3.6"/></svg></span></button></div>
+  <button id="shotBtn" aria-label="캡처"><span class="ring"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.6-2.2h6.8L17 8h3v11H4z"/><circle cx="12" cy="13.2" r="3.6"/></svg></span></button>
+  <button id="penBtn" aria-label="마음 남기기"><span class="ring"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15.5 4.5l4 4L9 19H5v-4z"/><path d="M13.5 6.5l4 4"/></svg></span></button>
+  <button id="bookBtn" aria-label="간직한 마음"><span class="ring"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4.5h10.5a2 2 0 0 1 2 2V20H7a2 2 0 0 1-2-2z"/><path d="M5 18a2 2 0 0 1 2-2h10.5"/><path d="M9 8.5h5"/></svg></span></button></div>
 <div id="flash"></div>
 <div id="grab" aria-label="메뉴 열기"><span class="bar"></span></div>
 
@@ -173,10 +176,6 @@ body.mind #grab,body.mind #cap,body.mind .dock{display:none}
     <div class="speed" id="rangeRow"><span>손 인식 범위</span><input type="range" id="handRange" min="0" max="100" step="1" aria-label="손 인식 범위"><b id="handRangeVal"></b></div>
     <div class="row chips" id="engRow"><button class="chip" data-e="tasks">새 손 인식</button><button class="chip" data-e="legacy">기존 손 인식</button></div>
     <div class="row">
-      <button class="btn main" id="mindBtn">마음 남기기</button>
-      <button class="btn" id="keptBtn">간직한 마음</button>
-    </div>
-    <div class="row">
       <button class="btn main" id="camBtn">손 인식 시작</button>
       <button class="btn" id="seedBtn">새 캔버스</button>
       <button class="btn" id="snapBtn">저장</button>
@@ -188,7 +187,7 @@ body.mind #grab,body.mind #cap,body.mind .dock{display:none}
       <button class="btn" id="install">앱 설치</button>
     </div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 91</p>
+    <p class="hint" id="ver">버전 92</p>
   </div>
 </div>
 <!-- 마음 남기기: write over the flowing art, then keep it (locked with a 4-digit PIN, on this phone only) or let it flow away -->
@@ -964,7 +963,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 91';
+const VER_TXT='버전 92';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -2468,11 +2467,12 @@ function wrapLines(ctx,text,maxW){const out=[];for(const para of text.split('\n'
     for(const ch of para){const t=line+ch;if(ctx.measureText(t).width>maxW&&line){let cut=line.lastIndexOf(' ');
         if(cut>line.length*.5){out.push(line.slice(0,cut));line=line.slice(cut+1)+ch;}else{out.push(line);line=ch;}}else line=t;}
     out.push(line);}return out;}
+async function mindFont(text){try{await document.fonts.load('400 40px "Gowun Batang"',text+fmtDate(Date.now())+'Hand Flow Art · 마음 남기기');}catch(e){}}
 function composeMind(art,text,t){const W=art.width,H=art.height,c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d');
   x.drawImage(art,0,0);
   const g=x.createLinearGradient(0,0,0,H);g.addColorStop(0,'rgba(0,0,0,.42)');g.addColorStop(.35,'rgba(0,0,0,.16)');g.addColorStop(.7,'rgba(0,0,0,.16)');g.addColorStop(1,'rgba(0,0,0,.42)');
   x.fillStyle=g;x.fillRect(0,0,W,H);
-  const u=Math.min(W,H),pad=u*.085,ff='-apple-system,"Pretendard","Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif';
+  const u=Math.min(W,H),pad=u*.085,ff='"Gowun Batang","Noto Serif KR","Noto Serif CJK KR",serif';
   x.fillStyle='rgba(255,255,255,.80)';x.font=`400 ${Math.round(u*.034)}px ${ff}`;x.textBaseline='top';
   x.shadowColor='rgba(0,0,0,.45)';x.shadowBlur=u*.012;x.fillText(fmtDate(t),pad,H*.12);
   let fs=u*.058;x.font=`400 ${Math.round(fs)}px ${ff}`;let lines=wrapLines(x,text,W-pad*2);
@@ -2539,14 +2539,14 @@ document.getElementById('mKeep').onclick=async()=>{const text=mText.value.trim()
   const t=Date.now(),img=await new Promise(r=>art.toBlob(r,'image/jpeg',.86));
   try{const rec=await encJ(key,{text,t,mode});await dbDo('readwrite',st=>st.put({id:t,iv:rec.iv,ct:rec.ct,img}));}
   catch(e){console.warn(e);return mToast('저장하지 못했어요');}
-  const pic=composeMind(art,text,t);mText.value='';
+  await mindFont(text);const pic=composeMind(art,text,t);mText.value='';
   for(;;){const v=await mMenu('마음을 간직했어요','이 휴대폰에만, 비밀번호로 잠겨 있어요',[{t:'공유하기',v:'share',cls:'solid'},{t:'간직한 마음 보기',v:'list'},{t:'닫기',v:'close'}]);
     if(v==='share'){await shareMind(pic,text);continue;}
     if(v==='list'){closeMind();openKept();}else closeMind();break;}};
 // ---- let it flow away ----
 document.getElementById('mLet').onclick=async()=>{const text=mText.value;if(!text.trim()){mText.focus();return mToast('먼저 마음을 적어 주세요');}
   try{mText.blur();}catch(e){}
-  const art=await grabArt(),t=Date.now(),pic=composeMind(art,text.trim(),t);
+  const art=await grabArt(),t=Date.now();await mindFont(text);const pic=composeMind(art,text.trim(),t);
   await mindDissolve(text);mText.value='';
   const v=await mMenu('흘려보냈어요','글은 어디에도 남지 않았어요',[{t:'공유하기',v:'share',cls:'solid'},{t:'다시 쓰기',v:'again'},{t:'닫기',v:'close'}]);
   mFly.innerHTML='';mText.style.visibility='';
@@ -2595,12 +2595,12 @@ function viewKept(it,back){const v=document.getElementById('mView');let url=null
   const close=(again)=>{v.classList.remove('on');v.setAttribute('aria-hidden','true');if(url)URL.revokeObjectURL(url);if(again)back();};
   document.getElementById('vBack').onclick=()=>close(true);
   document.getElementById('vShare').onclick=async()=>{let art;if(it.r.img){const bm=await createImageBitmap(it.r.img);art=document.createElement('canvas');art.width=bm.width;art.height=bm.height;art.getContext('2d').drawImage(bm,0,0);}
-    else art=await grabArt();await shareMind(composeMind(art,it.d.text,it.d.t),it.d.text);};
+    else art=await grabArt();await mindFont(it.d.text);await shareMind(composeMind(art,it.d.text,it.d.t),it.d.text);};
   document.getElementById('vDel').onclick=async()=>{const ok=await mMenu('이 마음을 지울까요?','지우면 다시 꺼낼 수 없어요',[{t:'지우기',v:1,cls:'danger'},{t:'취소',v:0}]);
     if(!ok)return;try{await dbDo('readwrite',st=>st.delete(it.r.id));}catch(e){}close(false);mToast('지웠어요');
     try{const left=await dbDo('readonly',st=>st.count());if(left)back();}catch(e){}};}
-document.getElementById('mindBtn').onclick=openMind;
-document.getElementById('keptBtn').onclick=()=>{openMenu(false);openKept();};
+capPress(document.getElementById('penBtn'),openMind);
+capPress(document.getElementById('bookBtn'),()=>{openMenu(false);openKept();});
 
 // PWA install
 let deferred=null;const inst=document.getElementById('install');

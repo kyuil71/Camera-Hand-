@@ -135,11 +135,13 @@ body.mind #grab,body.mind #cap,body.mind .dock{display:none}
 .mitem span{display:block;font-size:16px;line-height:1.35;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 #mView{position:fixed;inset:0;z-index:10;display:none;flex-direction:column;background:transparent;touch-action:auto}
 #mView.on{display:flex}
+#mView .mbtn[hidden]{display:none}
 #mView .mveil{position:absolute;inset:0;background:rgba(0,0,0,.68)}
 body.mview #grab,body.mview #cap,body.mview .dock{display:none}
 #mView > *:not(.mveil){position:relative}
 #mView .mread{flex:1;overflow:auto;color:var(--mtxt);font:400 25px/1.8 "Gowun Batang","Noto Serif KR","Nanum Myeongjo","Noto Serif CJK KR",serif;white-space:pre-wrap;word-break:keep-all;overflow-wrap:anywhere;
-  text-shadow:0 1px 3px rgba(0,0,0,.35),0 2px 16px rgba(0,0,0,.35);user-select:text;-webkit-user-select:text}
+  text-shadow:0 1px 3px rgba(0,0,0,.35),0 2px 16px rgba(0,0,0,.35);user-select:text;-webkit-user-select:text;
+  width:100%;min-height:0;padding:0;border:0;outline:0;resize:none;background:transparent;caret-color:#fff;letter-spacing:.01em}   /* a kept note can be rewritten in place */
 #mToast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 96px);transform:translate(-50%,20px);z-index:12;opacity:0;pointer-events:none;
   background:rgba(18,26,36,.86);color:#fff;border-radius:20px;padding:11px 18px;font-size:15px;transition:opacity .3s,transform .3s;white-space:nowrap}
 #mToast.on{opacity:1;transform:translate(-50%,0)}
@@ -189,7 +191,7 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
     </div>
     <div class="row"><button class="btn" id="pinBtn">비밀번호 바꾸기</button></div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 96</p>
+    <p class="hint" id="ver">버전 97</p>
   </div>
 </div>
 <!-- 마음 남기기: write over the flowing art, then keep it (locked with a 4-digit PIN, on this phone only) or let it flow away -->
@@ -200,8 +202,8 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
 </div>
 <div id="mView" aria-hidden="true"><div class="mveil"></div>
   <div class="mhead"><button id="vBack" aria-label="닫기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button><button id="vShot" aria-label="이미지로 저장"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.6-2.2h6.8L17 8h3v11H4z"/><circle cx="12" cy="13.2" r="3.6"/></svg></button></div>
-  <div class="mbody"><div id="vDate" class="mdate"></div><div class="mread" id="vText"></div></div>
-  <div class="mfoot"><button class="mbtn" id="vDel">지우기</button><button class="mbtn" id="vShare">공유하기</button></div>
+  <div class="mbody"><div id="vDate" class="mdate"></div><textarea class="mread" id="vText" maxlength="3000" spellcheck="false"></textarea></div>
+  <div class="mfoot"><button class="mbtn" id="vDel">지우기</button><button class="mbtn" id="vShare">공유하기</button><button class="mbtn" id="vUndo" hidden>되돌리기</button><button class="mbtn" id="vSave" hidden>간직하기</button></div>
 </div>
 <div id="mModal" aria-hidden="true"><div class="mcard" id="mCard"></div></div>
 <div id="mToast"></div>
@@ -963,7 +965,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 96';
+const VER_TXT='버전 97';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -2624,13 +2626,25 @@ function viewKept(it,back){const v=document.getElementById('mView');
   if(viewPrevMode==null)viewPrevMode=mode;
   const m=it.d.mode;if(m&&m!==mode&&MODE_NAME_K[m])setMode(m);
   document.body.classList.add('mview');for(const id of [...pointers.keys()])tUp(id);
-  document.getElementById('vDate').textContent=fmtDate(it.d.t);document.getElementById('vText').textContent=it.d.text;
+  const vT=document.getElementById('vText'),vDel=document.getElementById('vDel'),vShr=document.getElementById('vShare'),vUndo=document.getElementById('vUndo'),vSave=document.getElementById('vSave');
+  document.getElementById('vDate').textContent=fmtDate(it.d.t);vT.value=it.d.text;vT.scrollTop=0;
+  const cur=()=>vT.value.replace(/\s+$/,''),dirty=()=>cur()!==it.d.text;
+  const foot=()=>{const e=dirty();vDel.hidden=vShr.hidden=e;vUndo.hidden=vSave.hidden=!e;};foot();vT.oninput=foot;   // once the words change: 되돌리기 · 간직하기
+  vUndo.onclick=()=>{vT.value=it.d.text;foot();try{vT.blur();}catch(e){}};
+  const save=async()=>{const text=cur();if(!text.trim()){mToast('비어 있으면 간직할 수 없어요');return false;}
+    try{const d={...it.d,text,edited:Date.now()};const n=await sealNote(d);await dbDo('readwrite',st=>st.put({id:it.r.id,...n}));it.d=d;it.r={id:it.r.id,...n};}   // sealed again with the public key: no PIN needed
+    catch(e){mToast('간직하지 못했어요');return false;}
+    vT.value=text;foot();try{vT.blur();}catch(e){}mToast('고친 마음을 간직했어요');return true;};
+  vSave.onclick=save;
   v.classList.add('on');v.setAttribute('aria-hidden','false');
   const close=(again)=>{v.classList.remove('on');v.setAttribute('aria-hidden','true');document.body.classList.remove('mview');
     if(again)back();else if(viewPrevMode!=null){if(viewPrevMode!==mode)setMode(viewPrevMode);viewPrevMode=null;}};
-  document.getElementById('vBack').onclick=()=>close(false);
-  document.getElementById('vShot').onclick=async()=>{const art=await grabArt();await mindFont(it.d.text);composeMind(art,it.d.text,it.d.t).toBlob(b=>{if(b)saveBlob(b,'jpg');},'image/jpeg',.92);mindFlash();mToast('이미지로 저장했어요');};
-  document.getElementById('vShare').onclick=async()=>{const art=await grabArt();await mindFont(it.d.text);await shareMind(composeMind(art,it.d.text,it.d.t),it.d.text);};
+  document.getElementById('vBack').onclick=async()=>{if(dirty()){try{vT.blur();}catch(e){}
+      const v2=await mMenu('고친 마음을 간직할까요?','',[{t:'간직하기',v:'keep'},{t:'고치지 않고 닫기',v:'drop'},{t:'계속 고치기',v:'stay'}]);
+      if(v2==='stay'){try{vT.focus();}catch(e){}return;}if(v2==='keep'&&!(await save()))return;}
+    try{vT.blur();}catch(e){}close(false);};
+  document.getElementById('vShot').onclick=async()=>{const text=cur();try{vT.blur();}catch(e){}const art=await grabArt();await mindFont(text);composeMind(art,text,it.d.t).toBlob(b=>{if(b)saveBlob(b,'jpg');},'image/jpeg',.92);mindFlash();mToast('이미지로 저장했어요');};
+  vShr.onclick=async()=>{const art=await grabArt();await mindFont(it.d.text);await shareMind(composeMind(art,it.d.text,it.d.t),it.d.text);};
 document.getElementById('vDel').onclick=async()=>{const ok=await mMenu('이 마음을 지울까요?','지우면 다시 꺼낼 수 없어요',[{t:'지우기',v:1,cls:'danger'},{t:'취소',v:0}]);
     if(!ok)return;try{await dbDo('readwrite',st=>st.delete(it.r.id));}catch(e){}close(false);mToast('지웠어요');
     try{const left=await dbDo('readonly',st=>st.count());if(left)back();}catch(e){}};}

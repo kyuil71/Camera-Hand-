@@ -208,7 +208,7 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
     </div>
     <div class="row"><button class="btn" id="pinBtn">비밀번호 바꾸기</button></div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 101</p>
+    <p class="hint" id="ver">버전 102</p>
   </div>
 </div>
 <!-- 마음 남기기: write over the flowing art, then keep it (locked with a 4-digit PIN, on this phone only) or let it flow away -->
@@ -982,7 +982,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 101';
+const VER_TXT='버전 102';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -2015,10 +2015,10 @@ function tMove(id,x,y,t){const p=pointers.get(id);if(!p)return;lastAct=performan
   if(mode==='halo'&&halo&&halo.grab&&halo.grab.id===id){haloMove(id,x,y,t);p.x=x;p.y=y;p.t=t;return;}   // holding the ring: it carries the smoke itself
   const dtR=Math.min(Math.max((t-p.t)/1000,.008),.1);
   const vp=p.virt&&mode==='paint';   // a camera fingertip in Pigment: made to feel like a finger on the glass
-  if(vp){const ds=Math.min(.1,Math.max(.005,(t-(p.ft??p.t))/1000));p.ft=t;const a=1-Math.exp(-ds/.09);   // smooth out the tracking tremble (≈90 ms)
+  if(vp){const ds=Math.min(.1,Math.max(.005,(t-(p.ft??p.t))/1000));p.ft=t;const a=1-Math.exp(-ds/.05);   // smooth out the tracking tremble (≈50 ms, little lag)
     p.fx=(p.fx??p.x)+(x-(p.fx??p.x))*a;p.fy=(p.fy??p.y)+(y-(p.fy??p.y))*a;x=p.fx;y=p.fy;
     const dd=Math.hypot((x-p.x)*aspect,y-p.y);p.vs=(p.vs||0)*.7+.3*dd/ds;
-    if(dd<.004)return;}              // a fingertip held (nearly) still draws nothing — like a resting touch, which sends no moves
+    if(dd<.0015)return;}              // a fingertip held (nearly) still draws nothing — like a resting touch, which sends no moves
   feelFinger(Math.hypot((x-p.x)*aspect,y-p.y)/dtR*(vp?.5:1));
   if(mode==='ink'){if(inkA&&flow>.3){const sp=Math.hypot((x-p.x)*aspect,y-p.y)/dtR;   // a quick stroke is a thinner, drier line — like a real brush
       const rw=Math.max(.45,Math.min(1.25,1.25-sp*.35));p.ivx=(p.ivx||0)*.6+(x-p.x)/dtR*.4;p.ivy=(p.ivy||0)*.6+(y-p.y)/dtR*.4;
@@ -2027,8 +2027,8 @@ function tMove(id,x,y,t){const p=pointers.get(id);if(!p)return;lastAct=performan
       let L=0;for(let i=1;i<p.ib.length;i++)L+=Math.hypot((p.ib[i].x-p.ib[i-1].x)*aspect,p.ib[i].y-p.ib[i-1].y);
       while(p.ib.length>2&&L>INK_LAG){const a=p.ib[0],b=p.ib[1];inkStroke(a.x,a.y,b.x,b.y,p.ink||0,1,a.w,b.w);L-=Math.hypot((b.x-a.x)*aspect,b.y-a.y);p.ib.shift();}}}
   else if(mode==='water'&&!dipMode)wakeStep('t'+id,x,y,Math.hypot((x-p.x)*aspect,y-p.y)/dtR,t);
-  else if(mode!=='water'){if(vp){let n=0;for(const q of pointers.values())if(q.virt)n++;const k=Math.max(.55,1/Math.sqrt(n||1));   // several fingertips share the push, as one hand
-      queue.push({x,y,vx:(x-p.x)/dtR*.7,vy:(y-p.y)/dtR*.7,set:.85*k,c:p.c,r:.0042,s:.9*k});}
+  else if(mode!=='water'){if(vp){let n=0;for(const q of pointers.values())if(q.virt)n++;const k=Math.max(.72,1/Math.sqrt(n||1));   // several fingertips share the push, as one hand
+      queue.push({x,y,vx:(x-p.x)/dtR*.85,vy:(y-p.y)/dtR*.85,set:.85*k,c:p.c,r:.0042,s:.9*k});}
     else queue.push({x,y,vx:(x-p.x)/dtR,vy:(y-p.y)/dtR,set:.85,c:p.c,r:.0042,s:.9});}p.x=x;p.y=y;p.t=t;
   if(dipMode&&!p.virt)dipMove('t'+id,x,y);}
 function tUp(id){if(mode==='halo')haloUp(id);
@@ -2059,7 +2059,7 @@ function onHands(res){
   const now=performance.now();const q0=queue.length;
   let list=(res.multiHandLandmarks||[]).map(camToView);
   if(viewAng)list=list.map(lm=>{const m=lm.map(p=>{const [u,v]=locXY(p.x*innerWidth,p.y*innerHeight);return {x:u,y:v,z:p.z};});m.world=lm.world;m.slot=lm.slot;return m;});   // 화면이 돌아가 있어도 손 좌표는 기기 기준으로
-  if(!list.length){ for(const id of [...pointers.keys()])if(typeof id==='string'&&id[0]==='v')tUp(id);
+  if(!list.length){ for(const [id,q] of [...pointers])if(typeof id==='string'&&id[0]==='v'&&now-(q.seen||0)>VGRACE)tUp(id);
     if(now-lastSeen>250){for(const k in tracks)delete tracks[k];for(const k in pointState)delete pointState[k];} handInfo=[]; setDetect(false); if(camOn)status('손 인식 켜짐 · 손을 카메라에 보여주세요'); fistSince=0; return; }
   lastSeen=now; handInfo=[]; setDetect(true); lastAct=now;
   const seenH={},vSeen=new Set(),vList=[];
@@ -2127,7 +2127,7 @@ function onHands(res){
   flowTarget = (fistSince && now-fistSince>160) ? 0 : 1;
   for(let k=q0;k<queue.length;k++)queue[k].hand=1;
   for(const [sl,lm,fi] of vList)virtTouches(sl,lm,fi,now,vSeen);   // 손가락 터치는 화면 터치와 똑같이 (hand 표시 없이)
-  for(const id of [...pointers.keys()])if(typeof id==='string'&&id[0]==='v'&&!vSeen.has(id))tUp(id);   // 굽혔거나 화면 밖/손이 사라짐 = 뗌
+  {const sl=new Set(vList.map(v=>v[0]));for(const [id,q] of [...pointers])if(typeof id==='string'&&id[0]==='v'&&!vSeen.has(id)&&(sl.has(+id[1])||now-(q.seen||0)>VGRACE))tUp(id);}   // 굽힘 = 바로 뗌 · 손을 잠깐 놓친 것 = 0.18초 기다림
   firePendingTaps(now);
   status(`카메라 인식됨 · 손 ${list.length}개${flowTarget?'':' · 굳힘'}${handInfo.some(x=>x.point)?' · 가리키기':''}`);
 }
@@ -2156,7 +2156,7 @@ async function loadTasks(){
   const vision=await import('./mediapipe/tasks/vision_bundle.mjs');
   const fs=await vision.FilesetResolver.forVisionTasks(new URL('mediapipe/tasks/wasm',location.href).href);
   const mk=d=>vision.HandLandmarker.createFromOptions(fs,{baseOptions:{modelAssetPath:new URL('mediapipe/tasks/hand_landmarker.task',location.href).href,delegate:d},
-    runningMode:'VIDEO',numHands:2,minHandDetectionConfidence:.6,minHandPresenceConfidence:.6,minTrackingConfidence:.5});
+    runningMode:'VIDEO',numHands:2,minHandDetectionConfidence:.6,minHandPresenceConfidence:.5,minTrackingConfidence:.4});
   try{tasksLM=await mk('GPU');tasksDelegate='GPU';}catch(e){console.warn('GPU 인식 실패 → CPU',e);tasksLM=await mk('CPU');tasksDelegate='CPU';}
 }
 function tasksDetect(){
@@ -2176,7 +2176,7 @@ function tasksDetect(){
 }
 // 손가락을 톡 굽히면 = 그 자리를 터치한 것 (물: 퐁당, 먹: 먹물 한 방울, 파도: 물 밀기, 물감: 색 터짐)
 // 주먹을 쥘 때 네 손가락이 한꺼번에 굽는 건 터치가 아님 → 잠깐 기다렸다가 주먹이면 취소
-const fingerState=[{},{}],pendingTaps=[];
+const fingerState=[{},{}],pendingTaps=[],VGRACE=180;
 function fingerTaps(slot,lm,bends,fist,now){
   const st=fingerState[slot]||(fingerState[slot]={});const R=Math.PI/180;
   if(fist){for(let i=pendingTaps.length-1;i>=0;i--)if(pendingTaps[i].slot===slot)pendingTaps.splice(i,1);}
@@ -2193,7 +2193,7 @@ function virtTouches(slot,lm,fist,now,vSeen){
   for(let fi=1;fi<5;fi++){const s=st[fi],tip=lm[FINGERS[fi][3]];const x=tip.x,y=1-tip.y;
     const on=!fist&&s&&s.ext&&x>=0&&x<=1&&y>=0&&y<=1;const id='v'+slot+fi;
     if(!on)continue;vSeen.add(id);
-    if(!pointers.has(id))tDown(id,x,y,now,true);else tMove(id,x,y,now);}
+    if(!pointers.has(id))tDown(id,x,y,now,true);else tMove(id,x,y,now);const q=pointers.get(id);if(q)q.seen=now;}
 }
 function firePendingTaps(now){
   for(let i=pendingTaps.length-1;i>=0;i--){const p=pendingTaps[i];if(p.fire>now)continue;pendingTaps.splice(i,1);

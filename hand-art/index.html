@@ -130,7 +130,13 @@ body.mind #grab,body.mind #cap,body.mind .dock{display:none}
 .mlink{border:0;background:transparent;color:rgba(255,255,255,.66);font:inherit;font-size:15px;padding:10px;text-decoration:underline;text-underline-offset:3px}
 .mlist{display:flex;flex-direction:column;gap:10px;text-align:left;margin-bottom:14px}
 .mitem{display:flex;gap:12px;align-items:center;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.06);border-radius:16px;padding:8px;color:#fff;font:inherit;text-align:left}
-.mitem .mbadge{width:48px;height:48px;border-radius:14px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-style:normal;font-weight:700;font-size:20px;color:rgba(255,255,255,.92);box-shadow:inset 0 0 0 1px rgba(255,255,255,.25)}
+.mitem .mthumb{width:52px;height:52px;border-radius:14px;flex:0 0 auto;object-fit:cover;background:#111;box-shadow:0 0 0 1px rgba(255,255,255,.22)}
+.mrow{position:relative}
+.mrow .mitem{width:100%;padding-right:52px}
+.mitem>div{flex:1;min-width:0}
+.mtrash{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:44px;height:44px;border:0;border-radius:22px;background:transparent;color:rgba(255,255,255,.72);display:flex;align-items:center;justify-content:center}
+.mtrash:active{background:rgba(255,255,255,.12)}
+.mtrash svg{width:22px;height:22px}
 .mitem b{display:block;font-size:13px;font-weight:500;color:rgba(255,255,255,.65);margin-bottom:3px}
 .mitem span{display:block;font-size:16px;line-height:1.35;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 #mView{position:fixed;inset:0;z-index:10;display:none;flex-direction:column;background:transparent;touch-action:auto}
@@ -191,7 +197,7 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
     </div>
     <div class="row"><button class="btn" id="pinBtn">비밀번호 바꾸기</button></div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 97</p>
+    <p class="hint" id="ver">버전 98</p>
   </div>
 </div>
 <!-- 마음 남기기: write over the flowing art, then keep it (locked with a 4-digit PIN, on this phone only) or let it flow away -->
@@ -965,7 +971,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 97';
+const VER_TXT='버전 98';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -2377,13 +2383,13 @@ setDip(dipMode);
 document.getElementById('snapBtn').onclick=()=>{snapReq='png';};
 /* ================= Record (MP4) & capture (JPEG): only the artwork, never the buttons or the menu ================= */
 function stamp(){const d=new Date(),z=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate())+'_'+z(d.getHours())+'-'+z(d.getMinutes())+'-'+z(d.getSeconds());}
-async function saveNative(b,ext){   // 안드로이드 앱(APK) 안에서는 갤러리에 바로 저장
-  const S=window.AndroidSave;const id=S.begin('hand-flow-'+stamp()+'.'+ext,b.type||(ext==='mp4'?'video/mp4':ext==='webm'?'video/webm':'image/jpeg'));if(id<0)return false;
+async function saveNative(b,ext,sfx=''){   // 안드로이드 앱(APK) 안에서는 갤러리에 바로 저장
+  const S=window.AndroidSave;const id=S.begin('hand-flow-'+stamp()+sfx+'.'+ext,b.type||(ext==='mp4'?'video/mp4':ext==='webm'?'video/webm':'image/jpeg'));if(id<0)return false;
   const CH=786432;for(let o=0;o<b.size;o+=CH){const u=new Uint8Array(await b.slice(o,o+CH).arrayBuffer());let t='';
     for(let i=0;i<u.length;i+=32768)t+=String.fromCharCode.apply(null,u.subarray(i,i+32768));if(!S.append(id,btoa(t)))return false;}
   return S.end(id);}
-function saveBlob(b,ext){if(window.AndroidSave){saveNative(b,ext).then(ok=>{if(!ok)saveWeb(b,ext);}).catch(()=>saveWeb(b,ext));return;}saveWeb(b,ext);}
-function saveWeb(b,ext){const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='hand-flow-'+stamp()+'.'+ext;
+function saveBlob(b,ext,sfx=''){if(window.AndroidSave)return saveNative(b,ext,sfx).then(ok=>{if(!ok)saveWeb(b,ext,sfx);}).catch(()=>saveWeb(b,ext,sfx));saveWeb(b,ext,sfx);return Promise.resolve();}
+function saveWeb(b,ext,sfx=''){const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='hand-flow-'+stamp()+sfx+'.'+ext;
   document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),8000);}
 const recBtn=document.getElementById('recBtn'),recTime=document.getElementById('recTime'),flashEl=document.getElementById('flash');
 let rec=null,recChunks=[],recT0=0,recTimer=0,recExt='mp4';
@@ -2445,7 +2451,7 @@ swipe(document.getElementById('sheetHead'),-1,()=>openMenu(false));   // swipe d
 /* ================= 마음 남기기: write, then keep (locked, on this phone only) or let it flow away ================= */
 const mindEl=document.getElementById('mind'),mText=document.getElementById('mText'),mFly=document.getElementById('mFly'),mModal=document.getElementById('mModal'),mCard=document.getElementById('mCard'),mToastEl=document.getElementById('mToast');
 const writing=()=>document.body.classList.contains('mind');
-const fmtDate=t=>{const d=new Date(t);return d.getFullYear()+'년 '+(d.getMonth()+1)+'월 '+d.getDate()+'일';};
+const fmtDate=t=>{const d=new Date(t),h=d.getHours();return d.getFullYear()+'년 '+(d.getMonth()+1)+'월 '+d.getDate()+'일 '+(h<12?'AM':'PM')+' '+((h%12)||12)+':'+String(d.getMinutes()).padStart(2,'0');};   // e.g. 2026년 11월 9일 PM 7:46
 let mindToastT=0;function mToast(t){mToastEl.textContent=t;mToastEl.classList.add('on');clearTimeout(mindToastT);mindToastT=setTimeout(()=>mToastEl.classList.remove('on'),2200);}
 function openMind(){openMenu(false);document.body.classList.add('mind');mindEl.setAttribute('aria-hidden','false');document.getElementById('mDate').textContent=fmtDate(Date.now());
   for(const id of [...pointers.keys()])tUp(id);mFly.innerHTML='';mText.style.visibility='';setTimeout(()=>{try{mText.focus();}catch(e){}},250);}
@@ -2453,8 +2459,7 @@ function closeMind(){document.body.classList.remove('mind');mindEl.setAttribute(
 document.getElementById('mBack').onclick=closeMind;
 // capture while writing: the art + the words only (never the keyboard or the buttons)
 document.getElementById('mShot').onclick=async()=>{const text=mText.value.replace(/\s+$/,'');const art=await grabArt();await mindFont(text);
-  const pic=composeMind(art,text,Date.now());pic.toBlob(b=>{if(b)saveBlob(b,'jpg');},'image/jpeg',.92);
-  mindFlash();mToast('이미지로 저장했어요');};
+  await saveMind(composeMind(art,text,Date.now()));};
 function mindFlash(){flashEl.style.zIndex='12';flashEl.style.transition='none';flashEl.style.opacity='.45';requestAnimationFrame(()=>{flashEl.style.transition='opacity .35s';flashEl.style.opacity='0';});
   setTimeout(()=>{flashEl.style.zIndex='';},450);}
 // keep the bottom buttons above the phone keyboard (the art underneath never resizes)
@@ -2474,22 +2479,33 @@ function wrapLines(ctx,text,maxW){const out=[];for(const para of text.split('\n'
         if(cut>line.length*.5){out.push(line.slice(0,cut));line=line.slice(cut+1)+ch;}else{out.push(line);line=ch;}}else line=t;}
     out.push(line);}return out;}
 async function mindFont(text){try{await document.fonts.load('400 40px "Gowun Batang"',text+fmtDate(Date.now())+'Hand Flow Art · 마음 남기기');}catch(e){}}
-function composeMind(art,text,t){const W=art.width,H=art.height,c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d');
-  x.drawImage(art,0,0);
-  x.fillStyle='rgba(0,0,0,.68)';x.fillRect(0,0,W,H);                    // the same dim veil as on screen while writing (art at ~30%) → the words stand out
-  const u=Math.min(W,H),pad=u*.085,ff='"Gowun Batang","Noto Serif KR","Noto Serif CJK KR",serif';
-  x.fillStyle='rgba(255,255,255,.80)';x.font=`400 ${Math.round(u*.034)}px ${ff}`;x.textBaseline='top';
-  x.shadowColor='rgba(0,0,0,.45)';x.shadowBlur=u*.012;x.fillText(fmtDate(t),pad,H*.12);
-  let fs=u*.058;x.font=`400 ${Math.round(fs)}px ${ff}`;let lines=wrapLines(x,text,W-pad*2);
-  while(lines.length*fs*1.7>H*.66&&fs>u*.03){fs*=.9;x.font=`400 ${Math.round(fs)}px ${ff}`;lines=wrapLines(x,text,W-pad*2);}
-  x.fillStyle='#fff';x.shadowBlur=u*.02;lines.forEach((l,i)=>x.fillText(l,pad,H*.12+u*.07+i*fs*1.7));
-  x.shadowBlur=0;x.fillStyle='rgba(255,255,255,.55)';x.font=`400 ${Math.round(u*.026)}px ${ff}`;x.textAlign='right';x.fillText('Hand Flow Art · 마음 남기기',W-pad,H-pad*.9);
-  return c;}
-async function shareMind(pic,text){const blob=await new Promise(r=>pic.toBlob(r,'image/jpeg',.92));if(!blob)return;
-  const name='hand-flow-maeum-'+stamp()+'.jpg',file=new File([blob],name,{type:'image/jpeg'});
-  try{if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],text});return;}}catch(e){if(e&&e.name==='AbortError')return;}
+function composeMind(art,text,t){const W=art.width,H=art.height,u=Math.min(W,H),pad=u*.085,ff='"Gowun Batang","Noto Serif KR","Noto Serif CJK KR",serif';
+  const fs=u*.056,lh=fs*1.7,y0=H*.12+u*.07,yEnd=H-pad*1.9;              // one fixed, easy-to-read size; long words run onto more pages instead of shrinking
+  const m=document.createElement('canvas').getContext('2d');m.font=`400 ${Math.round(fs)}px ${ff}`;const lines=wrapLines(m,text,W-pad*2);
+  const per=Math.max(1,Math.floor((yEnd-y0)/lh)),pages=[];let k=0;
+  while(k<lines.length){if(pages.length)while(k<lines.length&&!lines[k].trim())k++;   // a new page never starts with blank lines
+    if(k>=lines.length)break;pages.push(lines.slice(k,k+per));k+=per;}
+  if(!pages.length)pages.push(['']);
+  return pages.map((pl,pi)=>{const c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d');
+    x.drawImage(art,0,0);
+    x.fillStyle='rgba(0,0,0,.68)';x.fillRect(0,0,W,H);                  // the same dim veil as on screen while writing (art at ~30%) → the words stand out
+    x.fillStyle='rgba(255,255,255,.80)';x.font=`400 ${Math.round(u*.034)}px ${ff}`;x.textBaseline='top';
+    x.shadowColor='rgba(0,0,0,.45)';x.shadowBlur=u*.012;x.fillText(fmtDate(t),pad,H*.12);
+    x.font=`400 ${Math.round(fs)}px ${ff}`;x.fillStyle='#fff';x.shadowBlur=u*.02;pl.forEach((l,i)=>x.fillText(l,pad,y0+i*lh));
+    x.shadowBlur=0;x.fillStyle='rgba(255,255,255,.55)';x.font=`400 ${Math.round(u*.026)}px ${ff}`;
+    if(pages.length>1){x.textAlign='left';x.fillText((pi+1)+' / '+pages.length,pad,H-pad*.9);}
+    x.textAlign='right';x.fillText('Hand Flow Art · 마음 남기기',W-pad,H-pad*.9);
+    return c;});}
+const toJpg=c=>new Promise(r=>c.toBlob(r,'image/jpeg',.92));
+async function saveMind(pages){for(let i=0;i<pages.length;i++){const b=await toJpg(pages[i]);if(b)await saveBlob(b,'jpg',pages.length>1?'_'+(i+1)+'of'+pages.length:'');
+    if(i<pages.length-1)await new Promise(r=>setTimeout(r,350));}
+  mindFlash();mToast(pages.length>1?`이미지 ${pages.length}장으로 저장했어요`:'이미지로 저장했어요');}
+async function shareMind(pages,text){const blobs=(await Promise.all(pages.map(toJpg))).filter(Boolean);if(!blobs.length)return;
+  const st=stamp(),files=blobs.map((b,i)=>new File([b],'hand-flow-maeum-'+st+(blobs.length>1?'_'+(i+1)+'of'+blobs.length:'')+'.jpg',{type:'image/jpeg'}));
+  try{if(navigator.canShare&&navigator.canShare({files})){await navigator.share({files,text});return;}}catch(e){if(e&&e.name==='AbortError')return;}
   try{await navigator.clipboard.writeText(text);}catch(e){}
-  saveBlob(blob,'jpg');mToast('그림을 저장했어요 · 글은 복사해 두었어요');}
+  for(let i=0;i<blobs.length;i++){await saveBlob(blobs[i],'jpg',blobs.length>1?'_'+(i+1)+'of'+blobs.length:'');if(i<blobs.length-1)await new Promise(r=>setTimeout(r,350));}
+  mToast((blobs.length>1?`그림 ${blobs.length}장을`:'그림을')+' 저장했어요 · 글은 복사해 두었어요');}
 
 // ---- the locked box: AES-GCM with a key made from the 4-digit PIN; everything stays in this phone's storage ----
 const MIND_META='hf-mind-lock';let mindKey=null;
@@ -2607,6 +2623,7 @@ function mindDissolve(text){return new Promise(done=>{
   setTimeout(done,3300);});}
 // ---- the kept ones ----
 const MODE_NAME_K={paint:'Pigment',water:'Ripple',wave:'Wave',light:'Aurora',silk:'Silk',cloud:'Cloud',ink:'Ink',halo:'Halo'};
+const TRASH_SVG='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9.5 7V4.8h5V7M6.5 7l1 12.2h9l1-12.2M10.2 10.5v5.8M13.8 10.5v5.8"/></svg>';
 const MODE_TINT={paint:'#e85d8a',water:'#2fa4c4',wave:'#2b7fd6',light:'#7a5cff',silk:'#d79ad0',cloud:'#9fb6d8',ink:'#3a3a3a',halo:'#e8e4f0'};
 async function openKept(){let recs=[];try{recs=await dbDo('readonly',st=>st.getAll());}catch(e){}
   if(!recs||!recs.length)return mToast('아직 간직한 마음이 없어요');
@@ -2614,10 +2631,12 @@ async function openKept(){let recs=[];try{recs=await dbDo('readonly',st=>st.getA
   for(const r of recs)if(r.img){delete r.img;try{await dbDo('readwrite',st=>st.put(r));}catch(e){}}   // older notes carried a picture: keep only the words now
   const items=[];for(const r of recs.sort((a,b)=>b.id-a.id)){try{items.push({r,d:await openNote(key,r)});}catch(e){}}
   mCard.innerHTML=`<h3>간직한 마음</h3><p>${items.length}개 · 이 휴대폰에만 있어요</p><div class="mlist">${items.map((it,i)=>{const m=it.d.mode||'paint';
-      return `<button class="mitem" data-i="${i}"><i class="mbadge" style="background:${MODE_TINT[m]||'#888'}">${(MODE_NAME_K[m]||m)[0]}</i><div><b>${fmtDate(it.d.t)} · ${MODE_NAME_K[m]||m}</b><span></span></div></button>`;}).join('')}</div>
+      return `<div class="mrow"><button class="mitem" data-i="${i}"><img class="mthumb" alt="" src="thumbs/${MODE_NAME_K[m]?m:'paint'}.jpg"><div><b>${fmtDate(it.d.t)} · ${MODE_NAME_K[m]||m}</b><span></span></div></button><button class="mtrash" aria-label="지우기">${TRASH_SVG}</button></div>`;}).join('')}</div>
     <div class="mbtns"><button class="mbtn" id="mLc">닫기</button></div>`;
   mCard.querySelectorAll('.mitem').forEach((b,i)=>{const it=items[i];b.querySelector('span').textContent=it.d.text.split('\n')[0];
-    b.onclick=()=>{mModal.classList.remove('on');viewKept(it,()=>openKept());};});
+    b.onclick=()=>{mModal.classList.remove('on');viewKept(it,()=>openKept());};
+    b.parentNode.querySelector('.mtrash').onclick=async()=>{const ok=await mMenu('이 마음을 지울까요?','지우면 다시 꺼낼 수 없어요',[{t:'지우기',v:1,cls:'danger'},{t:'취소',v:0}]);
+      if(ok){try{await dbDo('readwrite',st=>st.delete(it.r.id));}catch(e){}mToast('지웠어요');}openKept();};});
   document.getElementById('mLc').onclick=()=>mModal.classList.remove('on');
   mModal.classList.add('on');}
 // reading a kept note: the mode it was written in comes back underneath (with its music), the words over it
@@ -2643,7 +2662,7 @@ function viewKept(it,back){const v=document.getElementById('mView');
       const v2=await mMenu('고친 마음을 간직할까요?','',[{t:'간직하기',v:'keep'},{t:'고치지 않고 닫기',v:'drop'},{t:'계속 고치기',v:'stay'}]);
       if(v2==='stay'){try{vT.focus();}catch(e){}return;}if(v2==='keep'&&!(await save()))return;}
     try{vT.blur();}catch(e){}close(false);};
-  document.getElementById('vShot').onclick=async()=>{const text=cur();try{vT.blur();}catch(e){}const art=await grabArt();await mindFont(text);composeMind(art,text,it.d.t).toBlob(b=>{if(b)saveBlob(b,'jpg');},'image/jpeg',.92);mindFlash();mToast('이미지로 저장했어요');};
+  document.getElementById('vShot').onclick=async()=>{const text=cur();try{vT.blur();}catch(e){}const art=await grabArt();await mindFont(text);await saveMind(composeMind(art,text,it.d.t));};
   vShr.onclick=async()=>{const art=await grabArt();await mindFont(it.d.text);await shareMind(composeMind(art,it.d.text,it.d.t),it.d.text);};
 document.getElementById('vDel').onclick=async()=>{const ok=await mMenu('이 마음을 지울까요?','지우면 다시 꺼낼 수 없어요',[{t:'지우기',v:1,cls:'danger'},{t:'취소',v:0}]);
     if(!ok)return;try{await dbDo('readwrite',st=>st.delete(it.r.id));}catch(e){}close(false);mToast('지웠어요');

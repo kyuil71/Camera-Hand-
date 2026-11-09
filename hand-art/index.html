@@ -20,16 +20,21 @@ canvas#art,canvas#fx{position:fixed;inset:0;width:100%;height:100%;display:block
 canvas#fx{pointer-events:none}
 .bar{display:block;width:56px;height:5px;border-radius:3px;background:rgba(190,196,206,.55);transition:background .35s,box-shadow .35s}
 body.detect .bar{background:#fff;box-shadow:0 0 12px rgba(255,255,255,.95)}
-#cap{position:fixed;top:env(safe-area-inset-top);right:env(safe-area-inset-right);z-index:8;display:flex;gap:0;align-items:center;padding:2px 2px 10px 10px}
-#cap button{width:62px;height:68px;border:0;background:transparent;padding:0;color:#fff;touch-action:none;-webkit-tap-highlight-color:transparent;
+#cap{position:fixed;top:env(safe-area-inset-top);left:env(safe-area-inset-left);right:env(safe-area-inset-right);z-index:8;display:flex;justify-content:space-between;align-items:center;padding:4px 4px 8px;pointer-events:none}
+#cap .grp{display:flex;align-items:center;gap:0;pointer-events:auto}
+#cap button{width:46px;height:50px;border:0;background:transparent;padding:0;color:#fff;touch-action:none;-webkit-tap-highlight-color:transparent;
   display:flex;align-items:center;justify-content:center;cursor:pointer}            /* big invisible touch area around each round button */
-#cap .ring{width:48px;height:48px;border-radius:24px;border:1px solid rgba(255,255,255,.3);background:rgba(10,12,16,.40);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+#cap .ring{width:34px;height:34px;border-radius:17px;border:1px solid rgba(255,255,255,.3);background:rgba(10,12,16,.40);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
   display:flex;align-items:center;justify-content:center;transition:transform .12s}
 #cap button:active .ring{transform:scale(.9)}
-#cap svg{width:22px;height:22px}
-#recBtn .dot{width:16px;height:16px;border-radius:8px;background:#ff3b30;transition:border-radius .2s,width .2s,height .2s}
-#recBtn.on .dot{width:14px;height:14px;border-radius:3px}
-#recTime{font:600 13px/1 system-ui,sans-serif;color:#fff;background:rgba(255,59,48,.85);padding:5px 8px;border-radius:10px;display:none;font-variant-numeric:tabular-nums}
+#cap svg{width:20px;height:20px}
+#gestBtn.on .ring{background:rgba(255,255,255,.92);color:#111;border-color:#fff}
+body.detect #gestBtn.on .ring{box-shadow:0 0 12px rgba(255,255,255,.9)}
+#gestBtn.busy .ring{animation:gbusy 1s ease-in-out infinite}
+@keyframes gbusy{50%{opacity:.45}}
+#recBtn .dot{width:13px;height:13px;border-radius:7px;background:#ff3b30;transition:border-radius .2s,width .2s,height .2s}
+#recBtn.on .dot{width:11px;height:11px;border-radius:2px}
+#recTime{font:600 12px/1 system-ui,sans-serif;margin-left:2px;color:#fff;background:rgba(255,59,48,.85);padding:5px 8px;border-radius:10px;display:none;font-variant-numeric:tabular-nums}
 body.rec #recTime{display:block}
 #flash{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:7;transition:opacity .35s}
 #grab{position:fixed;left:0;right:0;bottom:0;z-index:5;height:calc(env(safe-area-inset-bottom) + 64px);display:flex;justify-content:center;padding-top:30px;touch-action:none;transition:opacity .3s}
@@ -159,10 +164,12 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
 <canvas id="fx"></canvas>
 <video id="video" playsinline muted style="display:none"></video>
 
-<div id="cap"><span id="recTime">0:00</span><button id="recBtn" aria-label="녹화"><span class="ring"><span class="dot"></span></span></button>
-  <button id="shotBtn" aria-label="캡처"><span class="ring"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.6-2.2h6.8L17 8h3v11H4z"/><circle cx="12" cy="13.2" r="3.6"/></svg></span></button>
+<div id="cap"><div class="grp"><button id="recBtn" aria-label="녹화"><span class="ring"><span class="dot"></span></span></button>
+  <button id="shotBtn" aria-label="캡처"><span class="ring"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.6-2.2h6.8L17 8h3v11H4z"/><circle cx="12" cy="13.2" r="3.6"/></svg></span></button><span id="recTime">0:00</span></div>
+  <div class="grp">
   <button id="penBtn" aria-label="마음 남기기"><span class="ring"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15.5 4.5l4 4L9 19H5v-4z"/><path d="M13.5 6.5l4 4"/></svg></span></button>
-  <button id="bookBtn" aria-label="간직한 마음"><span class="ring"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4.5h10.5a2 2 0 0 1 2 2V20H7a2 2 0 0 1-2-2z"/><path d="M5 18a2 2 0 0 1 2-2h10.5"/><path d="M9 8.5h5"/></svg></span></button></div>
+  <button id="bookBtn" aria-label="간직한 마음 리스트"><span class="ring"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6.5h11M9 12h11M9 17.5h11"/><circle cx="4.6" cy="6.5" r=".9" fill="currentColor"/><circle cx="4.6" cy="12" r=".9" fill="currentColor"/><circle cx="4.6" cy="17.5" r=".9" fill="currentColor"/></svg></span></button>
+  <button id="gestBtn" aria-label="손 인식 켜기"><span class="ring"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8.2 12.2V5.6a1.35 1.35 0 0 1 2.7 0v5.6M10.9 11.2V4.2a1.35 1.35 0 0 1 2.7 0v7M13.6 11.2V5.4a1.35 1.35 0 0 1 2.7 0v6.4M16.3 11.8V8.6a1.35 1.35 0 0 1 2.7 0v5.2a6.6 6.6 0 0 1-6.6 6.6h-.9a5.6 5.6 0 0 1-4.7-2.6l-2.3-3.6a1.4 1.4 0 0 1 2.2-1.7l1.6 1.9"/></svg></span></button></div></div>
 <div id="flash"></div>
 <div id="grab" aria-label="메뉴 열기"><span class="bar"></span></div>
 
@@ -197,7 +204,7 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
     </div>
     <div class="row"><button class="btn" id="pinBtn">비밀번호 바꾸기</button></div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 98</p>
+    <p class="hint" id="ver">버전 99</p>
   </div>
 </div>
 <!-- 마음 남기기: write over the flowing art, then keep it (locked with a 4-digit PIN, on this phone only) or let it flow away -->
@@ -209,7 +216,7 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
 <div id="mView" aria-hidden="true"><div class="mveil"></div>
   <div class="mhead"><button id="vBack" aria-label="닫기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button><button id="vShot" aria-label="이미지로 저장"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.6-2.2h6.8L17 8h3v11H4z"/><circle cx="12" cy="13.2" r="3.6"/></svg></button></div>
   <div class="mbody"><div id="vDate" class="mdate"></div><textarea class="mread" id="vText" maxlength="3000" spellcheck="false"></textarea></div>
-  <div class="mfoot"><button class="mbtn" id="vDel">지우기</button><button class="mbtn" id="vShare">공유하기</button><button class="mbtn" id="vUndo" hidden>되돌리기</button><button class="mbtn" id="vSave" hidden>간직하기</button></div>
+  <div class="mfoot"><button class="mbtn" id="vDel">지우기</button><button class="mbtn" id="vShare">리스트 보기</button><button class="mbtn" id="vUndo" hidden>되돌리기</button><button class="mbtn" id="vSave" hidden>간직하기</button></div>
 </div>
 <div id="mModal" aria-hidden="true"><div class="mcard" id="mCard"></div></div>
 <div id="mToast"></div>
@@ -971,7 +978,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 98';
+const VER_TXT='버전 99';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -2117,7 +2124,7 @@ function onHands(res){
 const video=document.getElementById('video');
 const setDetect=on=>document.body.classList.toggle('detect',!!on);
 const statusEl=document.getElementById('status');const status=t=>{if(t)statusEl.textContent=t;};
-const camBtn=document.getElementById('camBtn');
+const camBtn=document.getElementById('camBtn'),gestBtn=document.getElementById('gestBtn');
 let stream=null, wakeLock=null;
 
 /* ===== 새 손 인식 (핸드 미러 3D와 같은 방식): MediaPipe Tasks HandLandmarker · full 모델 · GPU · 동영상 모드 · One Euro 필터 =====
@@ -2197,7 +2204,7 @@ document.querySelectorAll('#engRow .chip').forEach(b=>b.onclick=()=>setEngine(b.
 document.querySelectorAll('#engRow .chip').forEach(b=>b.setAttribute('aria-pressed',b.dataset.e===ENGINE));
 async function startCam(){
   try{
-    status('AI 모델 불러오는 중…');camBtn.disabled=true;
+    status('AI 모델 불러오는 중…');camBtn.disabled=true;gestBtn.classList.add('busy');
     if(ENGINE==='tasks'&&!tasksLM){try{await loadTasks();}catch(e){console.warn('새 손 인식을 못 불러옴 → 기존 인식',e);ENGINE='legacy';
       document.querySelectorAll('#engRow .chip').forEach(b=>b.setAttribute('aria-pressed',b.dataset.e==='legacy'));}}
     if(ENGINE==='legacy'&&!hands){
@@ -2209,15 +2216,15 @@ async function startCam(){
     status('카메라 여는 중…');
     stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:640},height:{ideal:480},frameRate:{ideal:30}}});
     video.srcObject=stream;await video.play();
-    camOn=true;camBtn.textContent='손 인식 끄기';camBtn.classList.add('on');
+    camOn=true;camBtn.textContent='손 인식 끄기';camBtn.classList.add('on');gestBtn.classList.add('on');gestBtn.setAttribute('aria-label','손 인식 끄기');
     status('손 인식 켜짐 · 손을 카메라에 보여주세요');
     try{wakeLock=await navigator.wakeLock?.request('screen');}catch(e){}
     detectLoop();
   }catch(err){console.error(err);status(err.name==='NotAllowedError'?'카메라 권한이 거부되었어요':'시작 실패: '+(err.message||err));}
-  finally{camBtn.disabled=false;}
+  finally{camBtn.disabled=false;gestBtn.classList.remove('busy');}
 }
 function stopCam(){camOn=false;for(const id of [...pointers.keys()])if(typeof id==='string'&&id[0]==='v')tUp(id);stream&&stream.getTracks().forEach(t=>t.stop());stream=null;setDetect(false);
-  camBtn.textContent='손 인식 시작';camBtn.classList.remove('on');handInfo=[];flowTarget=1;fistSince=0;for(const k in tracks)delete tracks[k];
+  camBtn.textContent='손 인식 시작';camBtn.classList.remove('on');gestBtn.classList.remove('on');gestBtn.setAttribute('aria-label','손 인식 켜기');handInfo=[];flowTarget=1;fistSince=0;for(const k in tracks)delete tracks[k];
   try{wakeLock&&wakeLock.release();}catch(e){} status('손 인식 꺼짐 · 화면을 문질러 보세요');}
 async function detectLoop(){
   if(!camOn)return;
@@ -2226,6 +2233,7 @@ async function detectLoop(){
   requestAnimationFrame(detectLoop);
 }
 camBtn.onclick=()=>{wake();camOn?stopCam():startCam();};
+capPress(gestBtn,()=>{if(camBtn.disabled)return;wake();camOn?stopCam():startCam();});
 document.addEventListener('visibilitychange',async()=>{if(!document.hidden&&camOn){try{wakeLock=await navigator.wakeLock?.request('screen');}catch(e){}}});
 
 /* fingertip glow overlay */
@@ -2580,14 +2588,13 @@ function mMenu(title,sub,items){return new Promise(done=>{mCard.innerHTML=`<h3>$
 // ---- keep ----
 document.getElementById('mKeep').onclick=async()=>{const text=mText.value.trim();if(!text){mText.focus();return mToast('먼저 마음을 적어 주세요');}
   try{mText.blur();}catch(e){}
-  const art=await grabArt();const m0=mindMeta();if(!m0||!m0.pub){if(!await mindUnlock())return;}   // the PIN is asked only the very first time (or once to upgrade an older box)
+  const m0=mindMeta();if(!m0||!m0.pub){if(!await mindUnlock())return;}   // the PIN is asked only the very first time (or once to upgrade an older box)
   const t=Date.now();
   try{const n=await sealNote({text,t,mode});await dbDo('readwrite',st=>st.put({id:t,...n}));}   // only the words (sealed) and which mode it was written in
   catch(e){console.warn(e);return mToast('저장하지 못했어요');}
-  await mindFont(text);const pic=composeMind(art,text,t);mText.value='';
-  for(;;){const v=await mMenu('마음을 간직했어요','이 휴대폰에만, 비밀번호로 잠겨 있어요',[{t:'공유하기',v:'share',cls:'solid'},{t:'간직한 마음 보기',v:'list'},{t:'닫기',v:'close'}]);
-    if(v==='share'){await shareMind(pic,text);continue;}
-    if(v==='list'){closeMind();openKept();}else closeMind();break;}};
+  mText.value='';
+  const v=await mMenu('마음을 간직했어요','이 휴대폰에만, 비밀번호로 잠겨 있어요',[{t:'리스트 보기',v:'list',cls:'solid'},{t:'닫기',v:'close'}]);
+  closeMind();if(v==='list')openKept();};
 // ---- let it flow away ----
 document.getElementById('mLet').onclick=async()=>{const text=mText.value;if(!text.trim()){mText.focus();return mToast('먼저 마음을 적어 주세요');}
   try{mText.blur();}catch(e){}
@@ -2626,8 +2633,8 @@ const MODE_NAME_K={paint:'Pigment',water:'Ripple',wave:'Wave',light:'Aurora',sil
 const TRASH_SVG='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9.5 7V4.8h5V7M6.5 7l1 12.2h9l1-12.2M10.2 10.5v5.8M13.8 10.5v5.8"/></svg>';
 const MODE_TINT={paint:'#e85d8a',water:'#2fa4c4',wave:'#2b7fd6',light:'#7a5cff',silk:'#d79ad0',cloud:'#9fb6d8',ink:'#3a3a3a',halo:'#e8e4f0'};
 async function openKept(){let recs=[];try{recs=await dbDo('readonly',st=>st.getAll());}catch(e){}
-  if(!recs||!recs.length)return mToast('아직 간직한 마음이 없어요');
-  const key=await mindUnlock();if(!key)return;
+  if(!recs||!recs.length){viewRestore();return mToast('아직 간직한 마음이 없어요');}
+  const key=await mindUnlock();if(!key){viewRestore();return;}
   for(const r of recs)if(r.img){delete r.img;try{await dbDo('readwrite',st=>st.put(r));}catch(e){}}   // older notes carried a picture: keep only the words now
   const items=[];for(const r of recs.sort((a,b)=>b.id-a.id)){try{items.push({r,d:await openNote(key,r)});}catch(e){}}
   mCard.innerHTML=`<h3>간직한 마음</h3><p>${items.length}개 · 이 휴대폰에만 있어요</p><div class="mlist">${items.map((it,i)=>{const m=it.d.mode||'paint';
@@ -2637,10 +2644,11 @@ async function openKept(){let recs=[];try{recs=await dbDo('readonly',st=>st.getA
     b.onclick=()=>{mModal.classList.remove('on');viewKept(it,()=>openKept());};
     b.parentNode.querySelector('.mtrash').onclick=async()=>{const ok=await mMenu('이 마음을 지울까요?','지우면 다시 꺼낼 수 없어요',[{t:'지우기',v:1,cls:'danger'},{t:'취소',v:0}]);
       if(ok){try{await dbDo('readwrite',st=>st.delete(it.r.id));}catch(e){}mToast('지웠어요');}openKept();};});
-  document.getElementById('mLc').onclick=()=>mModal.classList.remove('on');
+  document.getElementById('mLc').onclick=()=>{mModal.classList.remove('on');viewRestore();};
   mModal.classList.add('on');}
 // reading a kept note: the mode it was written in comes back underneath (with its music), the words over it
 let viewPrevMode=null;
+function viewRestore(){if(viewPrevMode!=null){if(viewPrevMode!==mode)setMode(viewPrevMode);viewPrevMode=null;}}
 function viewKept(it,back){const v=document.getElementById('mView');
   if(viewPrevMode==null)viewPrevMode=mode;
   const m=it.d.mode;if(m&&m!==mode&&MODE_NAME_K[m])setMode(m);
@@ -2663,7 +2671,7 @@ function viewKept(it,back){const v=document.getElementById('mView');
       if(v2==='stay'){try{vT.focus();}catch(e){}return;}if(v2==='keep'&&!(await save()))return;}
     try{vT.blur();}catch(e){}close(false);};
   document.getElementById('vShot').onclick=async()=>{const text=cur();try{vT.blur();}catch(e){}const art=await grabArt();await mindFont(text);await saveMind(composeMind(art,text,it.d.t));};
-  vShr.onclick=async()=>{const art=await grabArt();await mindFont(it.d.text);await shareMind(composeMind(art,it.d.text,it.d.t),it.d.text);};
+  vShr.onclick=()=>{try{vT.blur();}catch(e){}close(true);};   // back to the list of kept notes
 document.getElementById('vDel').onclick=async()=>{const ok=await mMenu('이 마음을 지울까요?','지우면 다시 꺼낼 수 없어요',[{t:'지우기',v:1,cls:'danger'},{t:'취소',v:0}]);
     if(!ok)return;try{await dbDo('readwrite',st=>st.delete(it.r.id));}catch(e){}close(false);mToast('지웠어요');
     try{const left=await dbDo('readonly',st=>st.count());if(left)back();}catch(e){}};}

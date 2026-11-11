@@ -210,7 +210,7 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
     </div>
     <div class="row"><button class="btn" id="pinBtn">비밀번호 바꾸기</button></div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 109</p>
+    <p class="hint" id="ver">버전 110</p>
   </div>
 </div>
 <!-- 마음 남기기: write over the flowing art, then keep it (locked with a 4-digit PIN, on this phone only) or let it flow away -->
@@ -571,7 +571,7 @@ void main(){vec2 v=texture(uVel,vUv).xy*simTexel;vec2 c=vUv-v*dt;
  d.xy=d.xy/sqrt(1.+dot(d.xy,d.xy)/(.17*.17));                                    /* soft limit: no flat plateau with a hard rim */
  d.z=max(d.z*exp(-dt*.45),min(1.,length(v)*clearK));
  o=vec4(d.xy,d.z,1.);}`,
-cloudPass: H+`uniform sampler2D uD,uN;uniform float aspect,bg;uniform vec4 sty;uniform vec3 lay;uniform vec2 lo[3];uniform vec4 lw[3],lc[3],lm[3];
+cloudPass: H+`uniform sampler2D uD,uN;uniform float aspect,bg;uniform vec4 sty;uniform vec3 lay;uniform vec2 lo[3];uniform vec4 lw[3],lc[3],lm[3];uniform vec2 pan;
 /* tiling noise (period 8) whose every octave is folded back into [0,8): the numbers stay small on any GPU, at any time,
    so the gas can never break into flat facets with straight edges — only smooth curves */
 float vnP(vec2 x){return texture(uN,x*.125+.001953125).r;}   /* the tiling noise is baked once into a small texture: cheap on a phone, smooth everywhere */
@@ -587,16 +587,17 @@ void main(){vec2 uv=vUv;vec4 D=texture(uD,uv);
  vec3 col=bgc;float A=0.;vec2 ld=normalize(vec2(.6,.8));float thin=1.-.85*D.z;
  for(int i=0;i<3;i++){float fi=float(i);
   float sc=lay.x*(1.7-.45*fi),al=(.5+.25*fi)*lay.z;
-  vec2 q=mod(p*sc+lo[i],16.);                                  /* the wind's travel arrives here already folded small */
+  vec2 pl=p+pan*(.45+.275*fi);                                /* tilting looks around: the near gas slides more than the far (depth) */
+  vec2 q=mod(pl*sc+lo[i],16.);                                  /* the wind's travel arrives here already folded small */
   vec2 w=vec2(fbP3(q*.5+lw[i].xy),fbP3(q*.5+lw[i].zw))-.5;
   vec2 qq=q+w*sty.w;
   qq+=.35*vec2(sin(qq.y*.7854+lm[i].y),cos(qq.x*.7854+lm[i].z));   /* long curling currents */
   float d=fbP5(qq);
-  float cov=sty.x+lm[i].x+.09*(fbP3(p*.45+lc[i].xy)-.5);
+  float cov=sty.x+lm[i].x+.09*(fbP3(pl*.45+lc[i].xy)-.5);
   float lo_=1.-cov,dens=smoothstep(lo_,lo_+sty.y,d);
   float dl=fbP5(qq+ld*.35);float lit=clamp(.55+(d-dl)*5.,0.,1.);
   float a=dens*al*thin;
-  float hue=(fbP3(p*.7+lc[i].zw)-.5)*3.2+.5+fi*.23+.4*(fbP3(p*.21+lc[i].yx)-.5)+lm[i].w;   /* broad regions of colour that travel with the wind */
+  float hue=(fbP3(pl*.7+lc[i].zw)-.5)*3.2+.5+fi*.23+.4*(fbP3(pl*.21+lc[i].yx)-.5)+lm[i].w;   /* broad regions of colour that travel with the wind */
   vec3 hc=nebCol(hue);vec3 cc;
   if(white>.5){cc=pow(hc,vec3(1.25))*(.82+.22*lit);cc=mix(cc,vec3(1.,.97,.93),pow(dens,4.)*.35*lit);a*=1.15;}
   else{cc=hc*(.80+.55*lit);cc+=vec3(1.,.93,.84)*pow(dens,3.2)*lit*.75;}
@@ -605,7 +606,7 @@ void main(){vec2 uv=vUv;vec4 D=texture(uD,uv);
   if(white>.5)col=mix(col,cc,clamp(a,0.,1.));else col+=cc*a*(.85-.15*fi);A=max(A,a);}
  if(white<.5){col=bgc+(1.-exp(-(col-bgc)*1.35));float l=dot(col,vec3(.3,.5,.2));col=max(mix(vec3(l),col,1.22),0.);}
  o=vec4(col,A);}`,
-cloudOut: H+`uniform sampler2D uC;uniform float time,bg,seed;uniform vec2 res;
+cloudOut: H+`uniform sampler2D uC;uniform float time,bg,seed;uniform vec2 res,pan;
 /* dozens of stars: a few big bright ones, many tiny faint ones, each twinkling at its own pace */
 vec3 stars(vec2 fc,float cell,float sd,float thr,float big){vec2 g=fc/cell;vec2 id=floor(g);vec3 a=vec3(0.);
  for(int j=-1;j<=1;j++)for(int i=-1;i<=1;i++){vec2 c=id+vec2(float(i),float(j));float h=hash(c+sd);if(h<thr)continue;
@@ -618,8 +619,8 @@ vec3 stars(vec2 fc,float cell,float sd,float thr,float big){vec2 g=fc/cell;vec2 
   a+=tint*(core+halo)*(.35+.65*b)*tw;}   /* round soft glows only: no straight glints anywhere */
  return a;}
 void main(){vec4 n=texture(uC,vUv);vec3 c=n.rgb;float white=step(1.5,bg);
- vec2 fc=gl_FragCoord.xy+vec2(time*.6,time*.25);
- vec3 st=stars(fc,res.y*.16,seed,.38,3.8)*2.2+stars(fc+71.,res.y*.085,seed+4.4,.62,2.2)*1.6+stars(fc+213.,res.y*.06,seed+9.1,.72,1.3)*1.1;
+ vec2 fc=gl_FragCoord.xy+vec2(time*.6,time*.25);vec2 pp=pan*res.y;   /* the stars are farthest of all: they shift least when tilting */
+ vec3 st=stars(fc+pp*.30,res.y*.16,seed,.38,3.8)*2.2+stars(fc+71.+pp*.22,res.y*.085,seed+4.4,.62,2.2)*1.6+stars(fc+213.+pp*.15,res.y*.06,seed+9.1,.72,1.3)*1.1;
  float occ=1.-.6*smoothstep(.2,.9,n.a);
  if(white>.5)c-=(vec3(1.)-vec3(.35,.45,.70))*min(st,vec3(1.))*.55*occ;    /* on white the stars show as soft blue-grey glints */
  else c+=st*occ;
@@ -1090,7 +1091,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 109';
+const VER_TXT='버전 110';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -1421,10 +1422,14 @@ function cloudWindStep(dt,live){const W=cWind;W.T+=dt;const now=performance.now(
     else{L.tx=L.wx;L.ty=L.wy;}
     const r=1-Math.exp(-dt*(touching||L.hold>0?CL_RATE[i]:.3+.1*i));L.x+=(L.tx-L.x)*r;L.y+=(L.ty-L.y)*r;
     if(live){L.ox+=L.x*dt*flow;L.oy+=L.y*dt*flow;L.mt+=dt*flow*(.03+1.6*Math.hypot(L.x,L.y));}});}   // the faster a layer is blown, the faster its shapes churn
+// tilt = look around the space: tilt toward a side and the view travels that way, as far as the tilt (bounded), and comes back when level
+const cPan=[0,0];
 function cloudFrame(dt){
   const st=NEB_STY,live=flow>.3,k=dt*flow*(.35+.5*Math.min(timeScale,2));
   cloudT+=k;
   cloudWindStep(dt,live);
+  {const K=.8,lim=.5,tx=gyroOn?Math.max(-lim,Math.min(lim,viewTilt[0]*K)):0,ty=gyroOn?Math.max(-lim,Math.min(lim,viewTilt[1]*K)):0,r=1-Math.exp(-dt*3);
+   cPan[0]+=(tx-cPan[0])*r;cPan[1]+=(ty-cPan[1])*r;}
   // everything that grows with time is folded here (in double precision) before it reaches the GPU
   const M=(v,m)=>((v%m)+m)%m,T=cloudT,lo=new Float32Array(6),lw=new Float32Array(12),lc=new Float32Array(12),lm=new Float32Array(12);
   for(let i=0;i<3;i++){const sc=st.sc*(1.7-.45*i),spd=.6+.25*i,sd=cloudSeed%8+i*7.31;
@@ -1434,9 +1439,9 @@ function cloudFrame(dt){
     lc[i*4]=M(T*.006+sd*.7,8);lc[i*4+1]=M(-T*.004+sd*.3,8);lc[i*4+2]=M(-L.ox*.7+sd*.37+i*.29,8);lc[i*4+3]=M(-L.oy*.7+T*.004,8);
     lm[i*4]=.05*Math.sin(T*.043+sd);lm[i*4+1]=M(T*.02+sd,6.2832);lm[i*4+2]=M(-T*.017+sd*1.3,6.2832);lm[i*4+3]=.06*Math.sin(T*.02+i);}
   let u=use('cloudPass',[cFbo.tx,cFbo.ty]);gl.uniform1i(u.uD,cDisp.r.bind(0));gl.uniform1i(u.uN,nebNoise(1));
-  gl.uniform1f(u.aspect,aspect);gl.uniform1f(u.bg,cloudBg);gl.uniform2fv(u.lo,lo);gl.uniform4fv(u.lw,lw);gl.uniform4fv(u.lc,lc);gl.uniform4fv(u.lm,lm);
+  gl.uniform1f(u.aspect,aspect);gl.uniform1f(u.bg,cloudBg);gl.uniform2fv(u.lo,lo);gl.uniform4fv(u.lw,lw);gl.uniform4fv(u.lc,lc);gl.uniform4fv(u.lm,lm);gl.uniform2f(u.pan,cPan[0],cPan[1]);
   gl.uniform4f(u.sty,st.cov,st.soft,st.sc,st.warp);gl.uniform3f(u.lay,st.sc,0,st.al);blit(cFbo);
-  u=use('cloudOut',[0,0]);gl.uniform1i(u.uC,cFbo.bind(0));gl.uniform1f(u.time,(performance.now()*.001)%3600);gl.uniform1f(u.bg,cloudBg);gl.uniform1f(u.seed,(cloudSeed*.37)%9);
+  u=use('cloudOut',[0,0]);gl.uniform1i(u.uC,cFbo.bind(0));gl.uniform1f(u.time,(performance.now()*.001)%3600);gl.uniform1f(u.bg,cloudBg);gl.uniform1f(u.seed,(cloudSeed*.37)%9);gl.uniform2f(u.pan,cPan[0],cPan[1]);
   gl.uniform2f(u.res,canvas.width,canvas.height);blit(null);
 }
 
@@ -2614,7 +2619,7 @@ function setMode(m){mode=m;document.body.classList.toggle('water',m==='water');d
   document.querySelectorAll('#modeSeg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.m===m));
   seedBtn.textContent=(m==='water'||m==='wave')?'잔잔하게':m==='ink'?'새 한지':'새 캔버스';hintTxt.innerHTML=(m==='water'&&dipMode)?HINTS.dip:HINTS[m];
   gliders.length=0;queue.length=0;drops.length=0;try{localStorage.setItem('hf-mode',m);}catch(e){}
-  if(m==='wave'&&!gyroOn)setGyro(true);                 // the aquarium lives on tilt and shake
+  if((m==='wave'||m==='cloud')&&!gyroOn)setGyro(true);                 // the aquarium lives on tilt and shake
   if(curTrack)switchTrack();}
 document.querySelectorAll('#modeSeg button').forEach(b=>b.onclick=()=>setMode(b.dataset.m));
 setMode(mode);

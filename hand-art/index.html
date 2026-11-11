@@ -210,7 +210,7 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
     </div>
     <div class="row"><button class="btn" id="pinBtn">비밀번호 바꾸기</button></div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 105</p>
+    <p class="hint" id="ver">버전 106</p>
   </div>
 </div>
 <!-- 마음 남기기: write over the flowing art, then keep it (locked with a 4-digit PIN, on this phone only) or let it flow away -->
@@ -562,49 +562,74 @@ void main(){vec2 uv=vUv;vec2 p=vec2(uv.x*aspect,uv.y);
 
 cloudDisp: H+`uniform sampler2D uD,uVel;uniform vec2 simTexel;uniform float dt,relax,clearK;
 // displacement (RG) + thinning (B) left behind by the hands; advected, then slowly healing → clouds part and drift back together
-void main(){vec2 v=texture(uVel,vUv).xy*simTexel;
- vec4 d=texture(uD,vUv-v*dt);
+void main(){vec2 v=texture(uVel,vUv).xy*simTexel;vec2 c=vUv-v*dt;
+ vec4 d=texture(uD,c);
+ vec2 oc=max(-c,c-1.);float inside=1.-smoothstep(0.,.015,max(oc.x,oc.y));d.xy*=inside;   /* what flows in from beyond the edge is calm gas, never a streak copied from the border */
+ vec2 tx=vR-vUv,ty=vT-vUv;vec4 nb=.25*(texture(uD,c+tx)+texture(uD,c-tx)+texture(uD,c+ty)+texture(uD,c-ty));
+ d=mix(d,nb,.5);                                            /* a little diffusion every step: the field stays smooth, never creased */
  d.xy+=v*dt;d.xy*=exp(-dt*relax);
+ d.xy=.17*tanh(d.xy/.17);                                    /* soft limit: no flat plateau with a hard rim */
  d.z=max(d.z*exp(-dt*.45),min(1.,length(v)*clearK));
- o=vec4(clamp(d.xy,-.35,.35),d.z,1.);}`,
-cloudPass: H+`uniform sampler2D uD;uniform float time,aspect,seed;
-uniform vec3 skyTop,skyBot,litC,shdC,sunC;uniform vec2 sunP;uniform vec4 sty;uniform vec3 lay;
-// rotated octaves → no axis-aligned structure
+ o=vec4(d.xy,d.z,1.);}`,
+cloudPass: H+`uniform sampler2D uD;uniform float time,aspect,seed,bg;uniform vec4 sty;uniform vec3 lay;
 float fb5(vec2 p){mat2 m=mat2(1.62,1.18,-1.18,1.62);float s=0.,a=.5;for(int i=0;i<5;i++){s+=a*vn(p);p=m*p;a*=.5;}return s;}
 float fb3(vec2 p){mat2 m=mat2(1.62,1.18,-1.18,1.62);float s=0.,a=.5;for(int i=0;i<3;i++){s+=a*vn(p);p=m*p;a*=.5;}return s/.875;}
-// one cloud layer: domain-warped fbm, coverage that slowly breathes → clouds form, spread, merge and thin out
+/* the colours of the gas: deep blue → cyan → cream → ember orange → red, a touch of violet */
+vec3 nebCol(float h){vec3 cB=vec3(.05,.20,1.),cV=vec3(.42,.28,1.),cC=vec3(.0,.82,1.),cP=vec3(1.,.62,.48),cO=vec3(1.,.42,.12),cR=vec3(1.,.18,.10);
+ h=fract(h);vec3 c=mix(cB,cC,smoothstep(.05,.20,h));c=mix(c,cP,smoothstep(.27,.38,h));c=mix(c,cO,smoothstep(.40,.50,h));c=mix(c,cR,smoothstep(.55,.66,h));
+ c=mix(c,cV,smoothstep(.72,.84,h));return mix(c,cB,smoothstep(.88,1.,h));}
 vec2 cloudL(vec2 p,float t,float sc,float spd,float sd,vec2 ld){
  vec2 q=p*sc+vec2(t*spd,t*spd*.27)+sd;
  vec2 w=vec2(fb3(q*.55+vec2(0.,t*.013)),fb3(q*.55+vec2(5.2,1.3)-t*.011))-.5;
  vec2 qq=q+w*sty.w;
+ qq+=.35*vec2(sin(qq.y*.9+t*.02+sd),cos(qq.x*.8-t*.017+sd*1.3));   /* long curling currents: the gas streams in curves */
  float d=fb5(qq);
- float cov=sty.x+.10*sin(t*.043+sd)+.16*(fb3(p*.45+vec2(t*.006,-t*.004)+sd*.7)-.5);
+ float cov=sty.x+.05*sin(t*.043+sd)+.09*(fb3(p*.45+vec2(t*.006,-t*.004)+sd*.7)-.5);
  float lo=1.-cov;
  float dens=smoothstep(lo,lo+sty.y,d);
- float dl=fb5(qq+ld*.35);                                    // density a little toward the light
- float lit=clamp(.55+(d-dl)*5.,0.,1.);                       // facing the light → brighter, underside → shadow
+ float dl=fb5(qq+ld*.35);
+ float lit=clamp(.55+(d-dl)*5.,0.,1.);
  return vec2(dens,lit);}
 void main(){vec2 uv=vUv;vec4 D=texture(uD,uv);
  vec2 p=vec2(uv.x*aspect,uv.y)-vec2(D.x*aspect,D.y);
- float t=time;
- vec3 col=mix(skyBot,skyTop,smoothstep(0.,1.,uv.y));
- vec2 sp=vec2(sunP.x*aspect,sunP.y);float sd2=length(vec2(uv.x*aspect,uv.y)-sp);
- col+=sunC*(.22*exp(-sd2*sd2/.05)+.08*exp(-sd2*sd2/.6));
- vec2 ld=normalize(sp-vec2(.5*aspect,.5)+1e-4);            // one light direction for the whole sky (no pinch at the sun)
+ float t=time;float white=step(1.5,bg);
+ vec3 bgc=bg<.5?vec3(.0,.0,.012):(bg<1.5?vec3(.085,.088,.10):vec3(.975,.972,.965));
+ vec3 col=bgc;float A=0.;
+ vec2 ld=normalize(vec2(.6,.8));
  float thin=1.-.85*D.z;
- // far → near: slower, smaller, paler at the back; faster, bigger and denser in front (parallax)
  for(int i=0;i<3;i++){float fi=float(i);
-  float sc=lay.x*(1.7-.45*fi),spd=lay.y*(.45+.55*fi),al=(.45+.25*fi)*lay.z;
+  float sc=lay.x*(1.7-.45*fi),spd=lay.y*(.45+.55*fi),al=(.5+.25*fi)*lay.z;
   vec2 c=cloudL(p+vec2(0.,fi*.13),t,sc,spd,seed+fi*7.31,ld);
   float a=c.x*al*thin;
-  vec3 cc=mix(shdC,litC,c.y);
+  float hue=(fb3(p*.8+vec2(seed*.37+fi*.29,t*.004))-.5)*3.6+.5+fi*.23+.4*(fb3(p*.21+vec2(t*.002,seed))-.5)+.06*sin(t*.02+fi);   /* several colours on every screen */   /* each region of the gas its own colour, slowly shifting */
+  vec3 hc=nebCol(hue);
+  vec3 cc;
+  if(white>.5){cc=pow(hc,vec3(1.25))*(.82+.22*c.y);cc=mix(cc,vec3(1.,.97,.93),pow(c.x,4.)*.35*c.y);a*=1.15;}   /* on white: clear coloured smoke */
+  else{cc=hc*(.80+.55*c.y);cc+=vec3(1.,.93,.84)*pow(c.x,3.2)*c.y*.75;}                                    /* on dark: glowing gas, white-hot only where it is densest */
   float rim=smoothstep(.15,.55,c.x)*(1.-smoothstep(.55,.95,c.x))*smoothstep(.6,1.,c.y);
-  cc+=sunC*rim*.35*exp(-sd2*.9);                             // silver lining on the side facing the light
-  cc=mix(cc,col,.35*(1.-fi*.45));                            // aerial perspective
-  col=mix(col,cc,a);}
- o=vec4(col,1.);}`,
-cloudOut: H+`uniform sampler2D uC;uniform float time;
-void main(){vec3 c=texture(uC,vUv).rgb;c*=1.-.18*pow(length(vUv-.5)*1.2,2.);
+  cc+=hc*rim*(white>.5?.0:.4);
+  if(white>.5)col=mix(col,cc,clamp(a,0.,1.));else col+=cc*a*(.85-.15*fi);A=max(A,a);}   /* on dark the layers of gas add up into light */
+ if(white<.5){col=bgc+(1.-exp(-(col-bgc)*1.35));float l=dot(col,vec3(.3,.5,.2));col=max(mix(vec3(l),col,1.22),0.);}
+ o=vec4(col,A);}`,
+cloudOut: H+`uniform sampler2D uC;uniform float time,bg,seed;uniform vec2 res;
+/* dozens of stars: a few big bright ones, many tiny faint ones, each twinkling at its own pace */
+vec3 stars(vec2 fc,float cell,float sd,float thr,float big){vec2 g=fc/cell;vec2 id=floor(g);vec3 a=vec3(0.);
+ for(int j=-1;j<=1;j++)for(int i=-1;i<=1;i++){vec2 c=id+vec2(float(i),float(j));float h=hash(c+sd);if(h<thr)continue;
+  vec2 pos=c+.15+.7*vec2(hash(c*1.7+sd+3.1),hash(c*2.3+sd+7.7));vec2 dv=(g-pos)*cell;float d=length(dv);
+  float b=pow(hash(c*3.1+sd+1.3),1.6);float sz=mix(.85,big,pow(hash(c*.61+sd+9.),2.5))*(res.y/1000.);   /* size and brightness chosen apart: big-faint, small-bright, all mixed */
+  float ph=hash(c+sd*3.+11.)*6.283,sp=.5+2.2*hash(c*.37+sd+5.);
+  float tw=.65+.35*sin(time*sp+ph)*(.6+.4*sin(time*sp*.43+ph*2.1));
+  float core=exp(-d*d/(sz*sz*.9)),halo=exp(-d/(sz*3.2))*.32+exp(-d*d/(sz*sz*30.))*.18;
+  vec3 tint=mix(vec3(.78,.86,1.),vec3(1.,.92,.80),hash(c*5.3+sd));
+  a+=tint*(core+halo)*(.35+.65*b)*tw;}   /* round soft glows only: no straight glints anywhere */
+ return a;}
+void main(){vec4 n=texture(uC,vUv);vec3 c=n.rgb;float white=step(1.5,bg);
+ vec2 fc=gl_FragCoord.xy+vec2(time*.6,time*.25);
+ vec3 st=stars(fc,res.y*.16,seed,.38,3.8)*2.2+stars(fc+71.,res.y*.085,seed+4.4,.62,2.2)*1.6+stars(fc+213.,res.y*.06,seed+9.1,.72,1.3)*1.1;
+ float occ=1.-.6*smoothstep(.2,.9,n.a);
+ if(white>.5)c-=(vec3(1.)-vec3(.35,.45,.70))*min(st,vec3(1.))*.55*occ;    /* on white the stars show as soft blue-grey glints */
+ else c+=st*occ;
+ c*=1.-(white>.5?.05:.18)*pow(length(vUv-.5)*1.2,2.);
  c+=(hash(gl_FragCoord.xy+fract(time)*53.)-.5)*.008;o=vec4(c,1.);}`,
 silkBg: H+`uniform vec3 c1,c2;uniform float time,aspect;
 void main(){vec2 uv=vUv;vec2 p=vec2(uv.x*aspect,uv.y);
@@ -1070,7 +1095,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 105';
+const VER_TXT='버전 106';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -1356,14 +1381,15 @@ const CLOUDS={
   'Dream Cloud':{top:'#8FB2F5',bot:'#F4D3E6',lit:'#FFF7FB',shd:'#C2AEE3',sun:'#FFE8F2',sunP:[.25,.8],cov:.62,soft:.28,sc:2.8,spd:.018,warp:1.6,al:1.0,relax:.40},
   'Twilight':  {top:'#231845',bot:'#E58AA6',lit:'#FFC4D2',shd:'#4C2F6E',sun:'#FFB27A',sunP:[.55,.18],cov:.55,soft:.20,sc:3.0,spd:.014,warp:2.0,al:1.0,relax:.35},
   'Moonlight': {top:'#03060F',bot:'#0E1C36',lit:'#93AEDB',shd:'#121C33',sun:'#CFE0FF',sunP:[.72,.82],cov:.47,soft:.24,sc:2.6,spd:.008,warp:1.5,al:.72,relax:.28}};
-let cloudName='Dream Cloud'; try{const v=localStorage.getItem('hf-cloud');if(v&&CLOUDS[v])cloudName=v;}catch(e){}
+const NEB_STY={cov:.55,soft:.34,sc:2.5,spd:.016,warp:1.9,al:1.0,relax:.40};
+let cloudBg=0; try{const v=+localStorage.getItem('hf-cloudbg');if(v===1||v===2)cloudBg=v;}catch(e){}
 let cloudT=0, cloudSeed=Math.random()*50, cDisp=null, cFbo=null;
 const CLOUD_SCALE=.5;                                   // clouds are soft: render at half resolution, upscale (mobile)
 function cloudAlloc(){const [sw,sh]=res(160);cDisp=dfbo(sw,sh);
   cFbo=fbo(Math.max(1,Math.round(canvas.width*CLOUD_SCALE)),Math.max(1,Math.round(canvas.height*CLOUD_SCALE)));}
 function cloudReset(){cloudSeed=Math.random()*50;if(!cDisp)return;for(const t of [cDisp.r,cDisp.w]){gl.bindFramebuffer(gl.FRAMEBUFFER,t.f);gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT);}}
 function cloudFrame(dt){
-  const st=CLOUDS[cloudName],live=flow>.3,k=dt*flow*(.35+timeScale);
+  const st=NEB_STY,live=flow>.3,k=dt*flow*(.35+timeScale);
   cloudT+=k;
   // hands / touch → gentle pushes in the shared flow field (no grabbing, no explosions)
   for(const h of handInfo){if(!live)break;
@@ -1371,17 +1397,16 @@ function cloudFrame(dt){
     if(h.open&&h.palm)for(let a=0;a<6;a++){const an=a/6*6.283+cloudT;splatVel(h.palm.x+Math.cos(an)*.05/aspect,h.palm.y+Math.sin(an)*.05,Math.cos(an)*160*dt*30,Math.sin(an)*160*dt*30,.006);}}
   for(const s of queue.splice(0)){if(!live)continue;
     const g=s.hand?.55:.7;                                // calm: never over-sensitive
-    if(s.set)splatVelSet(s.x,s.y,s.vx*vel.r.w*g,s.vy*vel.r.h*g,s.r*2.4,s.set*.8);else splatVel(s.x,s.y,s.dx*.35,s.dy*.35,s.r*2);}
+    if(s.set)splatVelSet(s.x,s.y,s.vx*vel.r.w*g,s.vy*vel.r.h*g,s.r*5,s.set*.6);else splatVel(s.x,s.y,s.dx*.35,s.dy*.35,s.r*4);}   // a broad, soft push: the gas bends, it is never creased
   if(flow>.02){simTime+=k;stepVel(k,0,4,0);}
   if(Math.abs(motionF[0])+Math.abs(motionF[1])>.01&&live)splatVel(.5,.5,motionF[0]*60,motionF[1]*60,.25);
   let u=use('cloudDisp',[cDisp.r.tx,cDisp.r.ty]);gl.uniform1i(u.uD,cDisp.r.bind(0));gl.uniform1i(u.uVel,vel.r.bind(1));
   gl.uniform2f(u.simTexel,vel.r.tx,vel.r.ty);gl.uniform1f(u.dt,k);gl.uniform1f(u.relax,st.relax);gl.uniform1f(u.clearK,.9);blit(cDisp.w);cDisp.swap();
   u=use('cloudPass',[cFbo.tx,cFbo.ty]);gl.uniform1i(u.uD,cDisp.r.bind(0));
-  gl.uniform1f(u.time,cloudT);gl.uniform1f(u.aspect,aspect);gl.uniform1f(u.seed,cloudSeed);
-  const c=x=>hex2rgb(x);gl.uniform3f(u.skyTop,...c(st.top));gl.uniform3f(u.skyBot,...c(st.bot));gl.uniform3f(u.litC,...c(st.lit));
-  gl.uniform3f(u.shdC,...c(st.shd));gl.uniform3f(u.sunC,...c(st.sun));gl.uniform2f(u.sunP,st.sunP[0],st.sunP[1]);
+  gl.uniform1f(u.time,cloudT);gl.uniform1f(u.aspect,aspect);gl.uniform1f(u.seed,cloudSeed);gl.uniform1f(u.bg,cloudBg);
   gl.uniform4f(u.sty,st.cov,st.soft,st.sc,st.warp);gl.uniform3f(u.lay,st.sc,st.spd*60,st.al);blit(cFbo);
-  u=use('cloudOut',[0,0]);gl.uniform1i(u.uC,cFbo.bind(0));gl.uniform1f(u.time,cloudT);blit(null);
+  u=use('cloudOut',[0,0]);gl.uniform1i(u.uC,cFbo.bind(0));gl.uniform1f(u.time,performance.now()*.001);gl.uniform1f(u.bg,cloudBg);gl.uniform1f(u.seed,cloudSeed*.37);
+  gl.uniform2f(u.res,canvas.width,canvas.height);blit(null);
 }
 
 /* ================= Water mode (lake) ================= */
@@ -2543,7 +2568,7 @@ const HINTS={paint:hintTxt.innerHTML,
   splash:'<b>저절로</b> 크고 작은 물감이 흩뿌려짐 · 오래된 물감은 천천히 가라앉음<br><b>터치·손끝을 휙</b> 움직인 방향으로 뿌려짐(빠를수록 많이) · <b>톡</b> 그 자리에서 터짐 · <b>주먹</b> 멈춤',
   dip:'<b>손 담그기</b> · 터치: 오래 누를수록 깊게, 톡 누르면 살짝<br>손: 손바닥을 화면 쪽으로 내밀어 오래 둘수록 깊게, 떼면 물이 되솟음',
   ink:'<b>랜덤</b> 붓이 스스로 그림 — 언제든 함께 그리기<br><b>터치·손가락</b> 움직이면 먹물이 스며듦 · 겹칠수록 짙어짐<br><b>엄지+검지 집기</b> 먹 한 방울 · <b>주먹</b> 멈춤<br>먹물은 천천히 옅어져 사라짐 · <b>흔들기 켜면</b> 기울인 쪽으로 번짐',
-  cloud:'<b>검지</b> 지나간 구름이 부드럽게 갈라짐 · 빠르게 움직이면 흩어짐<br><b>집기</b> 회전 흐름 · <b>손 펼치기</b> 넓게 확산 · <b>주먹</b> 천천히 안정',
+  cloud:'<b>저절로</b> 여러 빛깔의 성운이 별 사이를 유선형으로 흘러다님<br><b>터치·손끝</b> 움직이면 성운이 부드럽게 휘어 흐름 · <b>집기</b> 회전 흐름 · <b>손 펼치기</b> 넓게 퍼짐 · <b>주먹</b> 멈춤',
   silk:'<b>손가락·터치를 움직이면</b> 그 방향으로 바람이 불어 실크가 날아감<br>바람이 불어오는 쪽에서 새 실크가 들어옴 · <b>주먹</b> 바람이 잦아듦',
   light:'<b>손가락</b> 빛의 흐름 밀기 · <b>검지만 펴기</b> 가리킨 방향으로 빛줄기<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 멈춤',
   wave:'<b>폰 기울이기</b> 물이 쏠려 벽에 부딪힘 · <b>흔들기</b> 출렁임<br><b>터치·손</b> 물 밀기 · <b>톡</b> 물결 · <b>주먹</b> 멈춤',
@@ -2574,9 +2599,9 @@ function renderSilks(){silkWrap.innerHTML='';for(const name in SILKS){const b=do
   b.onclick=()=>{silkName=name;try{localStorage.setItem('hf-silk',name);}catch(e){}renderSilks();};silkWrap.appendChild(b);}}
 renderSilks();
 const cloudWrap=document.getElementById('clouds');
-function renderClouds(){cloudWrap.innerHTML='';for(const name in CLOUDS){const st=CLOUDS[name],b=document.createElement('button');b.className='chip';
-  b.setAttribute('aria-pressed',name===cloudName);b.innerHTML='<i>'+[st.top,st.shd,st.lit,st.bot].map(c=>`<span style="background:${c}"></span>`).join('')+'</i>'+name;
-  b.onclick=()=>{cloudName=name;try{localStorage.setItem('hf-cloud',name);}catch(e){}renderClouds();};cloudWrap.appendChild(b);}}
+function renderClouds(){cloudWrap.innerHTML='';[['검은 배경','#000'],['다크 그레이','#1a1b1e'],['흰 배경','#f6f5f2']].forEach(([name,sw],i)=>{const b=document.createElement('button');b.className='chip';
+  b.setAttribute('aria-pressed',i===cloudBg);b.innerHTML=`<i class="sw" style="background:${sw}"></i>`+name;
+  b.onclick=()=>{cloudBg=i;try{localStorage.setItem('hf-cloudbg',String(i));}catch(e){}renderClouds();};cloudWrap.appendChild(b);});}
 renderClouds();
 const inkWrap=document.getElementById('inks');
 function renderInks(){inkWrap.innerHTML='';for(const name of ['랜덤',...Object.keys(INKS)]){const b=document.createElement('button');b.className='chip';

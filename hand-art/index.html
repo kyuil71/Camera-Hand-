@@ -214,7 +214,7 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
     <div class="row"><button class="btn" id="pinBtn">비밀번호 바꾸기</button></div>
     <div class="row"><button class="btn" id="bakOut">마음 백업 내보내기</button><button class="btn" id="bakIn">백업 가져오기</button></div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 121</p>
+    <p class="hint" id="ver">버전 122</p>
   </div>
 </div>
 <!-- 마음 남기기: write over the flowing art, then keep it (locked with a 4-digit PIN, on this phone only) or let it flow away -->
@@ -683,7 +683,7 @@ void main(){vec4 s=texture(uP,vUv);vec2 p=s.xy;float life=s.z,lane=s.w;
   float hj=(hash(vUv*2.9+t)-.5)*.02;                       // tiny hue spread → richer, still one colour
   life=1.;lane=1.+fract(emitHue[ei]+hj)*.999;}
  o=vec4(p,life,lane);}`,
-trailFade: H+`uniform sampler2D uT;uniform float k;void main(){o=texture(uT,vUv)*k;}`,
+trailFade: H+`uniform sampler2D uT;uniform float k;uniform vec2 dp;void main(){vec2 q=vUv+dp;float ins=step(0.,q.x)*step(q.x,1.)*step(0.,q.y)*step(q.y,1.);o=texture(uT,q)*k*ins;}`,   /* when the view slides, the glowing trails slide with the space */
 glowDown: H+`uniform sampler2D uT;uniform vec2 px;
 void main(){vec3 c=vec3(0.);float W=0.;for(int y=-3;y<=3;y++)for(int x=-3;x<=3;x++){float w=exp(-float(x*x+y*y)*.18);c+=texture(uT,vUv+vec2(x,y)*px).rgb*w;W+=w;}o=vec4(c/W,1.);}`,
 lightComp: H+`uniform sampler2D uT,uG;uniform vec3 pal[6];uniform float time,aspect;
@@ -1009,7 +1009,7 @@ void main(){vec2 d=gl_PointCoord-.5;float r=length(d)*2.;
  o=vec4(vc*a,1.);}`;
 const PTP=(()=>{const p=gl.createProgram();gl.attachShader(p,compile(gl.VERTEX_SHADER,PT_VS));gl.attachShader(p,compile(gl.FRAGMENT_SHADER,PT_FS));gl.linkProgram(p);
   if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(p));
-  const u={};['uP','psize','t','bigPass','pal','emCol'].forEach(k=>u[k]=gl.getUniformLocation(p,k));return {p,u};})();
+  const u={};['uP','psize','t','bigPass','pal','emCol','pan'].forEach(k=>u[k]=gl.getUniformLocation(p,k));return {p,u};})();
 const vaoPts=gl.createVertexArray();
 const SILK_VS=`#version 300 es
 precision highp float;
@@ -1101,7 +1101,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 121';
+const VER_TXT='버전 122';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -1259,7 +1259,7 @@ function lightFrame(dt){
   gl.uniform2f(u.force,motionF[0],motionF[1]);gl.uniform2f(u.tilt,Math.max(-.7,Math.min(.7,viewTilt[0])),Math.max(-.7,Math.min(.7,viewTilt[1])));gl.uniform1f(u.dt,ldt);gl.uniform1f(u.t,lightTime);gl.uniform1f(u.seed,lightSeed);gl.uniform1f(u.aspect,aspect);
   blit(parts.w);parts.swap();
   // light trails: fade, then add the sparks
-  u=use('trailFade',[0,0]);gl.uniform1i(u.uT,trail.r.bind(0));gl.uniform1f(u.k,Math.exp(-dt*flow*2.6));blit(trail.w);trail.swap();
+  u=use('trailFade',[0,0]);gl.uniform1i(u.uT,trail.r.bind(0));gl.uniform1f(u.k,Math.exp(-dt*flow*2.6));gl.uniform2f(u.dp,LV.o[0]-(LV.po0??LV.o[0]),LV.o[1]-(LV.po1??LV.o[1]));LV.po0=LV.o[0];LV.po1=LV.o[1];blit(trail.w);trail.swap();
   drawPoints(trail.r,0);
   u=use('glowDown',[0,0]);gl.uniform1i(u.uT,trail.r.bind(0));gl.uniform2f(u.px,trail.r.tx*3,trail.r.ty*3);blit(glowF);
   u=use('lightComp',[0,0]);gl.uniform1i(u.uT,trail.r.bind(0));gl.uniform1i(u.uG,glowF.bind(1));gl.uniform3fv(u.pal,lightFlat);
@@ -1980,8 +1980,8 @@ function inkFrame(dt){
 let WATER_AMP=1, HAND_K=1.1;const wPan=[0,0];
 // look around by tilting, for the modes that draw on a canvas larger than the screen: z = how much of it the screen shows,
 // o = where the window sits (uv). The canvas is 1/z the screen; the window slides as far as the tilt, never past the edge.
-const VIEW={paint:{z:.72,o:[0,0]},ink:{z:.75,o:[0,0]},light:{z:1,lim:.5,o:[0,0]},halo:{z:1,lim:.5,o:[0,0]}};
-function viewStep(key,dt){const V=VIEW[key],lim=V.lim||(1-V.z)/2,K=V.lim?.8:.5,r=1-Math.exp(-dt*3);
+const VIEW={paint:{z:.72,o:[0,0]},ink:{z:.75,o:[0,0]},light:{z:1,lim:.5,K:1.1,o:[0,0]},halo:{z:1,lim:.5,o:[0,0]}};
+function viewStep(key,dt){const V=VIEW[key],lim=V.lim||(1-V.z)/2,K=V.K||(V.lim?.8:.5),r=1-Math.exp(-dt*3);
   const tx=gyroOn?Math.max(-lim,Math.min(lim,viewTilt[0]*K)):0,ty=gyroOn?Math.max(-lim,Math.min(lim,viewTilt[1]*K)):0;
   V.o[0]+=(tx-V.o[0])*r;V.o[1]+=(ty-V.o[1])*r;return V;}
 const vwx=(k,x)=>(x-.5)*VIEW[k].z+.5+VIEW[k].o[0], vwy=(k,y)=>(y-.5)*VIEW[k].z+.5+VIEW[k].o[1];   // screen → canvas

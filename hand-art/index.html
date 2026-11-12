@@ -57,7 +57,7 @@ body.menu .dock{transform:translate(-50%,0)}
 .btn{flex:1;min-height:48px;border:1px solid var(--line);background:rgba(255,255,255,.06);color:var(--ink);border-radius:14px;font:inherit;font-size:16px;font-weight:600}
 .btn.main{flex:1.6;background:var(--ink);color:#101826;border-color:transparent}
 .btn.main.on{background:#d8262c;color:#fff}
-#gyroBtn.on{background:var(--ink);color:#101826}
+#gyroBtn.on,#musicBtn.on{background:var(--ink);color:#101826}
 .btn:active,.chip:active{transform:scale(.97)}
 #install{display:none}
 .speed{display:flex;align-items:center;gap:12px;margin:0 2px 12px;touch-action:none}
@@ -88,6 +88,7 @@ body:not(.water) #plopRow,body:not(.water) #floors,body:not(.water) #dipRow,body
 #gyroBtn{flex:1.45;white-space:nowrap;padding-left:6px;padding-right:6px}   /* removed from the menu (hand tracking: the ✋ button at the top) */
 body:not(.halo) #haloColRow,body:not(.halo) #beadRow{display:none}
 #dipRow{margin-bottom:10px}
+#dipRow[hidden]{display:none}
 #dipBtn.on{background:var(--ink);color:#101826}
 .chip i.sw{width:24px;height:18px;border-radius:9px;border:1px solid rgba(255,255,255,.25)}
 .hint{font-size:16px;color:var(--mute);text-align:center;margin-top:10px;line-height:1.5}
@@ -193,7 +194,7 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
     <div class="row chips" id="inks"></div>
     <div class="row chips" id="splashRow"><button class="chip" data-sb="0"><i class="sw" style="background:#000"></i>검은 배경</button><button class="chip" data-sb="1"><i class="sw" style="background:#f6f5f2"></i>흰 배경</button></div>
     <div class="row chips" id="rainRow"><button class="chip" data-r="0">비 없음</button><button class="chip" data-r="1">이슬비</button><button class="chip" data-r="2">비</button><button class="chip" data-r="3">소나기</button></div>
-    <div class="row" id="dipRow"><button class="btn" id="dipBtn">손 담그기 켜기</button></div>
+    <div class="row" id="dipRow" hidden><button class="btn" id="dipBtn">손 담그기 켜기</button></div>
     <div class="row chips" id="haloColRow"><button class="chip" data-hc="white">링 화이트</button><button class="chip" data-hc="random">링 색 랜덤</button></div>
     <div class="speed" id="beadRow"><span>구슬 배경</span><input type="range" id="beadSize" min="20" max="100" step="1" aria-label="구슬 배경 범위"><b id="beadVal"></b></div>
     <div class="row chips" id="floors"><button class="chip" data-f="2"><i class="sw" style="background:linear-gradient(135deg,#000,#1b1d20 50%,#000)"></i>검은 유리</button><button class="chip" data-f="1"><i class="sw" style="background:linear-gradient(135deg,#1c2328,#3a464e 50%,#11171b)"></i>다크 그레이</button><button class="chip" data-f="3"><i class="sw" style="background:#1d2024;background-image:linear-gradient(#5a5f66 1.5px,transparent 1.5px),linear-gradient(90deg,#5a5f66 1.5px,transparent 1.5px);background-size:8px 8px"></i>그레이 타일</button><button class="chip" data-f="0"><i class="sw" style="background:linear-gradient(135deg,#8c8270,#c9bda4 45%,#6e675c)"></i>자갈</button></div>
@@ -213,7 +214,7 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
     <div class="row"><button class="btn" id="pinBtn">비밀번호 바꾸기</button></div>
     <div class="row"><button class="btn" id="bakOut">마음 백업 내보내기</button><button class="btn" id="bakIn">백업 가져오기</button></div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 118</p>
+    <p class="hint" id="ver">버전 119</p>
   </div>
 </div>
 <!-- 마음 남기기: write over the flowing art, then keep it (locked with a 4-digit PIN, on this phone only) or let it flow away -->
@@ -712,12 +713,13 @@ waterPoke: H+`uniform sampler2D uT;uniform float aspect,radius,amp;uniform vec2 
 void main(){vec4 s=texture(uT,vUv);vec2 p=vUv-point;p.x*=aspect;float g=exp(-dot(p,p)/radius);o=vec4(s.x,s.y-amp*g,0.,1.);}`,
 waterGrad: H+`uniform sampler2D uT;void main(){float l=texture(uT,vL).x,r=texture(uT,vR).x,b=texture(uT,vB).x,t=texture(uT,vT).x,c=texture(uT,vUv).x;
 o=vec4((r-l)*.5,(t-b)*.5,l+r+b+t-4.*c,c);}`,
-waterRender: H+`uniform sampler2D uH,uS;uniform vec2 simTexel;uniform float aspect,time,nk,floorType,rainN,rough,swlN;uniform vec4 swl[4];uniform vec3 sunDir;uniform vec4 rain[40];uniform vec2 viewT;
+waterRender: H+`uniform sampler2D uH,uS;uniform vec2 simTexel;uniform float aspect,time,nk,floorType,rainN,rainVis,rough,swlN;uniform vec4 swl[4];uniform vec3 sunDir;uniform vec4 rain[100];uniform vec2 viewT;
 // raindrop impacts: fine capillary ring packets, computed per pixel (crisp at any resolution)
 vec2 rainGrad(vec2 p,vec2 gsurf,out float spark){vec2 gr=vec2(0.);spark=0.;
  vec2 pw=p+gsurf*.0035+.0025*vec2(sin(p.y*61.+p.x*23.),sin(p.x*57.-p.y*31.));   // rings ride on and are bent by the existing waves
- for(int i=0;i<40;i++){if(float(i)>=rainN)break;vec4 r=rain[i];
+ for(int i=0;i<100;i++){if(float(i)>=rainN)break;vec4 r=rain[i];
   vec2 dv=pw-vec2(r.x*aspect,r.y);float d=length(dv);float age=r.z;
+  float R0=.004+.11*age;if(d>R0*1.1+.006||d<R0*.9-.05){if(age<.12)spark+=exp(-age*22.)*exp(-d*d/(.000006+.00004*r.w))*r.w;continue;}   /* far from this ring: skip the costly part */
   float an=atan(dv.y,dv.x),sd=r.w*37.+float(i)*1.7;
   float R=(.004+.11*age)*(1.+.055*sin(an*2.+sd)+.03*sin(an*3.-sd*1.3)+.012*sin(an*5.+sd*.7));   // uneven front: wind and current stretch it
   float x=R-d;if(x<-.006||x>.05)continue;
@@ -726,7 +728,7 @@ vec2 rainGrad(vec2 p,vec2 gsurf,out float spark){vec2 gr=vec2(0.);spark=0.;
   float env=x>0.?exp(-x*x/(W*W)):exp(-x*x/.000012);
   float dh=A*K*cos(x*K)*env;
   gr-=dh*dv/max(d,1e-4);
-  spark+=exp(-age*40.)*exp(-d*d/(.000004+.00003*r.w))*r.w;}   // the instant of impact
+  spark+=exp(-age*22.)*exp(-d*d/(.000006+.00004*r.w))*r.w;}   // the instant of impact: a short bright splash
  return gr;}
 #define TAU 6.28318530718
 vec2 h2(vec2 p){return vec2(hash(p),hash(p+19.19));}
@@ -806,7 +808,7 @@ void main(){
  float s0=swellH(p,t)+ripH(p,t,gk);
  vec2 ga=vec2(swellH(p+vec2(e,0.),t)+ripH(p+vec2(e,0.),t,gk)-s0,swellH(p+vec2(0.,e),t)+ripH(p+vec2(0.,e),t,gk)-s0)/e;
  vec2 g=gs+ga;
- float spark;g+=rainGrad(p,gs+ga*.6,spark);
+ float spark;g+=rainGrad(p,gs+ga*.6,spark)*rainVis;spark*=rainVis;   /* heavier rain: rings and splashes show more */
  vec3 N=normalize(vec3(-g,1.));
  vec3 P=vec3(p,0.);vec3 cam=vec3(.5*aspect,-.6,.85)+vec3(viewT.x*aspect*.9,viewT.y*1.1,0.);vec3 V=normalize(cam-P);   // the phone's tilt moves the viewpoint
  float cosT=clamp(dot(N,V),0.,1.);float F=.02+.98*pow(1.-cosT,5.);
@@ -1097,7 +1099,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 118';
+const VER_TXT='버전 119';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -1479,7 +1481,7 @@ function waterStep(){const u=use('waterStep',[wat.r.tx,wat.r.ty]);gl.uniform1i(u
   gl.uniform1f(u.c2,W_C*W_C);gl.uniform1f(u.sm,wSmooth);gl.uniform1f(u.damp,Math.exp(-(.55+wExtra)*W_H));gl.uniform1f(u.w2,4.);gl.uniform1f(u.hs,W_H);
   gl.uniform1f(u.aspect,aspect);gl.uniform2f(u.tilt,-motionF[0]*.35,-motionF[1]*.35);blit(wat.w);wat.swap();}
 /* ---- 손 담그기: dipping a hand into the water ---- */
-let dipMode=false; try{dipMode=localStorage.getItem('hf-dip')==='1';}catch(e){}
+let dipMode=false;   // 손 담그기 removed from the menu: always off
 const dips=new Map();                 // id → {x,y,t0,depth,on,r,entered}
 const DIP_MAX=.16;
 function dipStart(id,x,y,r){dips.set(id,{x,y,t0:performance.now(),depth:0,on:true,r,entered:false});}
@@ -1584,7 +1586,7 @@ function waterFrame(dt){
     waterStep();wAcc-=W_H;n++;} if(n>=30)wAcc=0;
   let u=use('waterGrad',[wat.r.tx,wat.r.ty]);gl.uniform1i(u.uT,wat.r.bind(0));blit(wgrad);
   u=use('waterRender',[wat.r.tx,wat.r.ty]);gl.uniform1i(u.uH,wgrad.bind(0));gl.uniform1i(u.uS,wat.r.bind(1));gl.uniform2f(u.simTexel,wat.r.tx,wat.r.ty);
-  gl.uniform1f(u.aspect,aspect);gl.uniform1f(u.time,waterTime);gl.uniform1f(u.nk,W_NK);gl.uniform1f(u.floorType,floorType);gl.uniform4fv(u.rain,rainBuf);gl.uniform1f(u.rainN,rainDrops.length);gl.uniform1f(u.rough,roughNow);
+  gl.uniform1f(u.aspect,aspect);gl.uniform1f(u.time,waterTime);gl.uniform1f(u.nk,W_NK);gl.uniform1f(u.floorType,floorType);gl.uniform4fv(u.rain,rainBuf);gl.uniform1f(u.rainN,rainDrops.length);gl.uniform1f(u.rainVis,[1,1.1,1.3,1.6][rainLevel]);gl.uniform1f(u.rough,roughNow);
   {let n=0;swlBuf.fill(0);for(const w of wakes.values()){if(n>=4||w.whirl<.02)continue;const R=Math.max(.07,w.R*1.15);
     swlBuf.set([w.cx*aspect,w.cy,R*R,Math.sign(w.spin)*w.whirl*(.85+.12*Math.sin(waterTime*2.7+n))],n*4);n++;}
    gl.uniform4fv(u.swl,swlBuf);gl.uniform1f(u.swlN,n);}
@@ -1973,17 +1975,18 @@ function inkFrame(dt){
 let WATER_AMP=1, HAND_K=1.1;
 /* ---- 비: raindrops on the lake ---- */
 let rainLevel=0; try{const v=parseInt(localStorage.getItem('hf-rain'));if(v>=0&&v<=3)rainLevel=v;}catch(e){}
-const RAIN_RATE=[0,3.5,11,26], RAIN_ROUGH=[0,.12,.3,.55], MAXR=40;
+// 이슬비 → 비 → 소나기: more drops, bigger drops, a rougher lake (shower ≈ 3× the drops it had before)
+const RAIN_RATE=[0,7,22,62], RAIN_ROUGH=[0,.10,.32,.7], RAIN_SIZE=[[0,0,1],[.12,.45,2.6],[.2,.8,1.8],[.28,.9,1.3]], RAIN_LIFE=[1.5,1.6,1.5,1.25], MAXR=100;
 const rainDrops=[]; let rainAcc=0, roughNow=0;
 const rainBuf=new Float32Array(MAXR*4);
 function updateRain(dt){
   roughNow+=(RAIN_ROUGH[rainLevel]-roughNow)*Math.min(1,dt*.8);
-  for(let i=rainDrops.length-1;i>=0;i--){rainDrops[i].age+=dt;if(rainDrops[i].age>1.5)rainDrops.splice(i,1);}
+  for(let i=rainDrops.length-1;i>=0;i--){rainDrops[i].age+=dt;if(rainDrops[i].age>(rainDrops[i].life||1.5))rainDrops.splice(i,1);}
   rainAcc+=RAIN_RATE[rainLevel]*dt;
   while(rainAcc>=1){rainAcc-=1;
     if(rainDrops.length>=MAXR)rainDrops.shift();
-    const sz=Math.pow(Math.random(),1.8);                       // mostly small drops, a few big ones
-    const d={x:Math.random(),y:Math.random(),age:0,size:.2+.8*sz};rainDrops.push(d);
+    const S=RAIN_SIZE[rainLevel],sz=Math.pow(Math.random(),S[2]);   // drizzle: fine drops only · shower: many big ones
+    const d={x:Math.random(),y:Math.random(),age:0,size:S[0]+S[1]*sz,life:RAIN_LIFE[rainLevel]*(.8+.4*Math.random())};rainDrops.push(d);
     if(d.size>.75&&flow>.3)waterPoke(d.x,d.y,WATER_AMP*.35*d.size,.00006);}   // big drops also stir the lake
   rainBuf.fill(0);rainDrops.forEach((d,i)=>rainBuf.set([d.x,d.y,d.age,d.size],i*4));
 }
@@ -2676,7 +2679,7 @@ document.querySelectorAll('#rainRow .chip').forEach(b=>b.onclick=()=>setRain(+b.
 function setFloor(v){floorType=v;document.querySelectorAll('#floors .chip').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.f===v));try{localStorage.setItem('hf-floor4',v);}catch(e){}}
 document.querySelectorAll('#floors .chip').forEach(b=>b.onclick=()=>setFloor(+b.dataset.f));setFloor(floorType);
 const musicBtn=document.getElementById('musicBtn');
-function setMusic(on){musicOn=on;musicBtn.textContent=on?'음악 끄기':'음악 켜기';try{localStorage.setItem('hf-music',on?'on':'off');}catch(e){}
+function setMusic(on){musicOn=on;musicBtn.textContent=on?'음악 끄기':'음악 켜기';musicBtn.classList.toggle('on',on);try{localStorage.setItem('hf-music',on?'on':'off');}catch(e){}
   if(on)tryMusic();}                                   // off: the song fades out by itself (updateMusic)
 musicBtn.onclick=()=>setMusic(!musicOn);setMusic(musicOn);
 document.getElementById('gyroBtn').onclick=()=>{const want=!gyroOn;setGyro(want);try{localStorage.setItem('hf-gyro',want?'1':'0');}catch(e){}};   // remembers the choice

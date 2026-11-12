@@ -210,7 +210,7 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
     </div>
     <div class="row"><button class="btn" id="pinBtn">비밀번호 바꾸기</button></div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 111</p>
+    <p class="hint" id="ver">버전 113</p>
   </div>
 </div>
 <!-- 마음 남기기: write over the flowing art, then keep it (locked with a 4-digit PIN, on this phone only) or let it flow away -->
@@ -571,19 +571,18 @@ void main(){vec2 v=texture(uVel,vUv).xy*simTexel;vec2 c=vUv-v*dt;
  d.xy=d.xy/sqrt(1.+dot(d.xy,d.xy)/(.17*.17));                                    /* soft limit: no flat plateau with a hard rim */
  d.z=max(d.z*exp(-dt*.45),min(1.,length(v)*clearK));
  o=vec4(d.xy,d.z,1.);}`,
-cloudPass: H+`uniform sampler2D uD,uN;uniform float aspect,bg;uniform vec4 sty;uniform vec3 lay;uniform vec2 lo[3];uniform vec4 lw[3],lc[3],lm[3];uniform vec2 pan;
+cloudPass: H+`uniform sampler2D uD,uN;uniform float aspect;uniform vec3 pal[6],bgc;uniform vec4 thm;uniform vec4 sty;uniform vec3 lay;uniform vec2 lo[3];uniform vec4 lw[3],lc[3],lm[3];uniform vec2 pan;
 /* tiling noise (period 8) whose every octave is folded back into [0,8): the numbers stay small on any GPU, at any time,
    so the gas can never break into flat facets with straight edges — only smooth curves */
 float vnP(vec2 x){return texture(uN,x*.125+.001953125).r;}   /* the tiling noise is baked once into a small texture: cheap on a phone, smooth everywhere */
 float fbP5(vec2 x){float s=0.,a=.5;x=mod(x,8.);for(int i=0;i<5;i++){s+=a*vnP(x);x=mod(mat2(2.,1.,-1.,2.)*x+vec2(1.7,9.2),8.);   /* integer rotation-scale (×2.24): keeps the tiling, no axis-aligned grain */a*=.42;}return s/.86;}
 float fbP3(vec2 x){float s=0.,a=.5;x=mod(x,8.);for(int i=0;i<3;i++){s+=a*vnP(x);x=mod(mat2(2.,1.,-1.,2.)*x+vec2(4.1,2.6),8.);a*=.47;}return s/.84;}
-vec3 nebCol(float h){vec3 cB=vec3(.05,.20,1.),cV=vec3(.42,.28,1.),cC=vec3(.0,.82,1.),cP=vec3(1.,.62,.48),cO=vec3(1.,.42,.12),cR=vec3(1.,.18,.10);
- h=fract(h);vec3 c=mix(cB,cC,smoothstep(.05,.20,h));c=mix(c,cP,smoothstep(.27,.38,h));c=mix(c,cO,smoothstep(.40,.50,h));c=mix(c,cR,smoothstep(.55,.66,h));
- c=mix(c,cV,smoothstep(.72,.84,h));return mix(c,cB,smoothstep(.88,1.,h));}
+/* the colours of the gas come from the chosen tone: 6 stops around a wheel */
+vec3 nebCol(float h){h=fract(h);vec3 c=mix(pal[0],pal[1],smoothstep(.05,.20,h));c=mix(c,pal[2],smoothstep(.27,.38,h));c=mix(c,pal[3],smoothstep(.40,.50,h));c=mix(c,pal[4],smoothstep(.55,.66,h));
+ c=mix(c,pal[5],smoothstep(.72,.84,h));return mix(c,pal[0],smoothstep(.88,1.,h));}
 void main(){vec2 uv=vUv;vec4 D=texture(uD,uv);
  vec2 p=vec2(uv.x*aspect,uv.y)-vec2(D.x*aspect,D.y);
- float white=step(1.5,bg);
- vec3 bgc=bg<.5?vec3(.0,.0,.012):(bg<1.5?vec3(.085,.088,.10):vec3(.975,.972,.965));
+ float wc=thm.x;   /* 0 = glowing gas (light adds up), 1 = watercolour (pigment layered, darker blooming rims) */
  vec3 col=bgc;float A=0.;vec2 ld=normalize(vec2(.6,.8));float thin=1.-.85*D.z;
  for(int i=0;i<3;i++){float fi=float(i);
   float sc=lay.x*(1.7-.45*fi),al=(.5+.25*fi)*lay.z;
@@ -597,14 +596,17 @@ void main(){vec2 uv=vUv;vec4 D=texture(uD,uv);
   float lo_=1.-cov,dens=smoothstep(lo_,lo_+sty.y,d);
   float dl=fbP5(qq+ld*.35);float lit=clamp(.55+(d-dl)*5.,0.,1.);
   float a=dens*al*thin;
-  float hue=(fbP3(pl*.7+lc[i].zw)-.5)*3.2+.5+fi*.23+.4*(fbP3(pl*.21+lc[i].yx)-.5)+lm[i].w;   /* broad regions of colour that travel with the wind */
+  float hue=(fbP3(qq*.5+lc[i].zw)-.5)*1.7+.5+fi*.23+.45*(fbP3(pl*.21+lc[i].yx)-.5)+lm[i].w;   /* colour follows the folds of the gas (curved), and changes gently — never in straight parallel bands */   /* broad regions of colour that travel with the wind */
   vec3 hc=nebCol(hue);vec3 cc;
-  if(white>.5){cc=pow(hc,vec3(1.25))*(.82+.22*lit);cc=mix(cc,vec3(1.,.97,.93),pow(dens,4.)*.35*lit);a*=1.15;}
-  else{cc=hc*(.80+.55*lit);cc+=vec3(1.,.93,.84)*pow(dens,3.2)*lit*.75;}
+  if(wc>.5){cc=hc*(.6+.62*lit);cc=mix(cc,pal[3]*1.1,pow(dens,3.)*lit*.45);                        /* pale light in the thick of it */
+   float edge=smoothstep(.02,.22,dens)*(1.-smoothstep(.22,.55,dens));cc*=1.-thm.w*edge;               /* watercolour: pigment gathers at the rim of every bloom */
+   cc*=.65+.35*vnP(qq*2.3);a*=.92;}                                                                    /* and the wash is never even */
+  else{cc=hc*(.80+.55*lit)*thm.y;cc+=vec3(1.,.93,.84)*pow(dens,3.2)*lit*.75*thm.y;}
   float rim=smoothstep(.15,.55,dens)*(1.-smoothstep(.55,.95,dens))*smoothstep(.6,1.,lit);
-  cc+=hc*rim*(white>.5?.0:.4);
-  if(white>.5)col=mix(col,cc,clamp(a,0.,1.));else col+=cc*a*(.85-.15*fi);A=max(A,a);}
- if(white<.5){col=bgc+(1.-exp(-(col-bgc)*1.35));float l=dot(col,vec3(.3,.5,.2));col=max(mix(vec3(l),col,1.22),0.);}
+  cc+=hc*rim*(wc>.5?.0:.4*thm.y);
+  if(wc>.5)col=mix(col,cc,clamp(a,0.,1.));else col+=cc*a*(.85-.15*fi);A=max(A,a);}
+ if(wc<.5)col=bgc+(1.-exp(-(col-bgc)*1.35));
+ {float l=dot(col,vec3(.3,.5,.2));col=max(mix(vec3(l),col,thm.z),0.);}
  o=vec4(col,A);}`,
 cloudOut: H+`uniform sampler2D uC;uniform float time,bg,seed;uniform vec2 res,pan;
 /* dozens of stars: a few big bright ones, many tiny faint ones, each twinkling at its own pace */
@@ -1091,7 +1093,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 111';
+const VER_TXT='버전 113';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -1377,8 +1379,14 @@ const CLOUDS={
   'Dream Cloud':{top:'#8FB2F5',bot:'#F4D3E6',lit:'#FFF7FB',shd:'#C2AEE3',sun:'#FFE8F2',sunP:[.25,.8],cov:.62,soft:.28,sc:2.8,spd:.018,warp:1.6,al:1.0,relax:.40},
   'Twilight':  {top:'#231845',bot:'#E58AA6',lit:'#FFC4D2',shd:'#4C2F6E',sun:'#FFB27A',sunP:[.55,.18],cov:.55,soft:.20,sc:3.0,spd:.014,warp:2.0,al:1.0,relax:.35},
   'Moonlight': {top:'#03060F',bot:'#0E1C36',lit:'#93AEDB',shd:'#121C33',sun:'#CFE0FF',sunP:[.72,.82],cov:.47,soft:.24,sc:2.6,spd:.008,warp:1.5,al:.72,relax:.28}};
-const NEB_STY={cov:.56,soft:.34,sc:2.5,spd:.016,warp:1.9,al:1.0,relax:.40};
-let cloudBg=0; try{const v=+localStorage.getItem('hf-cloudbg');if(v===1||v===2)cloudBg=v;}catch(e){}
+const NEB_STY={cov:.573,soft:.34,sc:2.5,spd:.016,warp:1.15,al:1.0,relax:.40};
+// colour tones for the Cloud cosmos: [name, 6 colour stops, background, mode(0 glow / 1 watercolour), brightness, saturation, rim]
+const NEB_TONES=[
+  ['다채로운',[[.05,.20,1],[0,.82,1],[1,.62,.48],[1,.42,.12],[1,.18,.10],[.42,.28,1]],[0,0,.012],0,1,1.22,0],
+  ['수채 성운',[[.30,.40,.70],[.40,.60,.70],[.90,.56,.70],[.98,.92,.62],[.62,.48,.86],[.14,.16,.34]],[.03,.035,.08],1,1,1.4,.48],
+  ['딥 다크',[[.10,.14,.48],[.04,.36,.46],[.34,.26,.56],[.26,.34,.62],[.50,.24,.42],[.12,.12,.32]],[0,0,.01],0,.78,1.1,0],
+  ['황혼',[[.95,.40,.48],[1,.62,.30],[1,.80,.62],[.95,.36,.15],[.62,.30,.75],[.42,.18,.48]],[.035,.012,.035],0,.95,1.15,0]];
+let cloudTone=0; try{const v=+localStorage.getItem('hf-cloudtone');if(v>=0&&v<NEB_TONES.length)cloudTone=v;}catch(e){}
 let cloudT=0, cloudSeed=Math.random()*50, cDisp=null, cFbo=null;
 const CLOUD_SCALE=.5;                                   // clouds are soft: render at half resolution, upscale (mobile)
 function cloudAlloc(){const [sw,sh]=res(160);cDisp=dfbo(sw,sh);
@@ -1388,7 +1396,8 @@ function cloudReset(){cloudSeed=Math.random()*50;if(!cDisp)return;for(const t of
 // a finger resting still lets it die down to a faint stir, and once let go it carries on, then wanders again
 // period-8 value noise, smooth (smoothstep between lattice points), 32 texels per cell, wraps seamlessly
 let nebNoiseT=null;
-function nebNoise(unit){if(!nebNoiseT){const N=256,C=32,L=new Float32Array(64);for(let i=0;i<64;i++)L[i]=Math.random();
+function nebNoise(unit){if(!nebNoiseT){gl.activeTexture(gl.TEXTURE0+unit);   // made on its own unit: never knocks out a texture already bound
+    const N=256,C=32,L=new Float32Array(64);for(let i=0;i<64;i++)L[i]=Math.random();
     const d=new Float32Array(N*N),sm=t=>t*t*(3-2*t);
     for(let y=0;y<N;y++)for(let x=0;x<N;x++){const u=x/C,v=y/C,i=Math.floor(u),j=Math.floor(v),fx=sm(u-i),fy=sm(v-j),i0=i&7,i1=(i+1)&7,j0=j&7,j1=(j+1)&7;
       const a=L[j0*8+i0],b=L[j0*8+i1],c=L[j1*8+i0],e=L[j1*8+i1];d[y*N+x]=(a+(b-a)*fx)+((c+(e-c)*fx)-(a+(b-a)*fx))*fy;}
@@ -1439,9 +1448,9 @@ function cloudFrame(dt){
     lc[i*4]=M(T*.006+sd*.7,8);lc[i*4+1]=M(-T*.004+sd*.3,8);lc[i*4+2]=M(-L.ox*.7+sd*.37+i*.29,8);lc[i*4+3]=M(-L.oy*.7+T*.004,8);
     lm[i*4]=.05*Math.sin(T*.043+sd);lm[i*4+1]=M(T*.02+sd,6.2832);lm[i*4+2]=M(-T*.017+sd*1.3,6.2832);lm[i*4+3]=.06*Math.sin(T*.02+i);}
   let u=use('cloudPass',[cFbo.tx,cFbo.ty]);gl.uniform1i(u.uD,cDisp.r.bind(0));gl.uniform1i(u.uN,nebNoise(1));
-  gl.uniform1f(u.aspect,aspect);gl.uniform1f(u.bg,cloudBg);gl.uniform2fv(u.lo,lo);gl.uniform4fv(u.lw,lw);gl.uniform4fv(u.lc,lc);gl.uniform4fv(u.lm,lm);gl.uniform2f(u.pan,cPan[0],cPan[1]);
+  gl.uniform1f(u.aspect,aspect);{const T_=NEB_TONES[cloudTone];gl.uniform3fv(u.pal,new Float32Array(T_[1].flat()));gl.uniform3f(u.bgc,...T_[2]);gl.uniform4f(u.thm,T_[3],T_[4],T_[5],T_[6]);}gl.uniform2fv(u.lo,lo);gl.uniform4fv(u.lw,lw);gl.uniform4fv(u.lc,lc);gl.uniform4fv(u.lm,lm);gl.uniform2f(u.pan,cPan[0],cPan[1]);
   gl.uniform4f(u.sty,st.cov,st.soft,st.sc,st.warp);gl.uniform3f(u.lay,st.sc,0,st.al);blit(cFbo);
-  u=use('cloudOut',[0,0]);gl.uniform1i(u.uC,cFbo.bind(0));gl.uniform1f(u.time,(performance.now()*.001)%3600);gl.uniform1f(u.bg,cloudBg);gl.uniform1f(u.seed,(cloudSeed*.37)%9);gl.uniform2f(u.pan,cPan[0],cPan[1]);
+  u=use('cloudOut',[0,0]);gl.uniform1i(u.uC,cFbo.bind(0));gl.uniform1f(u.time,(performance.now()*.001)%3600);gl.uniform1f(u.bg,0);gl.uniform1f(u.seed,(cloudSeed*.37)%9);gl.uniform2f(u.pan,cPan[0],cPan[1]);
   gl.uniform2f(u.res,canvas.width,canvas.height);blit(null);
 }
 
@@ -2115,7 +2124,7 @@ let bgm=players[0];
 let musicOn=true; try{musicOn=localStorage.getItem('hf-music')!=='off';}catch(e){}
 let curTrack=null, wantTrack=null;
 const MUSIC_VOL=.85, FADE_IN=2.2, FADE_OUT=1.8;          // seconds
-const TRACKS={cloud:'audio/slow_drift_at_zenith.mp3',cosmos:'audio/where_the_ocean_meets_sky.mp3',halo:'audio/beneath_the_haloed_glass.mp3',paint:'audio/where_the_stream_widens.mp3',water:'audio/glass_upon_the_lake.mp3',light:'audio/where_the_ocean_meets_sky.mp3',wave:'audio/where_the_ocean_meets_sky.mp3',ink:'audio/silk_and_moonlight.mp3'};
+const TRACKS={cloud:'audio/velvet_horizon.mp3',cosmos:'audio/where_the_ocean_meets_sky.mp3',halo:'audio/beneath_the_haloed_glass.mp3',paint:'audio/where_the_stream_widens.mp3',water:'audio/glass_upon_the_lake.mp3',light:'audio/where_the_ocean_meets_sky.mp3',wave:'audio/where_the_ocean_meets_sky.mp3',ink:'audio/silk_and_moonlight.mp3'};
 const trackURL={};
 function getTrack(path){ if(!trackURL[path])trackURL[path]=fetch(path).then(r=>r.blob()).then(b=>URL.createObjectURL(b)).catch(()=>null); return trackURL[path]; }
 // change song: the playing one fades out on its own player, the new one starts silent on the other player and fades in
@@ -2637,9 +2646,10 @@ function renderSilks(){silkWrap.innerHTML='';for(const name in SILKS){const b=do
   b.onclick=()=>{silkName=name;try{localStorage.setItem('hf-silk',name);}catch(e){}renderSilks();};silkWrap.appendChild(b);}}
 renderSilks();
 const cloudWrap=document.getElementById('clouds');
-function renderClouds(){cloudWrap.innerHTML='';[['검은 배경','#000'],['다크 그레이','#1a1b1e'],['흰 배경','#f6f5f2']].forEach(([name,sw],i)=>{const b=document.createElement('button');b.className='chip';
-  b.setAttribute('aria-pressed',i===cloudBg);b.innerHTML=`<i class="sw" style="background:${sw}"></i>`+name;
-  b.onclick=()=>{cloudBg=i;try{localStorage.setItem('hf-cloudbg',String(i));}catch(e){}renderClouds();};cloudWrap.appendChild(b);});}
+function renderClouds(){cloudWrap.innerHTML='';NEB_TONES.forEach((T_,i)=>{const b=document.createElement('button');b.className='chip';
+  const hx=c=>'rgb('+c.map(v=>Math.round(Math.min(1,v)*255)).join(',')+')';
+  b.setAttribute('aria-pressed',i===cloudTone);b.innerHTML='<i>'+[T_[2],T_[1][0],T_[1][2],T_[1][3]].map(c=>`<span style="background:${hx(c)}"></span>`).join('')+'</i>'+T_[0];
+  b.onclick=()=>{cloudTone=i;try{localStorage.setItem('hf-cloudtone',String(i));}catch(e){}renderClouds();};cloudWrap.appendChild(b);});}
 renderClouds();
 const inkWrap=document.getElementById('inks');
 function renderInks(){inkWrap.innerHTML='';for(const name of ['랜덤',...Object.keys(INKS)]){const b=document.createElement('button');b.className='chip';

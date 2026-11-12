@@ -209,8 +209,9 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
       <button class="btn" id="install">앱 설치</button>
     </div>
     <div class="row"><button class="btn" id="pinBtn">비밀번호 바꾸기</button></div>
+    <div class="row"><button class="btn" id="bakOut">마음 백업 내보내기</button><button class="btn" id="bakIn">백업 가져오기</button></div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 115</p>
+    <p class="hint" id="ver">버전 116</p>
   </div>
 </div>
 <!-- 마음 남기기: write over the flowing art, then keep it (locked with a 4-digit PIN, on this phone only) or let it flow away -->
@@ -1094,7 +1095,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 115';
+const VER_TXT='버전 116';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -2829,7 +2830,7 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden)mindKey=nul
 function askPin(kind,opt){opt=opt||{};return new Promise(done=>{let entered='',first=null;
   const draw=(title,sub)=>{mCard.innerHTML=`<h3>${title}</h3><p>${sub}</p><div class="mdots">${[0,1,2,3].map(i=>`<i class="${i<entered.length?'f':''}"></i>`).join('')}</div>
     <div class="mpad">${[1,2,3,4,5,6,7,8,9].map(n=>`<button data-k="${n}">${n}</button>`).join('')}<button class="x" data-k="c">취소</button><button data-k="0">0</button><button class="x" data-k="b">⌫</button></div>
-    ${kind==='unlock'?'<button class="mlink" data-k="f">비밀번호를 잊었어요</button>':''}`;
+    ${kind==='unlock'&&!opt.meta?'<button class="mlink" data-k="f">비밀번호를 잊었어요</button>':''}`;
     mCard.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>press(b.dataset.k));};
   const T=()=>kind==='create'?(first?['한 번 더 입력해 주세요','확인을 위해 같은 번호를 입력해 주세요']:(opt.title?[opt.title,opt.sub||'']:['비밀번호 4자리를 만들어 주세요','간직한 마음은 이 휴대폰에만 잠겨 저장되고,<br>이 번호로만 꺼낼 수 있어요'])):(opt.title?[opt.title,opt.sub||'']:['비밀번호 4자리','간직한 마음을 여는 번호를 입력해 주세요']);
   const shake=msg=>{entered='';draw(...T());const d=mCard.querySelector('.mdots');d.classList.add('shake');if(msg)mCard.querySelector('p').innerHTML=msg;};
@@ -2848,7 +2849,7 @@ function askPin(kind,opt){opt=opt||{};return new Promise(done=>{let entered='',f
       if(first!==entered){first=null;return shake('번호가 달라요. 처음부터 다시 만들어 주세요');}
       const salt=[...crypto.getRandomValues(new Uint8Array(16))],key=await pinKey(entered,salt);
       return fin({key,salt});}
-    const m=mindMeta();if(!m)return fin(null);
+    const m=opt.meta||mindMeta();if(!m)return fin(null);
     try{const key=await pinKey(entered,m.salt,m.it);const ok=await decJ(key,{iv:m.iv,ct:new Uint8Array(m.ct)});if(ok&&ok.ok==='hand-flow')return fin(key);}catch(e){}
     shake('번호가 맞지 않아요');}
   draw(...T());mShow();});}
@@ -2975,6 +2976,47 @@ document.getElementById('vDel').onclick=async()=>{const ok=await mMenu('이 마�
     try{const left=await dbDo('readonly',st=>st.count());if(left)back();}catch(e){}};}
 capPress(document.getElementById('penBtn'),openMind);
 document.getElementById('pinBtn').onclick=changePin;
+// ---- moving the kept notes to another phone: a backup file that stays locked ----
+// the file holds the box's lock (salt, the PIN-locked private key, the public key) and every note exactly as sealed:
+// nothing in it can be read without the PIN. It never goes to a server — the person carries it (Quick Share, USB, mail…).
+const b64e=u=>{u=u instanceof Uint8Array?u:new Uint8Array(u);let t='';for(let i=0;i<u.length;i+=32768)t+=String.fromCharCode.apply(null,u.subarray(i,i+32768));return btoa(t);};
+const b64d=t=>{const s=atob(t),u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return u;};
+async function mindExport(){openMenu(false);
+  let recs=[];try{recs=await dbDo('readonly',st=>st.getAll());}catch(e){}
+  if(!mindMeta()||!recs.length)return mToast('아직 간직한 마음이 없어요');
+  const K=await mindUnlock();if(!K)return;                                        // the PIN once: proves it is yours, and upgrades any older notes
+  await mindMigrate(K.pin);try{recs=await dbDo('readonly',st=>st.getAll());}catch(e){}
+  const notes=recs.filter(r=>r.wk).map(r=>({id:r.id,iv:r.iv,ct:b64e(r.ct),wk:b64e(r.wk)}));
+  const data={app:'hand-flow-maeum',v:1,exported:Date.now(),count:notes.length,meta:mindMeta(),notes};
+  const blob=new Blob([JSON.stringify(data)],{type:'application/json'}),d=new Date(),z=n=>String(n).padStart(2,'0');
+  const name=`hand-flow-maeum-backup-${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}.json`,file=new File([blob],name,{type:'application/json'});
+  const canShare=!window.AndroidSave&&navigator.canShare&&(()=>{try{return navigator.canShare({files:[file]});}catch(e){return false;}})();
+  const v=await mMenu(`마음 ${notes.length}개를 백업했어요`,'파일은 비밀번호로 잠겨 있어 이 번호 없이는 아무도 읽을 수 없어요.<br>새 휴대폰으로 옮긴 뒤 메뉴의 \'백업 가져오기\'로 불러오세요.',
+    [{t:'휴대폰에 파일로 저장',v:'save',cls:'solid'},...(canShare?[{t:'다른 곳으로 보내기',v:'share'}]:[]),{t:'취소',v:0}]);
+  if(v==='share'){try{await navigator.share({files:[file],title:'Hand Flow Art 마음 백업'});}catch(e){if(!(e&&e.name==='AbortError'))mToast('보내지 못했어요');}}
+  else if(v==='save'){if(window.AndroidSave)await saveBlob(blob,'json','_maeum-backup');
+    else{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),8000);mToast('다운로드 폴더에 저장했어요');}}}
+async function mindImport(file){
+  let data;try{data=JSON.parse(await file.text());}catch(e){return mToast('백업 파일을 읽지 못했어요');}
+  if(!data||data.app!=='hand-flow-maeum'||!data.meta||!data.meta.pub||!Array.isArray(data.notes))return mToast('Hand Flow Art 마음 백업 파일이 아니에요');
+  const pin=await askPin('unlock',{meta:data.meta,title:'백업 파일의 비밀번호',sub:`마음 ${data.notes.length}개 · 이 백업을 만들 때 쓰던 번호를 입력해 주세요`});if(!pin)return;
+  let bpriv;try{const pk=await crypto.subtle.decrypt({name:'AES-GCM',iv:new Uint8Array(data.meta.piv)},pin,new Uint8Array(data.meta.pct));bpriv=await crypto.subtle.importKey('pkcs8',pk,RSA,true,['decrypt']);}
+  catch(e){return mToast('백업 파일이 손상됐어요');}
+  let have=[];try{have=await dbDo('readonly',st=>st.getAllKeys());}catch(e){}const haveS=new Set(have);
+  const fresh=!mindMeta();if(fresh){localStorage.setItem(MIND_META,JSON.stringify(data.meta));mindKey={pin,priv:bpriv};}   // a new phone takes the backup's lock as is (same PIN)
+  let added=0,skip=0,bad=0;
+  for(const n of data.notes){if(haveS.has(n.id)){skip++;continue;}
+    try{const r={iv:n.iv,ct:b64d(n.ct),wk:b64d(n.wk)};
+      if(fresh){await openNote({priv:bpriv,pin},r);await dbDo('readwrite',st=>st.put({id:n.id,...r}));}   // check it opens, then keep it exactly as sealed
+      else{const d=await openNote({priv:bpriv,pin},r);const s2=await sealNote(d);await dbDo('readwrite',st=>st.put({id:n.id,...s2}));}   // sealed again with this phone's lock
+      added++;}catch(e){bad++;}}
+  const msg=`마음 ${added}개를 가져왔어요`+(skip?` · ${skip}개는 이미 있어 건너뜀`:'')+(bad?` · ${bad}개는 열지 못함`:'');
+  const v=await mMenu(msg,fresh?'비밀번호는 백업을 만들 때와 같아요':'이 휴대폰의 비밀번호로 다시 잠가 두었어요',[{t:'리스트 보기',v:'list',cls:'solid'},{t:'닫기',v:0}]);
+  if(v==='list')openKept();}
+document.getElementById('bakOut').onclick=()=>mindExport();
+document.getElementById('bakIn').onclick=()=>{openMenu(false);const inp=document.createElement('input');inp.type='file';inp.accept='.json,application/json';inp.style.display='none';
+  inp.onchange=()=>{const f=inp.files&&inp.files[0];inp.remove();if(f)mindImport(f);};document.body.appendChild(inp);inp.click();};
+
 capPress(document.getElementById('bookBtn'),()=>{openMenu(false);openKept();});
 
 // PWA install

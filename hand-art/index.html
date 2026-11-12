@@ -211,7 +211,7 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
     <div class="row"><button class="btn" id="pinBtn">비밀번호 바꾸기</button></div>
     <div class="row"><button class="btn" id="bakOut">마음 백업 내보내기</button><button class="btn" id="bakIn">백업 가져오기</button></div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 116</p>
+    <p class="hint" id="ver">버전 117</p>
   </div>
 </div>
 <!-- 마음 남기기: write over the flowing art, then keep it (locked with a 4-digit PIN, on this phone only) or let it flow away -->
@@ -1095,7 +1095,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 116';
+const VER_TXT='버전 117';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -2981,7 +2981,13 @@ document.getElementById('pinBtn').onclick=changePin;
 // nothing in it can be read without the PIN. It never goes to a server — the person carries it (Quick Share, USB, mail…).
 const b64e=u=>{u=u instanceof Uint8Array?u:new Uint8Array(u);let t='';for(let i=0;i<u.length;i+=32768)t+=String.fromCharCode.apply(null,u.subarray(i,i+32768));return btoa(t);};
 const b64d=t=>{const s=atob(t),u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return u;};
-async function mindExport(){openMenu(false);
+// an older Android app (APK) cannot save files to Downloads or open a file picker: say so plainly instead of silently doing nothing
+const APK_URL='https://github.com/kyuil71/APK-builder/releases/latest/download/HandFlowArt.apk';
+function apkTooOld(){try{return !!window.AndroidSave&&!(typeof AndroidSave.version==='function'&&AndroidSave.version()>=2);}catch(e){return true;}}
+async function apkUpdateNote(){const v=await mMenu('새 앱 설치가 필요해요','지금 설치된 Hand Flow Art 앱은 파일 저장·선택 기능이 없는 예전 버전이에요.<br>새 앱을 받아 설치하면 (간직한 글은 그대로) 백업을 쓸 수 있어요.<br><small>'+APK_URL+'</small>',
+    [{t:'주소 복사',v:'copy',cls:'solid'},{t:'닫기',v:0}]);
+  if(v==='copy'){try{await navigator.clipboard.writeText(APK_URL);mToast('주소를 복사했어요 · 인터넷 브라우저에 붙여 넣어 받으세요');}catch(e){mToast(APK_URL);}}}
+async function mindExport(){openMenu(false);if(apkTooOld())return apkUpdateNote();
   let recs=[];try{recs=await dbDo('readonly',st=>st.getAll());}catch(e){}
   if(!mindMeta()||!recs.length)return mToast('아직 간직한 마음이 없어요');
   const K=await mindUnlock();if(!K)return;                                        // the PIN once: proves it is yours, and upgrades any older notes
@@ -2994,7 +3000,7 @@ async function mindExport(){openMenu(false);
   const v=await mMenu(`마음 ${notes.length}개를 백업했어요`,'파일은 비밀번호로 잠겨 있어 이 번호 없이는 아무도 읽을 수 없어요.<br>새 휴대폰으로 옮긴 뒤 메뉴의 \'백업 가져오기\'로 불러오세요.',
     [{t:'휴대폰에 파일로 저장',v:'save',cls:'solid'},...(canShare?[{t:'다른 곳으로 보내기',v:'share'}]:[]),{t:'취소',v:0}]);
   if(v==='share'){try{await navigator.share({files:[file],title:'Hand Flow Art 마음 백업'});}catch(e){if(!(e&&e.name==='AbortError'))mToast('보내지 못했어요');}}
-  else if(v==='save'){if(window.AndroidSave)await saveBlob(blob,'json','_maeum-backup');
+  else if(v==='save'){if(window.AndroidSave){const ok=await saveNative(blob,'json','_maeum-backup').catch(()=>false);if(!ok)mToast('저장하지 못했어요');}
     else{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),8000);mToast('다운로드 폴더에 저장했어요');}}}
 async function mindImport(file){
   let data;try{data=JSON.parse(await file.text());}catch(e){return mToast('백업 파일을 읽지 못했어요');}
@@ -3014,7 +3020,7 @@ async function mindImport(file){
   const v=await mMenu(msg,fresh?'비밀번호는 백업을 만들 때와 같아요':'이 휴대폰의 비밀번호로 다시 잠가 두었어요',[{t:'리스트 보기',v:'list',cls:'solid'},{t:'닫기',v:0}]);
   if(v==='list')openKept();}
 document.getElementById('bakOut').onclick=()=>mindExport();
-document.getElementById('bakIn').onclick=()=>{openMenu(false);const inp=document.createElement('input');inp.type='file';inp.accept='.json,application/json';inp.style.display='none';
+document.getElementById('bakIn').onclick=()=>{openMenu(false);if(apkTooOld())return apkUpdateNote();const inp=document.createElement('input');inp.type='file';inp.accept='.json,application/json';inp.style.display='none';
   inp.onchange=()=>{const f=inp.files&&inp.files[0];inp.remove();if(f)mindImport(f);};document.body.appendChild(inp);inp.click();};
 
 capPress(document.getElementById('bookBtn'),()=>{openMenu(false);openKept();});

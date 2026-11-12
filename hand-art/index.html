@@ -214,7 +214,7 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
     <div class="row"><button class="btn" id="pinBtn">비밀번호 바꾸기</button></div>
     <div class="row"><button class="btn" id="bakOut">마음 백업 내보내기</button><button class="btn" id="bakIn">백업 가져오기</button></div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 120</p>
+    <p class="hint" id="ver">버전 121</p>
   </div>
 </div>
 <!-- 마음 남기기: write over the flowing art, then keep it (locked with a 4-digit PIN, on this phone only) or let it flow away -->
@@ -420,18 +420,18 @@ init: H+`uniform vec3 pal[6];uniform float seed,aspect;
 float fbm(vec2 p){float s=0.,a=.5;for(int i=0;i<5;i++){s+=a*vn(p);p=p*2.03+17.1;a*=.5;}return s;}
 void main(){vec2 p=vUv*vec2(aspect,1.)*1.25+seed;float m=fbm(p);
 o=vec4(pal[0],.9+.12*(m-.5));}`,                                                   /* a fresh canvas: one solid colour edge to edge */
-display: H+`uniform sampler2D uDye,uDet;uniform vec3 pal[6];uniform vec2 dyeTexel;uniform float dotSize,relief,time;
+display: H+`uniform sampler2D uDye,uDet;uniform vec3 pal[6];uniform vec2 dyeTexel,vO;uniform float dotSize,relief,time,vZ;
 float Hh(vec2 uv){vec4 d=texture(uDye,uv);float t=texture(uDet,uv).x;
 return d.a*.78+dot(d.rgb,vec3(.3,.5,.2))*.22+(t-.5)*(.05+.04*d.a);}
 vec2 grd(vec2 uv,vec2 e){return vec2(Hh(uv-vec2(e.x,0.))-Hh(uv+vec2(e.x,0.)),Hh(uv-vec2(0.,e.y))-Hh(uv+vec2(0.,e.y)));}
-void main(){vec4 d=texture(uDye,vUv);float t=texture(uDet,vUv).x;
-vec2 g=grd(vUv,dyeTexel*1.5)*.05+grd(vUv,dyeTexel*4.5)*.45+grd(vUv,dyeTexel*12.)*.75;   /* relief from the broad shapes, not every thread */
+void main(){vec2 wuv=(vUv-.5)*vZ+.5+vO;   /* the screen is a window onto a larger canvas */vec4 d=texture(uDye,wuv);float t=texture(uDet,wuv).x;
+vec2 g=grd(wuv,dyeTexel*1.5)*.05+grd(wuv,dyeTexel*4.5)*.45+grd(wuv,dyeTexel*12.)*.75;   /* relief from the broad shapes, not every thread */
 vec3 n=normalize(vec3(g*relief,1.));
 vec3 L=normalize(vec3(-.42,.62,.66));vec3 Hv=normalize(L+vec3(0.,0.,1.));
 float diff=max(dot(n,L),0.);
 float nh=max(dot(n,Hv),0.);float spec=pow(nh,70.)*1.05+pow(nh,12.)*.16;
 float fres=pow(1.-n.z,2.);
-float hC=Hh(vUv),hW=0.;for(int i=0;i<4;i++){float a=float(i)*1.5708+.6;hW+=Hh(vUv+vec2(cos(a),sin(a))*dyeTexel*9.);}hW*=.25;
+float hC=Hh(wuv),hW=0.;for(int i=0;i<4;i++){float a=float(i)*1.5708+.6;hW+=Hh(wuv+vec2(cos(a),sin(a))*dyeTexel*9.);}hW*=.25;
 float ao=clamp(1.-(hW-hC)*1.5,.62,1.1);
 float lum=dot(d.rgb,vec3(.3,.55,.15));
 vec3 nc=pal[0];float nd=1e3;for(int i=0;i<6;i++){vec3 q=d.rgb-pal[i];float dd=dot(q,q);if(dd<nd){nd=dd;nc=pal[i];}}
@@ -502,7 +502,7 @@ void main(){vec4 c=texture(uA,vUv);float k=texture(uK,vUv).r;
        +F(texture(uA,vUv+e2),texture(uK,vUv+e2).r,vec2(.7071,-.7071),c,k)+F(texture(uA,vUv-e2),texture(uK,vUv-e2).r,vec2(-.7071,.7071),c,k));
  float w=c.a,thin=1.-smoothstep(.03,.35,w),dr=w<.015?1.:clamp(dep0+dep1*thin,0.,1.);   /* ink settles fastest where the water thins: dark rims */
  o=vec4(max(c.rgb+s.rgb-c.rgb*dr,0.),max(w+s.a-(ev0+ev1*w),0.));}`,
-inkShow: H+`uniform sampler2D uS,uA;uniform float aspect;uniform vec2 simTexel;
+inkShow: H+`uniform sampler2D uS,uA;uniform float aspect,vZ;uniform vec2 simTexel,vO;
 float fbm(vec2 p){float s=0.,a=.5;for(int i=0;i<4;i++){s+=a*vn(p);p=p*2.03+17.1;a*=.5;}return s;}
 float fib(vec2 p,float a){mat2 r=mat2(cos(a),sin(a),-sin(a),cos(a));vec2 q=r*p;return vn(vec2(q.x*2.,q.y*70.));}
 vec2 h2i(vec2 p){return vec2(hash(p),hash(p+19.19));}
@@ -537,7 +537,7 @@ vec3 hanji(vec2 p,out float crease){
  c-=vec3(.10,.11,.13)*smoothstep(.985,1.,hash(floor(p*520.)))*.55;       /* tiny specks of bark */
  return c;}
 float dens(vec2 uv){return dot(texture(uS,uv).rgb,vec3(.3333));}
-void main(){vec2 uv=vUv;vec2 p=vec2(uv.x*aspect,uv.y);
+void main(){vec2 uv=(vUv-.5)*vZ+.5+vO;vec2 p=vec2(uv.x*aspect,uv.y);   /* the hanji sheet is larger than the screen: tilting slides along it */
  vec2 wv=(vec2(vn(p*70.),vn(p*70.+7.3))-.5)*simTexel*3.2;            /* the fibres fray every edge */
  vec3 S=texture(uS,uv+wv).rgb;vec4 A=texture(uA,uv+wv);
  vec3 ab=S+A.rgb*.8;float d=dot(ab,vec3(.3333));
@@ -561,7 +561,7 @@ void main(){vec2 uv=vUv;vec2 p=vec2(uv.x*aspect,uv.y);
  ab*=1.+.18*cr*smoothstep(.02,.2,d);                                   /* ink pools a little in the deep creases */
  vec3 col=pap*exp(-ab);
  col*=1.-.05*smoothstep(.05,.6,A.a);                                 /* still-wet paper looks a touch darker */
- col*=1.-.07*pow(length(uv-.5)*1.3,2.);
+ col*=1.-.07*pow(length(vUv-.5)*1.3,2.);
  o=vec4(col,1.);}`,
 
 cloudDisp: H+`uniform sampler2D uD,uVel;uniform vec2 simTexel;uniform float dt,relax,clearK;
@@ -643,7 +643,7 @@ void main(){vec2 uv=vUv;vec2 p=vec2(uv.x*aspect,uv.y);
  o=vec4(col,1.);}`,
 partInit: H+`uniform float seed;
 void main(){vec2 q=gl_FragCoord.xy;o=vec4(vec2(hash(q+seed),hash(q*1.31+seed+7.))*2.-.5,hash(q*.77+seed+3.),hash(q*2.13+seed+11.));}`,   /* the light lives in a space 4× the screen (2×2), the screen is its middle */
-partStep: H+`uniform sampler2D uP,uVel;uniform vec2 simTexel,force,tilt;uniform float dt,t,seed,aspect,emitFrac;uniform vec4 emit[4];uniform float emitK[4],emitHue[4];
+partStep: H+`uniform sampler2D uP,uVel;uniform vec2 simTexel,force,tilt,pan;uniform float dt,t,seed,aspect,emitFrac;uniform vec4 emit[4];uniform float emitK[4],emitHue[4];
 vec2 flowB(vec2 p,float t){            // big slow wave currents that never cross the walls (stream function)
  float PI=3.14159;vec2 v=vec2(0.);
  float a1=.030*cos(t*.13),a2=.020*sin(t*.17+1.),a3=.014*cos(t*.11+2.),a4=.010*sin(t*.23);
@@ -653,7 +653,7 @@ vec2 flowB(vec2 p,float t){            // big slow wave currents that never cros
  v+=a4*PI*vec2(2.*sin(3.*PI*p.x)*cos(2.*PI*p.y),-3.*cos(3.*PI*p.x)*sin(2.*PI*p.y));
  return v;}
 void main(){vec4 s=texture(uP,vUv);vec2 p=s.xy;float life=s.z,lane=s.w;
- vec2 sc=clamp(p,0.,1.);float ins=smoothstep(-.03,.0,min(min(p.x,1.-p.x),min(p.y,1.-p.y)));
+ vec2 ps=p-pan;vec2 sc=clamp(ps,0.,1.);float ins=smoothstep(-.03,.0,min(min(ps.x,1.-ps.x),min(ps.y,1.-ps.y)));
  vec2 v=texture(uVel,sc).xy*simTexel*ins;                  // hands / touch push the light (only where the screen is)
  float ph=lane*6.2831;
  vec2 w=vec2(.010*sin(p.y*9.+t*.5+ph),.018*sin(p.x*8.+t*.7+ph)); // ripples along the strands
@@ -933,7 +933,7 @@ void main(){vec2 p=vec2(vUv.x*aspect,vUv.y);float d=9.;
  float nn=smoothstep(.35,.85,n);float add=amt*exp(-d*d/.0011)*(.15+1.6*nn)+amt*.02*nn;                 /* the ring keeps breathing out smoke, a faint haze everywhere */
  vec2 q=p-puff.xy;add+=puff.w*exp(-dot(q,q)/puff.z)*(.6+.8*n);
  float s=texture(uS,vUv).x;o=vec4(min(s+add,1.6),0.,0.,1.);}`,
-haloRender: H+`uniform sampler2D uS;uniform vec4 rp[48];uniform vec3 rC,rN,pc,rCol;uniform float rR,rI,aspect,time,camF,floorY,sTx,sTy,beadH;
+haloRender: H+`uniform sampler2D uS;uniform vec4 rp[48];uniform vec3 rC,rN,pc,rCol;uniform float rR,rI,aspect,time,camF,floorY,sTx,sTy,beadH;uniform vec2 pan;
 float h2b(vec2 p){return hash(p+37.1);}
 void main(){
  vec2 uv=vUv;vec2 p=vec2(uv.x*aspect,uv.y);float t=time;
@@ -948,7 +948,7 @@ void main(){
  vec3 O=vec3(aspect*.5,.62,camF);vec3 D=normalize(vec3(p.x-aspect*.5,p.y-.62,-camF));
  {vec3 Np=normalize(vec3(0.,.95,1.)),Q0=vec3(aspect*.5,.35,-floorY),U=vec3(1.,0.,0.),Vv=normalize(cross(Np,U));
   float dn0=dot(D,Np);float tt=dot(Q0-O,Np)/min(dn0,-1e-3);vec3 H=O+D*tt;
-  float S=.07;vec2 g=vec2(dot(H-Q0,U),dot(H-Q0,Vv))/S;float row=floor(g.y);g.x+=.5*mod(row,2.);
+  float S=.07;vec2 g=vec2(dot(H-Q0,U),dot(H-Q0,Vv))/S+vec2(pan.x*aspect,pan.y)/S;float row=floor(g.y);   /* tilting looks along the wall of beads */g.x+=.5*mod(row,2.);
   vec2 ip=floor(g),f=g-ip-.5;float rb=.36+.06*h2b(ip);f+=(vec2(hash(ip),hash(ip+3.))-.5)*.10;
   float dr=length(f),fade=exp(-max(0.,tt-camF)*.35);
   vec3 n=dr<rb?normalize(U*f.x+Vv*f.y+Np*sqrt(max(rb*rb-dr*dr,0.))*.9):Np;
@@ -984,14 +984,14 @@ function compile(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);
 const vs = compile(gl.VERTEX_SHADER,VS);
 const PT_VS=`#version 300 es
 precision highp float;precision highp sampler2D;
-uniform sampler2D uP;uniform float psize,t,bigPass;uniform vec3 pal[6];uniform vec3 emCol[4];
+uniform sampler2D uP;uniform float psize,t,bigPass;uniform vec3 pal[6];uniform vec3 emCol[4];uniform vec2 pan;
 out vec3 vc;out float vb;
 float rnd(float n){return fract(sin(n*12.9898)*43758.5453);}
 void main(){int w=textureSize(uP,0).x;ivec2 id=ivec2(gl_VertexID%w,gl_VertexID/w);vec4 s=texelFetch(uP,id,0);
  float n=float(gl_VertexID),h=rnd(n),h2=rnd(n+.37);
  float born=step(1.,s.w);
  float big=step(.993,h2)*(1.-born);float bright=step(.90,h);
- gl_Position=vec4(s.xy*2.-1.,0.,1.);
+ gl_Position=vec4((s.xy-pan)*2.-1.,0.,1.);   /* tilting slides the window across the big space */
  float k=fract(.5+.45*sin(s.x*3.1+t*.05)*cos(s.y*2.3-t*.04)+s.y*.85+s.x*.45+t*.012)*6.;int i=int(k);vec3 c=mix(pal[i],pal[(i+1)%6],smoothstep(.2,.8,fract(k)));
  float fade=smoothstep(0.,.12,s.z)*smoothstep(1.,.9,s.z)*smoothstep(0.,.04,min(min(s.x+.5,1.5-s.x),min(s.y+.5,1.5-s.y)));
  if(abs(big-bigPass)>.5){gl_PointSize=0.;vc=vec3(0.);vb=0.;return;}
@@ -1096,12 +1096,12 @@ function blit(target){if(target){gl.bindFramebuffer(gl.FRAMEBUFFER,target.f);gl.
 function use(k,texel){const s=P[k];gl.useProgram(s.p);gl.uniform2f(s.u.texel,texel[0],texel[1]);return s.u;}
 
 /* ================= Simulation state ================= */
-const SIM_RES=128, DYE_RES=640;
+const SIM_RES=128, DYE_RES=800;   // the paint canvas is a little larger than the screen (tilt to look around), so a little finer
 let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 120';
+const VER_TXT='버전 121';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -1219,7 +1219,7 @@ function lightSeedAll(){lightSeed=Math.random()*100;const u=use('partInit',[0,0]
 function drawPoints(target,bigPass){
   if(target){gl.bindFramebuffer(gl.FRAMEBUFFER,target.f);gl.viewport(0,0,target.w,target.h);}else{gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,canvas.width,canvas.height);}
   gl.useProgram(PTP.p);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,parts.r.t);gl.uniform1i(PTP.u.uP,0);
-  gl.uniform1f(PTP.u.psize,dpr*1.15);gl.uniform1f(PTP.u.t,lightTime);gl.uniform1f(PTP.u.bigPass,bigPass);gl.uniform3fv(PTP.u.pal,lightFlat);gl.uniform3fv(PTP.u.emCol,emColFlat());
+  gl.uniform1f(PTP.u.psize,dpr*1.15);gl.uniform2f(PTP.u.pan,VIEW.light.o[0],VIEW.light.o[1]);gl.uniform1f(PTP.u.t,lightTime);gl.uniform1f(PTP.u.bigPass,bigPass);gl.uniform3fv(PTP.u.pal,lightFlat);gl.uniform3fv(PTP.u.emCol,emColFlat());
   gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE);gl.bindVertexArray(vaoPts);gl.drawArrays(gl.POINTS,0,PART_N*PART_N);
   gl.bindVertexArray(vao);gl.disable(gl.BLEND);}
 const emState=new Map();let hueCounter=Math.random();
@@ -1247,14 +1247,15 @@ function lightFrame(dt){
   for(const s of queue.splice(0)){ if(!live)continue;
     if(s.set){splatVelSet(s.x,s.y,s.vx*vel.r.w,s.vy*vel.r.h,s.r*1.6,s.set);} else splatVel(s.x,s.y,s.dx*.6,s.dy*.6,s.r*1.4);}
   const em=live?gatherEmitters(dt):[];const ev=new Float32Array(16),ek=new Float32Array(4),eh=new Float32Array(4);
-  em.forEach((e,i)=>{ev.set([e.x,e.y,e.dx,e.dy],i*4);ek[i]=e.k;eh[i]=e.hue;
+  const LV=viewStep('light',dt);
+  em.forEach((e,i)=>{ev.set([e.x+LV.o[0],e.y+LV.o[1],e.dx,e.dy],i*4);   /* a fingertip on the screen = that place in the big space */ek[i]=e.k;eh[i]=e.hue;
     // each new light is a source of flow: a jet that swirls, collides with the other flows and pushes them
     const j=520*e.k*Math.min(dt*60,2);
     splatVel(e.x,e.y,e.dx*j,e.dy*j,.0035);
     splatVel(e.x+e.dx/aspect*.05,e.y+e.dy*.05,e.dx*j*.8,e.dy*j*.8,.005);});
   if(flow>.02){simTime+=ldt;stepVel(ldt,12);}
   let u=use('partStep',[0,0]);gl.uniform1i(u.uP,parts.r.bind(0));gl.uniform1i(u.uVel,vel.r.bind(1));gl.uniform2f(u.simTexel,vel.r.tx,vel.r.ty);
-  gl.uniform4fv(u.emit,ev);gl.uniform1fv(u.emitK,ek);gl.uniform1fv(u.emitHue,eh);gl.uniform1f(u.emitFrac,Math.min(.02,1500*dt/(PART_N*PART_N)));
+  gl.uniform4fv(u.emit,ev);gl.uniform2f(u.pan,LV.o[0],LV.o[1]);gl.uniform1fv(u.emitK,ek);gl.uniform1fv(u.emitHue,eh);gl.uniform1f(u.emitFrac,Math.min(.02,1500*dt/(PART_N*PART_N)));
   gl.uniform2f(u.force,motionF[0],motionF[1]);gl.uniform2f(u.tilt,Math.max(-.7,Math.min(.7,viewTilt[0])),Math.max(-.7,Math.min(.7,viewTilt[1])));gl.uniform1f(u.dt,ldt);gl.uniform1f(u.t,lightTime);gl.uniform1f(u.seed,lightSeed);gl.uniform1f(u.aspect,aspect);
   blit(parts.w);parts.swap();
   // light trails: fade, then add the sparks
@@ -1889,7 +1890,7 @@ function haloFrame(dt){
   gl.uniform1i(u.uVel,vel.r.bind(0));gl.uniform1i(u.uSrc,hSmoke.r.bind(1));gl.uniform4f(u.diss,.35,0,0,0);blit(hSmoke.w);hSmoke.swap();
   // ---- draw ----
   const pcen=haloProj(H.C);
-  u=use('haloRender',[0,0]);gl.uniform1i(u.uS,hSmoke.r.bind(0));gl.uniform4fv(u.rp,rp);gl.uniform3f(u.rC,...H.C);gl.uniform3f(u.rN,...H.n);gl.uniform3f(u.pc,pcen[0],pcen[1],0);
+  {const V=viewStep('halo',dt);u=use('haloRender',[0,0]);gl.uniform2f(u.pan,V.o[0],V.o[1]);}gl.uniform1i(u.uS,hSmoke.r.bind(0));gl.uniform4fv(u.rp,rp);gl.uniform3f(u.rC,...H.C);gl.uniform3f(u.rN,...H.n);gl.uniform3f(u.pc,pcen[0],pcen[1],0);
   gl.uniform1f(u.rR,H.R);gl.uniform1f(u.rI,H.I);gl.uniform1f(u.aspect,aspect);gl.uniform1f(u.time,haloT);gl.uniform1f(u.camF,HALO_F);gl.uniform1f(u.floorY,HALO_FLOOR);
   haloColStep(dt);gl.uniform3f(u.rCol,...haloCol);gl.uniform1f(u.beadH,haloBead/100);
   gl.uniform1f(u.sTx,hSmoke.r.tx);gl.uniform1f(u.sTy,hSmoke.r.ty);blit(null);
@@ -1973,10 +1974,17 @@ function inkFrame(dt){
       u=use('inkStep',[inkA.r.tx,inkA.r.ty]);gl.uniform1i(u.uA,inkA.r.bind(0));gl.uniform1i(u.uK,inkK.bind(1));gl.uniform2f(u.tilt,tx,ty);
       gl.uniform1f(u.dw,.12);gl.uniform1f(u.gt,.08);gl.uniform1f(u.pk,.80);gl.uniform1f(u.dp,.025);gl.uniform1f(u.ev0,.00009);gl.uniform1f(u.ev1,.00036);
       gl.uniform1f(u.dep0,.0008);gl.uniform1f(u.dep1,.012);blit(inkA.w);inkA.swap();}}
-  const u=use('inkShow',[0,0]);gl.uniform1i(u.uS,inkS.r.bind(0));gl.uniform1i(u.uA,inkA.r.bind(1));gl.uniform1f(u.aspect,aspect);
+  const u=use('inkShow',[0,0]);gl.uniform1i(u.uS,inkS.r.bind(0));gl.uniform1i(u.uA,inkA.r.bind(1));gl.uniform1f(u.aspect,aspect);{const V=viewStep('ink',dt);gl.uniform1f(u.vZ,V.z);gl.uniform2f(u.vO,V.o[0],V.o[1]);}
   gl.uniform2f(u.simTexel,inkS.r.tx,inkS.r.ty);blit(null);
 }
 let WATER_AMP=1, HAND_K=1.1;const wPan=[0,0];
+// look around by tilting, for the modes that draw on a canvas larger than the screen: z = how much of it the screen shows,
+// o = where the window sits (uv). The canvas is 1/z the screen; the window slides as far as the tilt, never past the edge.
+const VIEW={paint:{z:.72,o:[0,0]},ink:{z:.75,o:[0,0]},light:{z:1,lim:.5,o:[0,0]},halo:{z:1,lim:.5,o:[0,0]}};
+function viewStep(key,dt){const V=VIEW[key],lim=V.lim||(1-V.z)/2,K=V.lim?.8:.5,r=1-Math.exp(-dt*3);
+  const tx=gyroOn?Math.max(-lim,Math.min(lim,viewTilt[0]*K)):0,ty=gyroOn?Math.max(-lim,Math.min(lim,viewTilt[1]*K)):0;
+  V.o[0]+=(tx-V.o[0])*r;V.o[1]+=(ty-V.o[1])*r;return V;}
+const vwx=(k,x)=>(x-.5)*VIEW[k].z+.5+VIEW[k].o[0], vwy=(k,y)=>(y-.5)*VIEW[k].z+.5+VIEW[k].o[1];   // screen → canvas
 /* ---- 비: raindrops on the lake ---- */
 let rainLevel=0; try{const v=parseInt(localStorage.getItem('hf-rain'));if(v>=0&&v<=3)rainLevel=v;}catch(e){}
 // 이슬비 → 비 → 소나기: more drops, bigger drops, a rougher lake (shower ≈ 3× the drops it had before)
@@ -2179,7 +2187,7 @@ const pickColor=(i)=>{const p=pal();const c=p[(i+colorTick)%p.length];const k=.9
 const pointers=new Map();
 // 화면 터치와 손가락 터치(새 손 인식: 펴진 손가락 끝 = 누름)가 똑같은 길을 탐. virt = 손가락(카메라)
 let lastAct=0;const isIdle=()=>performance.now()-lastAct>4000&&!handInfo.length&&!pointers.size;
-function tDown(id,x,y,t,virt){lastAct=performance.now();pointers.set(id,{x,y,t,c:pickColor(pointers.size+(Math.random()*6|0)),virt,born:performance.now()});
+function tDown(id,x,y,t,virt){lastAct=performance.now();if(mode==='ink'){x=vwx('ink',x);y=vwy('ink',y);}pointers.set(id,{x,y,t,c:pickColor(pointers.size+(Math.random()*6|0)),virt,born:performance.now()});
   if(virt&&flow>.3){const p=pointers.get(id);      // 손끝이 닿는 순간 바로 작은 반응 = '인식됐다'는 확인
     if(mode==='paint')queue.push({x,y,dx:0,dy:0,c:p.c,r:.0026,s:.8,t:.7});
     else if(mode==='splash')spThrow(x,y,0,spR(.16,.3),true);
@@ -2192,7 +2200,7 @@ function tDown(id,x,y,t,virt){lastAct=performance.now();pointers.set(id,{x,y,t,c
   else if(mode==='water'){if(!virt)addPlop(x,y,1);wakeEnd('t'+id);}          // 손가락은 '톡 굽히기'가 퐁당 (펴기만 해서는 퐁당 안 함)
   else if(mode==='wave'&&wvH&&flow>.3){if(!virt)wavePoke(x,y,.5);}
   else if(mode==='ink'&&flow>.3){const p=pointers.get(id);p.ink=inkNext++;if(inkA)inkDrop(p.x,p.y,p.ink,virt?.4:1);}}   // each finger that lands = one 퐁당
-function tMove(id,x,y,t){const p=pointers.get(id);if(!p)return;lastAct=performance.now();
+function tMove(id,x,y,t){const p=pointers.get(id);if(!p)return;lastAct=performance.now();if(mode==='ink'){x=vwx('ink',x);y=vwy('ink',y);}
   if(mode==='halo'&&halo&&halo.grab&&halo.grab.id===id){haloMove(id,x,y,t);p.x=x;p.y=y;p.t=t;return;}   // holding the ring: it carries the smoke itself
   const dtR=Math.min(Math.max((t-p.t)/1000,.008),.1);
   const vp=p.virt&&(mode==='paint'||mode==='cloud');   // a camera fingertip in Pigment: made to feel like a finger on the glass
@@ -2385,7 +2393,7 @@ function virtTouches(slot,lm,fist,now,vSeen){
     const inside=x>=0&&x<=1&&y>=0&&y<=1,ext=!fist&&s&&s.ext&&inside;
     const on=ext&&(fi===1||open);const id='v'+slot+fi;
     if(!on){if(ext)vTips.push({x,y,on:false});continue;}vSeen.add(id);
-    if(!pointers.has(id))tDown(id,x,y,now,true);else tMove(id,x,y,now);const q=pointers.get(id);if(q){q.seen=now;vTips.push({x:q.fx??q.x,y:q.fy??q.y,on:true,born:q.born});}}
+    if(!pointers.has(id))tDown(id,x,y,now,true);else tMove(id,x,y,now);const q=pointers.get(id);if(q){q.seen=now;vTips.push({x:mode==='paint'||mode==='cloud'?(q.fx??x):x,y:mode==='paint'||mode==='cloud'?(q.fy??y):y,on:true,born:q.born});}}
 }
 function firePendingTaps(now){
   for(let i=pendingTaps.length-1;i>=0;i--){const p=pendingTaps[i];if(p.fire>now)continue;pendingTaps.splice(i,1);
@@ -2396,7 +2404,7 @@ function firePendingTaps(now){
 function fingerTap(x,y,fi){
   x=Math.min(.99,Math.max(.01,x));y=Math.min(.99,Math.max(.01,y));
   if(mode==='water'){if(!dipMode)addPlop(x,y,.9);}
-  else if(mode==='ink'){if(inkA)inkDrop(x,y,inkNext++,.9);}
+  else if(mode==='ink'){if(inkA)inkDrop(vwx('ink',x),vwy('ink',y),inkNext++,.9);}
   else if(mode==='wave'){if(wvH)wavePoke(x,y,.45);}
   else if(mode==='halo'&&halo){const [d,i]=haloNear(x,y);if(d<.08)haloKick(i,-.8);else haloPuff=[x*aspect,y,.005,.3];}
   else if(mode==='splash'){spThrow(x,y,0,spRandE(),true);}
@@ -2560,12 +2568,13 @@ function frameBody(now){
   flow+=(flowTarget-flow)*Math.min(1,dt*(flowTarget>flow?2.5:6));
   updateGyro(dt);updateTimeScale(dt);
   if(mode==='water'){ waterFrame(dt); } else if(mode==='wave'){ waveFrame(dt); } else if(mode==='halo'){ haloFrame(dt); } else if(mode==='light'){ lightFrame(dt); } else if(mode==='silk'){ queue.length=0; silkFrame(dt); } else if(mode==='cloud'){ cloudFrame(dt); } else if(mode==='ink'){ inkFrame(dt); } else if(mode==='splash'){ splashFrame(dt); } else if(mode==='cosmos'){ cosmosFrame(dt); } else {
+  viewStep('paint',dt);
   // left alone: two invisible brushes wander and stir the colours on their own
   if(isIdle()&&flow>.3){for(const g of ghosts){g.ph+=dt;g.a+=(Math.sin(g.ph*.7+g.s)*1.1+Math.sin(g.ph*1.9+g.s*2.)*.6)*dt;
       const m=.12;if(g.x<m||g.x>1-m||g.y<m||g.y>1-m){const ta=Math.atan2(.5-g.y,(.5-g.x)*aspect);let da=ta-g.a;da=Math.atan2(Math.sin(da),Math.cos(da));g.a+=da*Math.min(1,dt*2.5);}
       const sp=.16+.10*Math.sin(g.ph*.9+g.s),vx=Math.cos(g.a)*sp/aspect,vy=Math.sin(g.a)*sp;g.x+=vx*dt;g.y+=vy*dt;
       if(Math.random()<dt*.25)g.c=(g.c+1)%6;
-      queue.push({x:g.x,y:g.y,vx,vy,set:.6,c:pickColor(g.c),r:.0034,s:.55});}}
+      queue.push({x:g.x,y:g.y,vx,vy,set:.6,c:pickColor(g.c),r:.0034,s:.55,cv:1});   /* cv: already in canvas space */}}
   // ambient life: drifting color drops keep the canvas evolving
   ambientClock+=dt*flow*Math.max(timeScale,.15);
   if(ambientClock>.6){ambientClock=0;const x=Math.random(),y=Math.random(),a=Math.random()*6.28;
@@ -2574,14 +2583,15 @@ function frameBody(now){
     splatVel(x,y,Math.cos(a)*(big?650:380),Math.sin(a)*(big?650:380),big?r*1.4:.004);}
   if(Math.random()<dt*.15)colorTick++;
   // pointing jets: paint streams out of the fingertip in the pointed direction
-  for(const h of handInfo){const p=h.point;if(!p)continue;
+  for(const h of handInfo){const p0=h.point;if(!p0)continue;const p={...p0,x:vwx('paint',p0.x),y:vwy('paint',p0.y)};
     let js=1/Math.max(timeScale,.35);
     if(h.W){const vq=pointers.get('v'+(h.lm.slot??0)+'1');const sp=vq?vq.vs||0:0;if(sp>.12)continue;js*=.45;}
     if(flow>.3){splatVel(p.x,p.y,p.dx*1500*js*dt*60*.5,p.dy*1500*js*dt*60*.5,.0032);
       for(let k=1;k<=3;k++)splatVel(p.x+p.dx/aspect*.04*k,p.y+p.dy*.04*k,p.dx*(1250-k*180)*js*dt*30,p.dy*(1250-k*180)*js*dt*30,.0042);}
     splatDye(p.x,p.y,pickColor(p.c),.0024,.45,.55);
 }
-  // apply queued splats
+  // apply queued splats (touch & fingertips arrive in screen space → onto the larger canvas)
+  {const Z=VIEW.paint.z;for(const s of queue){if(s.cv)continue;s.cv=1;s.x=vwx('paint',s.x);s.y=vwy('paint',s.y);if(s.vx!=null){s.vx*=Z;s.vy*=Z;}if(s.dx!=null){s.dx*=Z;s.dy*=Z;}if(s.r)s.r*=Z*Z;}}
   for(const s of queue.splice(0)){
     if(flow>.3){ if(s.set) {const g=1.1/Math.max(timeScale,.35);splatVelSet(s.x,s.y,s.vx*vel.r.w*g,s.vy*vel.r.h*g,s.r*1.25,s.set);}
                  else splatVel(s.x,s.y,s.dx*flow,s.dy*flow,s.r*1.2); }
@@ -2593,7 +2603,7 @@ function frameBody(now){
     gl.uniform2f(u2.force,motionF[0]*f,motionF[1]*f);gl.uniform1f(u2.k,dt*flow*1400.*PAINT_TILT_K/Math.max(timeScale,.35));blit(vel.w);vel.swap();}}
   if(flow>.02){simTime+=dt*flow*timeScale;step(dt*flow*timeScale);}
   // display
-  const u=use('display',[0,0]);gl.uniform3fv(u.pal,palFlat);gl.uniform1i(u.uDye,dye.r.bind(0));gl.uniform1i(u.uDet,det.r.bind(1));gl.uniform2f(u.dyeTexel,dye.r.tx,dye.r.ty);
+  const u=use('display',[0,0]);gl.uniform3fv(u.pal,palFlat);gl.uniform1i(u.uDye,dye.r.bind(0));gl.uniform1i(u.uDet,det.r.bind(1));gl.uniform2f(u.dyeTexel,dye.r.tx,dye.r.ty);{const V=VIEW.paint;gl.uniform1f(u.vZ,V.z);gl.uniform2f(u.vO,V.o[0],V.o[1]);}
   gl.uniform1f(u.dotSize,2.0*dpr);gl.uniform1f(u.relief,11.+7.*(1.-flow));gl.uniform1f(u.time,now*.001);blit(null);
   }
   updateMusic(dt);
@@ -2644,7 +2654,7 @@ function setMode(m){mode=m;document.body.classList.toggle('water',m==='water');d
   document.querySelectorAll('#modeSeg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.m===m));
   seedBtn.textContent=(m==='water'||m==='wave')?'잔잔하게':m==='ink'?'새 한지':'새 캔버스';hintTxt.innerHTML=(m==='water'&&dipMode)?HINTS.dip:HINTS[m];
   gliders.length=0;queue.length=0;drops.length=0;try{localStorage.setItem('hf-mode',m);}catch(e){}
-  if((m==='wave'||m==='cloud'||m==='water')&&!gyroOn)setGyro(true);                 // the aquarium lives on tilt and shake
+  if(['wave','cloud','water','paint','light','halo','ink'].includes(m)&&!gyroOn)setGyro(true);                 // the aquarium lives on tilt and shake
   if(curTrack)switchTrack();}
 document.querySelectorAll('#modeSeg button').forEach(b=>b.onclick=()=>setMode(b.dataset.m));
 setMode(mode);

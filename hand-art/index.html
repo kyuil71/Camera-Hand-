@@ -210,7 +210,7 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
     </div>
     <div class="row"><button class="btn" id="pinBtn">비밀번호 바꾸기</button></div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 114</p>
+    <p class="hint" id="ver">버전 115</p>
   </div>
 </div>
 <!-- 마음 남기기: write over the flowing art, then keep it (locked with a 4-digit PIN, on this phone only) or let it flow away -->
@@ -638,7 +638,7 @@ void main(){vec2 uv=vUv;vec2 p=vec2(uv.x*aspect,uv.y);
  col+=(hash(gl_FragCoord.xy+fract(time)*37.)-.5)*.006;                // anti-banding grain
  o=vec4(col,1.);}`,
 partInit: H+`uniform float seed;
-void main(){vec2 q=gl_FragCoord.xy;o=vec4(hash(q+seed),hash(q*1.31+seed+7.),hash(q*.77+seed+3.),hash(q*2.13+seed+11.));}`,
+void main(){vec2 q=gl_FragCoord.xy;o=vec4(vec2(hash(q+seed),hash(q*1.31+seed+7.))*2.-.5,hash(q*.77+seed+3.),hash(q*2.13+seed+11.));}`,   /* the light lives in a space 4× the screen (2×2), the screen is its middle */
 partStep: H+`uniform sampler2D uP,uVel;uniform vec2 simTexel,force,tilt;uniform float dt,t,seed,aspect,emitFrac;uniform vec4 emit[4];uniform float emitK[4],emitHue[4];
 vec2 flowB(vec2 p,float t){            // big slow wave currents that never cross the walls (stream function)
  float PI=3.14159;vec2 v=vec2(0.);
@@ -649,10 +649,11 @@ vec2 flowB(vec2 p,float t){            // big slow wave currents that never cros
  v+=a4*PI*vec2(2.*sin(3.*PI*p.x)*cos(2.*PI*p.y),-3.*cos(3.*PI*p.x)*sin(2.*PI*p.y));
  return v;}
 void main(){vec4 s=texture(uP,vUv);vec2 p=s.xy;float life=s.z,lane=s.w;
- vec2 v=texture(uVel,p).xy*simTexel;                       // hands / touch / pinch push the light
+ vec2 sc=clamp(p,0.,1.);float ins=smoothstep(-.03,.0,min(min(p.x,1.-p.x),min(p.y,1.-p.y)));
+ vec2 v=texture(uVel,sc).xy*simTexel*ins;                  // hands / touch push the light (only where the screen is)
  float ph=lane*6.2831;
  vec2 w=vec2(.010*sin(p.y*9.+t*.5+ph),.018*sin(p.x*8.+t*.7+ph)); // ripples along the strands
- vec2 fb=v+flowB(p,t)*1.6;                                      // the whole current at this point
+ vec2 fb=v+flowB((p+.5)*.5,t)*3.2;                              // the great slow currents turn through the whole 4× space, sweeping light in and out of view
  float tl=length(tilt);
  if(tl>.01){float al=dot(fb,tilt)/(length(fb)*tl+1e-5);          // flowing the way the phone leans → faster, against it → slower
   fb*=clamp(1.+al*tl*2.6,.25,2.6);fb+=tilt*.04;}
@@ -663,10 +664,10 @@ void main(){vec4 s=texture(uP,vUv);vec2 p=s.xy;float life=s.z,lane=s.w;
   vec2 d=(p-emit[k].xy)*vec2(aspect,1.);float g=exp(-dot(d,d)/.012);
   float other=born?smoothstep(.02,.06,abs(hue-emitHue[k])):1.;
   p+=normalize(d+1e-5)/vec2(aspect,1.)*g*emitK[k]*.45*other*dt;}
- if(p.x<0.)p.x=-p.x;if(p.x>1.)p.x=2.-p.x;if(p.y<0.)p.y=-p.y;if(p.y>1.)p.y=2.-p.y;   // bounce off the walls
- float eW=min(min(p.x,1.-p.x)*aspect,min(p.y,1.-p.y));
+ if(p.x<-.5)p.x=-1.-p.x;if(p.x>1.5)p.x=3.-p.x;if(p.y<-.5)p.y=-1.-p.y;if(p.y>1.5)p.y=3.-p.y;   // the walls are far outside the screen
+ float eW=min(min(p.x+.5,1.5-p.x)*aspect,min(p.y+.5,1.5-p.y));
  life-=dt*(born?.11+.05*hash(vUv*91.7):.05+.08*hash(vUv*91.7))+dt*4.*smoothstep(.03,.0,eW);   /* new flows last a while */      /* no light piling up along the walls */
- if(life<0.){p=vec2(hash(vUv+t+seed),hash(vUv*1.7+t+seed+3.));life=1.;lane=fract(lane);}
+ if(life<0.){p=vec2(hash(vUv+t+seed),hash(vUv*1.7+t+seed+3.))*2.-.5;life=1.;lane=fract(lane);}
  // emission: a few particles per frame are reborn at a fingertip as a new, bright stream
  float tot=emitK[0]+emitK[1]+emitK[2]+emitK[3];
  if(tot>0.&&hash(vUv*913.7+fract(t*3.17)*97.)<emitFrac*tot){
@@ -985,12 +986,12 @@ void main(){int w=textureSize(uP,0).x;ivec2 id=ivec2(gl_VertexID%w,gl_VertexID/w
  float big=step(.993,h2)*(1.-born);float bright=step(.90,h);
  gl_Position=vec4(s.xy*2.-1.,0.,1.);
  float k=fract(.5+.45*sin(s.x*3.1+t*.05)*cos(s.y*2.3-t*.04)+s.y*.85+s.x*.45+t*.012)*6.;int i=int(k);vec3 c=mix(pal[i],pal[(i+1)%6],smoothstep(.2,.8,fract(k)));
- float fade=smoothstep(0.,.12,s.z)*smoothstep(1.,.9,s.z)*smoothstep(0.,.04,min(min(s.x,1.-s.x),min(s.y,1.-s.y)));
+ float fade=smoothstep(0.,.12,s.z)*smoothstep(1.,.9,s.z)*smoothstep(0.,.04,min(min(s.x+.5,1.5-s.x),min(s.y+.5,1.5-s.y)));
  if(abs(big-bigPass)>.5){gl_PointSize=0.;vc=vec3(0.);vb=0.;return;}
  gl_PointSize=big>.5?psize*(7.+16.*h):(bright>.5?psize*(1.6+1.4*h2):psize*(.9+.6*h));
- vc=c*fade*(big>.5?.30:(bright>.5?.85:.07));vb=big;
+ vc=c*fade*(big>.5?.34:(bright>.5?1.0:.085));vb=big;
  if(born>.5){float hk=fract(s.w)*6.;int hi=int(hk);vec3 ec=mix(pal[hi%6],pal[(hi+1)%6],smoothstep(.3,.7,fract(hk)));ec=mix(vec3(dot(ec,vec3(.3,.55,.15))),ec,1.25);
-  float young=smoothstep(.7,1.,s.z);float edge=smoothstep(0.,.04,min(min(s.x,1.-s.x),min(s.y,1.-s.y)));
+  float young=smoothstep(.7,1.,s.z);float edge=smoothstep(0.,.04,min(min(s.x+.5,1.5-s.x),min(s.y+.5,1.5-s.y)));
   float glow=pow(s.z,1.6);                                       // light fades as it ages, then is gone
   vc=mix(max(ec,0.),vec3(1.),.12*young)*edge*glow*(1.05+.5*young)*(.6+.6*h);
   gl_PointSize=psize*(1.6+1.6*h)*(1.+.6*young);}}`;
@@ -1093,7 +1094,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 114';
+const VER_TXT='버전 115';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -1191,7 +1192,7 @@ const LIGHTS={
   '파랑':    ['#1e5bff','#00b3ff','#4fd8ff','#2a2fd6','#9ad7ff','#5a7dff']};
 let lightName='다채로움'; try{const v=localStorage.getItem('hf-light');if(v&&LIGHTS[v])lightName=v;}catch(e){}
 let lightFlat=new Float32Array(LIGHTS[lightName].map(hex2rgb).flat());
-const PART_N=256; let parts=null,trail=null,glowF=null,lightTime=0,lightSeed=0;
+const PART_N=384; /* 2.25× the sparks for a space 4× the screen */ let parts=null,trail=null,glowF=null,lightTime=0,lightSeed=0;
 const hasF32=!!gl.getExtension('EXT_color_buffer_float');
 function fboX(w,h,ifmt,type,filt){const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,filt);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,filt);

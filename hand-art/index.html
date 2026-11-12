@@ -84,6 +84,8 @@ body:not(.light) #lights{display:none}
 body:not(.water) #plopRow,body:not(.water) #floors,body:not(.water) #dipRow,body:not(.water) #rainRow{display:none}
 #rainRow{margin-bottom:10px}
 #rangeRow{margin-top:10px}
+#rangeRow[hidden],#engRow[hidden],#camRow[hidden]{display:none}
+#gyroBtn{flex:1.45;white-space:nowrap;padding-left:6px;padding-right:6px}   /* removed from the menu (hand tracking: the ✋ button at the top) */
 body:not(.halo) #haloColRow,body:not(.halo) #beadRow{display:none}
 #dipRow{margin-bottom:10px}
 #dipBtn.on{background:var(--ink);color:#101826}
@@ -195,23 +197,23 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
     <div class="row chips" id="haloColRow"><button class="chip" data-hc="white">링 화이트</button><button class="chip" data-hc="random">링 색 랜덤</button></div>
     <div class="speed" id="beadRow"><span>구슬 배경</span><input type="range" id="beadSize" min="20" max="100" step="1" aria-label="구슬 배경 범위"><b id="beadVal"></b></div>
     <div class="row chips" id="floors"><button class="chip" data-f="2"><i class="sw" style="background:linear-gradient(135deg,#000,#1b1d20 50%,#000)"></i>검은 유리</button><button class="chip" data-f="1"><i class="sw" style="background:linear-gradient(135deg,#1c2328,#3a464e 50%,#11171b)"></i>다크 그레이</button><button class="chip" data-f="3"><i class="sw" style="background:#1d2024;background-image:linear-gradient(#5a5f66 1.5px,transparent 1.5px),linear-gradient(90deg,#5a5f66 1.5px,transparent 1.5px);background-size:8px 8px"></i>그레이 타일</button><button class="chip" data-f="0"><i class="sw" style="background:linear-gradient(135deg,#8c8270,#c9bda4 45%,#6e675c)"></i>자갈</button></div>
-    <div class="speed" id="rangeRow"><span>손 인식 범위</span><input type="range" id="handRange" min="0" max="100" step="1" aria-label="손 인식 범위"><b id="handRangeVal"></b></div>
-    <div class="row chips" id="engRow"><button class="chip" data-e="tasks">새 손 인식</button><button class="chip" data-e="legacy">기존 손 인식</button></div>
-    <div class="row">
+    <div class="speed" id="rangeRow" hidden><span>손 인식 범위</span><input type="range" id="handRange" min="0" max="100" step="1" aria-label="손 인식 범위"><b id="handRangeVal"></b></div>
+    <div class="row chips" id="engRow" hidden><button class="chip" data-e="tasks">새 손 인식</button><button class="chip" data-e="legacy">기존 손 인식</button></div>
+    <div class="row" id="camRow" hidden>
       <button class="btn main" id="camBtn">손 인식 시작</button>
       <button class="btn" id="seedBtn">새 캔버스</button>
       <button class="btn" id="snapBtn">저장</button>
     </div>
     <div class="row">
       <button class="btn" id="musicBtn">음악 끄기</button>
-      <button class="btn" id="gyroBtn">흔들기 켜기</button>
+      <button class="btn" id="gyroBtn">기울기 센서 켜기</button>
       <button class="btn" id="fsBtn">전체화면</button>
       <button class="btn" id="install">앱 설치</button>
     </div>
     <div class="row"><button class="btn" id="pinBtn">비밀번호 바꾸기</button></div>
     <div class="row"><button class="btn" id="bakOut">마음 백업 내보내기</button><button class="btn" id="bakIn">백업 가져오기</button></div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 117</p>
+    <p class="hint" id="ver">버전 118</p>
   </div>
 </div>
 <!-- 마음 남기기: write over the flowing art, then keep it (locked with a 4-digit PIN, on this phone only) or let it flow away -->
@@ -1095,7 +1097,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 117';
+const VER_TXT='버전 118';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -2115,12 +2117,12 @@ function updateGyro(dt){
 async function setGyro(on){gView=null;viewRaw=[0,0];
   if(on){
     try{if(typeof DeviceMotionEvent!=='undefined'&&typeof DeviceMotionEvent.requestPermission==='function'){
-      const r=await DeviceMotionEvent.requestPermission();if(r!=='granted'){status('흔들기 권한이 거부되었어요');on=false;}}}catch(e){on=false;}
+      const r=await DeviceMotionEvent.requestPermission();if(r!=='granted'){status('기울기 센서 권한이 거부되었어요');on=false;}}}catch(e){on=false;}
     if(on&&typeof DeviceMotionEvent==='undefined'){status('이 기기는 움직임 센서를 지원하지 않아요');on=false;}
   }
   gyroOn=on;gBase=null;motionRaw=[0,0];
   if(on)addEventListener('devicemotion',onMotion);else removeEventListener('devicemotion',onMotion);
-  const b=document.getElementById('gyroBtn');if(b){b.textContent=on?'흔들기 끄기':'흔들기 켜기';b.classList.toggle('on',on);}
+  const b=document.getElementById('gyroBtn');if(b){b.textContent=on?'기울기 센서 끄기':'기울기 센서 켜기';b.classList.toggle('on',on);}
 }
 
 /* ================= Music: each mode's song, played as it is ================= */
@@ -2315,7 +2317,7 @@ let stream=null, wakeLock=null;
 
 /* ===== 새 손 인식 (핸드 미러 3D와 같은 방식): MediaPipe Tasks HandLandmarker · full 모델 · GPU · 동영상 모드 · One Euro 필터 =====
    파일은 모두 mediapipe/tasks/ 안에 있어 오프라인에서도 동작 */
-let ENGINE='tasks';try{const v=localStorage.getItem('hf-engine');if(v==='tasks'||v==='legacy')ENGINE=v;}catch(e){}
+let ENGINE='tasks';   // the menu no longer offers the older engine: always the new hand tracking
 let tasksLM=null,tasksDelegate='',lastVT=-1;
 const FINGERS=[[1,2,3,4],[5,6,7,8],[9,10,11,12],[13,14,15,16],[17,18,19,20]];
 const d3=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z);

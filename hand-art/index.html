@@ -214,7 +214,7 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
     <div class="row"><button class="btn" id="pinBtn">비밀번호 바꾸기</button></div>
     <div class="row"><button class="btn" id="bakOut">마음 백업 내보내기</button><button class="btn" id="bakIn">백업 가져오기</button></div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 122</p>
+    <p class="hint" id="ver">버전 123</p>
   </div>
 </div>
 <!-- 마음 남기기: write over the flowing art, then keep it (locked with a 4-digit PIN, on this phone only) or let it flow away -->
@@ -653,7 +653,7 @@ vec2 flowB(vec2 p,float t){            // big slow wave currents that never cros
  v+=a4*PI*vec2(2.*sin(3.*PI*p.x)*cos(2.*PI*p.y),-3.*cos(3.*PI*p.x)*sin(2.*PI*p.y));
  return v;}
 void main(){vec4 s=texture(uP,vUv);vec2 p=s.xy;float life=s.z,lane=s.w;
- vec2 ps=p-pan;vec2 sc=clamp(ps,0.,1.);float ins=smoothstep(-.03,.0,min(min(ps.x,1.-ps.x),min(ps.y,1.-ps.y)));
+ vec2 ps=p-pan;vec2 sc=clamp(ps,0.,1.);float ins=smoothstep(-.35,.05,min(min(ps.x,1.-ps.x),min(ps.y,1.-ps.y)));   /* fades out far beyond the view: no seam where the flow changes */
  vec2 v=texture(uVel,sc).xy*simTexel*ins;                  // hands / touch push the light (only where the screen is)
  float ph=lane*6.2831;
  vec2 w=vec2(.010*sin(p.y*9.+t*.5+ph),.018*sin(p.x*8.+t*.7+ph)); // ripples along the strands
@@ -683,17 +683,18 @@ void main(){vec4 s=texture(uP,vUv);vec2 p=s.xy;float life=s.z,lane=s.w;
   float hj=(hash(vUv*2.9+t)-.5)*.02;                       // tiny hue spread → richer, still one colour
   life=1.;lane=1.+fract(emitHue[ei]+hj)*.999;}
  o=vec4(p,life,lane);}`,
+present: H+`uniform sampler2D uT;void main(){o=vec4(texture(uT,vUv).rgb,1.);}`,
 trailFade: H+`uniform sampler2D uT;uniform float k;uniform vec2 dp;void main(){vec2 q=vUv+dp;float ins=step(0.,q.x)*step(q.x,1.)*step(0.,q.y)*step(q.y,1.);o=texture(uT,q)*k*ins;}`,   /* when the view slides, the glowing trails slide with the space */
 glowDown: H+`uniform sampler2D uT;uniform vec2 px;
 void main(){vec3 c=vec3(0.);float W=0.;for(int y=-3;y<=3;y++)for(int x=-3;x<=3;x++){float w=exp(-float(x*x+y*y)*.18);c+=texture(uT,vUv+vec2(x,y)*px).rgb*w;W+=w;}o=vec4(c/W,1.);}`,
-lightComp: H+`uniform sampler2D uT,uG;uniform vec3 pal[6];uniform float time,aspect;
+lightComp: H+`uniform sampler2D uT,uG;uniform vec3 pal[6];uniform float time,aspect,tM;uniform vec2 vO;
 void main(){vec2 uv=vUv;vec3 avg=(pal[0]+pal[1]+pal[2]+pal[3]+pal[4]+pal[5])/6.;
  vec3 bg=mix(vec3(.004,.006,.016),vec3(.012,.018,.045),uv.y);
  bg+=avg*.22*exp(-pow((uv.y-.80)/.07,2.))*(.6+.4*vn(vec2(uv.x*3.+time*.05,1.)));          // horizon glow
  bg+=avg*.06*exp(-pow((uv.y-.80)/.25,2.));
  vec2 sp=uv*vec2(aspect,1.)*260.;vec2 si=floor(sp);float st=step(.996,hash(si))*smoothstep(.5,.0,length(sp-si-.5))*(.5+.5*sin(time*2.+hash(si)*40.));
  bg+=vec3(.8,.85,1.)*st*.6*smoothstep(.35,.9,uv.y);
- vec3 tr=texture(uT,uv).rgb,gw=texture(uG,uv).rgb;
+ vec2 tu=(uv+vO+tM)/(1.+2.*tM);vec3 tr=texture(uT,tu).rgb,gw=texture(uG,tu).rgb;   /* this view's part of the larger trail canvas */
  vec3 c=bg+tr*.85+gw*.55;
  c=1.-exp(-c*1.15);c=clamp(mix(vec3(dot(c,vec3(.3,.55,.15))),c,1.3),0.,1.);
  o=vec4(c,1.);}`,
@@ -984,14 +985,14 @@ function compile(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);
 const vs = compile(gl.VERTEX_SHADER,VS);
 const PT_VS=`#version 300 es
 precision highp float;precision highp sampler2D;
-uniform sampler2D uP;uniform float psize,t,bigPass;uniform vec3 pal[6];uniform vec3 emCol[4];uniform vec2 pan;
+uniform sampler2D uP;uniform float psize,t,bigPass,psc;uniform vec3 pal[6];uniform vec3 emCol[4];uniform vec2 pan;
 out vec3 vc;out float vb;
 float rnd(float n){return fract(sin(n*12.9898)*43758.5453);}
 void main(){int w=textureSize(uP,0).x;ivec2 id=ivec2(gl_VertexID%w,gl_VertexID/w);vec4 s=texelFetch(uP,id,0);
  float n=float(gl_VertexID),h=rnd(n),h2=rnd(n+.37);
  float born=step(1.,s.w);
  float big=step(.993,h2)*(1.-born);float bright=step(.90,h);
- gl_Position=vec4((s.xy-pan)*2.-1.,0.,1.);   /* tilting slides the window across the big space */
+ gl_Position=vec4((s.xy-pan)*psc*2.-1.,0.,1.);   /* trail pass: the whole reachable area · screen pass: the current view */
  float k=fract(.5+.45*sin(s.x*3.1+t*.05)*cos(s.y*2.3-t*.04)+s.y*.85+s.x*.45+t*.012)*6.;int i=int(k);vec3 c=mix(pal[i],pal[(i+1)%6],smoothstep(.2,.8,fract(k)));
  float fade=smoothstep(0.,.12,s.z)*smoothstep(1.,.9,s.z)*smoothstep(0.,.04,min(min(s.x+.5,1.5-s.x),min(s.y+.5,1.5-s.y)));
  if(abs(big-bigPass)>.5){gl_PointSize=0.;vc=vec3(0.);vb=0.;return;}
@@ -1009,7 +1010,7 @@ void main(){vec2 d=gl_PointCoord-.5;float r=length(d)*2.;
  o=vec4(vc*a,1.);}`;
 const PTP=(()=>{const p=gl.createProgram();gl.attachShader(p,compile(gl.VERTEX_SHADER,PT_VS));gl.attachShader(p,compile(gl.FRAGMENT_SHADER,PT_FS));gl.linkProgram(p);
   if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(p));
-  const u={};['uP','psize','t','bigPass','pal','emCol','pan'].forEach(k=>u[k]=gl.getUniformLocation(p,k));return {p,u};})();
+  const u={};['uP','psize','t','bigPass','pal','emCol','pan','psc'].forEach(k=>u[k]=gl.getUniformLocation(p,k));return {p,u};})();
 const vaoPts=gl.createVertexArray();
 const SILK_VS=`#version 300 es
 precision highp float;
@@ -1090,8 +1091,22 @@ function fbo(w,h){const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);
   gl.viewport(0,0,w,h);gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT);
   return {t,f,w,h,tx:1/w,ty:1/h,bind(u){gl.activeTexture(gl.TEXTURE0+u);gl.bindTexture(gl.TEXTURE_2D,t);return u;}};}
 function dfbo(w,h){return {r:fbo(w,h),w:fbo(w,h),swap(){const x=this.r;this.r=this.w;this.w=x;}};}
+/* ---- adaptive quality: when frames get slow, the final (heaviest) picture is drawn at a lower resolution and scaled up smoothly;
+   when the phone has headroom again it steps back up. Nothing is reset, only the last stage changes size. ---- */
+let QS=1,sceneF=null,qFt=16.7,qLast=0,qSlow=0,qGood=0;
+function sceneBuf(){if(QS>.999)return null;const w=Math.max(2,Math.round(canvas.width*QS)),h=Math.max(2,Math.round(canvas.height*QS));
+  if(!sceneF||sceneF.w!==w||sceneF.h!==h){if(sceneF){gl.deleteTexture(sceneF.t);gl.deleteFramebuffer(sceneF.f);}sceneF=fbo(w,h);}return sceneF;}
+function bindScreen(){const sf=sceneBuf();if(sf){gl.bindFramebuffer(gl.FRAMEBUFFER,sf.f);gl.viewport(0,0,sf.w,sf.h);}else{gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,canvas.width,canvas.height);}}
+const outW=()=>sceneF&&QS<.999?sceneF.w:canvas.width,outH=()=>sceneF&&QS<.999?sceneF.h:canvas.height;
+function qualityTick(now){const iv=now-(qLast||now);qLast=now;if(iv<=0||iv>250)return;   // ignore pauses (app in background)
+  qFt+=(iv-qFt)*.05;
+  if(qFt>24){qSlow+=iv;qGood=0;}else{qSlow=Math.max(0,qSlow-iv*.5);if(qFt<18)qGood+=iv;else qGood=0;}
+  if(qSlow>2000&&QS>.5){QS=Math.max(.5,+(QS-.12).toFixed(2));qSlow=0;qGood=0;}            // slow for ~2 s → a step down
+  else if(qGood>9000&&QS<1){QS=Math.min(1,+(QS+.1).toFixed(2));qGood=0;}}               // smooth for ~9 s → a step back up
+function presentScene(){if(QS>.999||!sceneF)return;gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,canvas.width,canvas.height);
+  const u=use('present',[0,0]);gl.uniform1i(u.uT,sceneF.bind(0));gl.drawElements(gl.TRIANGLES,6,gl.UNSIGNED_SHORT,0);}
 function blit(target){if(target){gl.bindFramebuffer(gl.FRAMEBUFFER,target.f);gl.viewport(0,0,target.w,target.h);}
-  else{gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,canvas.width,canvas.height);}
+  else bindScreen();
   gl.drawElements(gl.TRIANGLES,6,gl.UNSIGNED_SHORT,0);}
 function use(k,texel){const s=P[k];gl.useProgram(s.p);gl.uniform2f(s.u.texel,texel[0],texel[1]);return s.u;}
 
@@ -1101,7 +1116,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 122';
+const VER_TXT='버전 123';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -1211,16 +1226,17 @@ function fboX(w,h,ifmt,type,filt){const t=gl.createTexture();gl.bindTexture(gl.T
 function lightAlloc(){
   const pf=hasF32?gl.RGBA32F:IFMT, pt=hasF32?gl.FLOAT:TYPE;
   if(!parts){parts={r:fboX(PART_N,PART_N,pf,pt,gl.NEAREST),w:fboX(PART_N,PART_N,pf,pt,gl.NEAREST),swap(){const x=this.r;this.r=this.w;this.w=x;}};lightSeedAll();}
-  trail=dfbo(canvas.width,canvas.height);
-  glowF=fbo(Math.max(1,canvas.width>>2),Math.max(1,canvas.height>>2));
+  const tw=Math.round(canvas.width*(1+2*LM)*TQ),th=Math.round(canvas.height*(1+2*LM)*TQ);trail=dfbo(tw,th);   // covers every view the tilt can reach
+  glowF=fbo(Math.max(1,tw>>2),Math.max(1,th>>2));
 }
 function lightSeedAll(){lightSeed=Math.random()*100;const u=use('partInit',[0,0]);gl.uniform1f(u.seed,lightSeed);blit(parts.w);parts.swap();
   if(trail){gl.bindFramebuffer(gl.FRAMEBUFFER,trail.r.f);gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT);gl.bindFramebuffer(gl.FRAMEBUFFER,trail.w.f);gl.clear(gl.COLOR_BUFFER_BIT);}}
 function drawPoints(target,bigPass){
-  if(target){gl.bindFramebuffer(gl.FRAMEBUFFER,target.f);gl.viewport(0,0,target.w,target.h);}else{gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,canvas.width,canvas.height);}
+  if(target){gl.bindFramebuffer(gl.FRAMEBUFFER,target.f);gl.viewport(0,0,target.w,target.h);}else bindScreen();
   gl.useProgram(PTP.p);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,parts.r.t);gl.uniform1i(PTP.u.uP,0);
-  gl.uniform1f(PTP.u.psize,dpr*1.15);gl.uniform2f(PTP.u.pan,VIEW.light.o[0],VIEW.light.o[1]);gl.uniform1f(PTP.u.t,lightTime);gl.uniform1f(PTP.u.bigPass,bigPass);gl.uniform3fv(PTP.u.pal,lightFlat);gl.uniform3fv(PTP.u.emCol,emColFlat());
-  gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE);gl.bindVertexArray(vaoPts);gl.drawArrays(gl.POINTS,0,PART_N*PART_N);
+  if(target){gl.uniform1f(PTP.u.psize,dpr*1.15*TQ);gl.uniform2f(PTP.u.pan,-LM,-LM);gl.uniform1f(PTP.u.psc,1/(1+2*LM));}
+  else{gl.uniform1f(PTP.u.psize,dpr*1.15*(QS>.999?1:QS));gl.uniform2f(PTP.u.pan,VIEW.light.o[0],VIEW.light.o[1]);gl.uniform1f(PTP.u.psc,1);}gl.uniform1f(PTP.u.t,lightTime);gl.uniform1f(PTP.u.bigPass,bigPass);gl.uniform3fv(PTP.u.pal,lightFlat);gl.uniform3fv(PTP.u.emCol,emColFlat());
+  gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE);gl.bindVertexArray(vaoPts);gl.drawArrays(gl.POINTS,0,Math.round(PART_N*PART_N*(QS<.75?.65:1)));   /* a struggling phone draws fewer sparks */
   gl.bindVertexArray(vao);gl.disable(gl.BLEND);}
 const emState=new Map();let hueCounter=Math.random();
 function emColFlat(){const P=LIGHTS[lightName].map(hex2rgb);return new Float32Array([...P[1],...P[4],...P[2],...P[5]]);}
@@ -1259,11 +1275,11 @@ function lightFrame(dt){
   gl.uniform2f(u.force,motionF[0],motionF[1]);gl.uniform2f(u.tilt,Math.max(-.7,Math.min(.7,viewTilt[0])),Math.max(-.7,Math.min(.7,viewTilt[1])));gl.uniform1f(u.dt,ldt);gl.uniform1f(u.t,lightTime);gl.uniform1f(u.seed,lightSeed);gl.uniform1f(u.aspect,aspect);
   blit(parts.w);parts.swap();
   // light trails: fade, then add the sparks
-  u=use('trailFade',[0,0]);gl.uniform1i(u.uT,trail.r.bind(0));gl.uniform1f(u.k,Math.exp(-dt*flow*2.6));gl.uniform2f(u.dp,LV.o[0]-(LV.po0??LV.o[0]),LV.o[1]-(LV.po1??LV.o[1]));LV.po0=LV.o[0];LV.po1=LV.o[1];blit(trail.w);trail.swap();
+  u=use('trailFade',[0,0]);gl.uniform1i(u.uT,trail.r.bind(0));gl.uniform1f(u.k,Math.exp(-dt*flow*2.6));gl.uniform2f(u.dp,0,0);blit(trail.w);trail.swap();
   drawPoints(trail.r,0);
   u=use('glowDown',[0,0]);gl.uniform1i(u.uT,trail.r.bind(0));gl.uniform2f(u.px,trail.r.tx*3,trail.r.ty*3);blit(glowF);
   u=use('lightComp',[0,0]);gl.uniform1i(u.uT,trail.r.bind(0));gl.uniform1i(u.uG,glowF.bind(1));gl.uniform3fv(u.pal,lightFlat);
-  gl.uniform1f(u.time,lightTime);gl.uniform1f(u.aspect,aspect);blit(null);
+  gl.uniform1f(u.time,lightTime);gl.uniform1f(u.aspect,aspect);gl.uniform1f(u.tM,LM);gl.uniform2f(u.vO,LV.o[0],LV.o[1]);blit(null);
   drawPoints(null,1);                                   // soft bokeh orbs on top (no trails)
 }
 
@@ -1465,7 +1481,7 @@ function cloudFrame(dt){
   gl.uniform1f(u.aspect,aspect);{const T_=NEB_TONES[cloudTone];gl.uniform3fv(u.pal,new Float32Array(T_[1].flat()));gl.uniform3f(u.bgc,...T_[2]);gl.uniform4f(u.thm,T_[3],T_[4],T_[5],T_[6]);}gl.uniform2fv(u.lo,lo);gl.uniform4fv(u.lw,lw);gl.uniform4fv(u.lc,lc);gl.uniform4fv(u.lm,lm);gl.uniform2f(u.pan,cPan[0],cPan[1]);
   gl.uniform4f(u.sty,st.cov,st.soft,st.sc,st.warp);gl.uniform3f(u.lay,st.sc,0,st.al);blit(cFbo);
   u=use('cloudOut',[0,0]);gl.uniform1i(u.uC,cFbo.bind(0));gl.uniform1f(u.time,(performance.now()*.001)%3600);gl.uniform1f(u.bg,0);gl.uniform1f(u.seed,(cloudSeed*.37)%9);gl.uniform2f(u.pan,cPan[0],cPan[1]);
-  gl.uniform2f(u.res,canvas.width,canvas.height);blit(null);
+  gl.uniform2f(u.res,outW(),outH());blit(null);
 }
 
 /* ================= Water mode (lake) ================= */
@@ -1684,8 +1700,8 @@ function sprayStep(dt){const NX=WV.NX,NY=WV.NY;
     if(d.z<=0){const i=Math.min(NX-1,d.x/aspect*NX|0),j=Math.min(NY-1,d.y*NY|0);wvF[j*NX+i]=Math.min(1.6,wvF[j*NX+i]+.12*d.s);spray.splice(k,1);}}}
 function drawSpray(){const n=spray.length;if(!n)return;
   for(let k=0;k<n;k++){const d=spray[k],o=k*4;sprayData[o]=d.x/aspect;sprayData[o+1]=d.y;
-    sprayData[o+2]=Math.min(18,(1.3+d.z*42)*d.s)*dpr;sprayData[o+3]=Math.min(.9,d.vz>0?.85:.45+d.z*10);}
-  gl.useProgram(SPRAYP);gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE_MINUS_SRC_ALPHA);
+    sprayData[o+2]=Math.min(18,(1.3+d.z*42)*d.s)*dpr*(QS>.999?1:QS);sprayData[o+3]=Math.min(.9,d.vz>0?.85:.45+d.z*10);}
+  bindScreen();gl.useProgram(SPRAYP);gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE_MINUS_SRC_ALPHA);
   gl.bindVertexArray(sprayVAO);gl.bindBuffer(gl.ARRAY_BUFFER,sprayVBO);gl.bufferSubData(gl.ARRAY_BUFFER,0,sprayData,0,n*4);
   gl.drawArrays(gl.POINTS,0,n);gl.bindVertexArray(vao);gl.disable(gl.BLEND);}
 function wavePush(x,y,vx,vy,R,k){           // a hand / finger moving through the water drags it along
@@ -1980,7 +1996,8 @@ function inkFrame(dt){
 let WATER_AMP=1, HAND_K=1.1;const wPan=[0,0];
 // look around by tilting, for the modes that draw on a canvas larger than the screen: z = how much of it the screen shows,
 // o = where the window sits (uv). The canvas is 1/z the screen; the window slides as far as the tilt, never past the edge.
-const VIEW={paint:{z:.72,o:[0,0]},ink:{z:.75,o:[0,0]},light:{z:1,lim:.5,K:1.1,o:[0,0]},halo:{z:1,lim:.5,o:[0,0]}};
+const LM=.3,TQ=.8;   // Aurora: how far the view can slide, and the trail canvas resolution (per screen pixel)
+const VIEW={paint:{z:.72,o:[0,0]},ink:{z:.75,o:[0,0]},light:{z:1,lim:LM,K:1.1,o:[0,0]},halo:{z:1,lim:.5,o:[0,0]}};
 function viewStep(key,dt){const V=VIEW[key],lim=V.lim||(1-V.z)/2,K=V.K||(V.lim?.8:.5),r=1-Math.exp(-dt*3);
   const tx=gyroOn?Math.max(-lim,Math.min(lim,viewTilt[0]*K)):0,ty=gyroOn?Math.max(-lim,Math.min(lim,viewTilt[1]*K)):0;
   V.o[0]+=(tx-V.o[0])*r;V.o[1]+=(ty-V.o[1])*r;return V;}
@@ -2482,7 +2499,7 @@ function cosmosFrame(dt){
   let u=use('cloudDisp',[cDisp.r.tx,cDisp.r.ty]);gl.uniform1i(u.uD,cDisp.r.bind(0));gl.uniform1i(u.uVel,vel.r.bind(1));
   gl.uniform2f(u.simTexel,vel.r.tx,vel.r.ty);gl.uniform1f(u.dt,k);gl.uniform1f(u.relax,.10);gl.uniform1f(u.clearK,.5);blit(cDisp.w);cDisp.swap();   // what a hand moves stays moved for a long while, then drifts back
   u=use('cosNeb',[cFbo.tx,cFbo.ty]);gl.uniform1i(u.uD,cDisp.r.bind(0));gl.uniform1f(u.time,cosT*2.2);gl.uniform1f(u.aspect,aspect);gl.uniform1f(u.seed,cosSeed);blit(cFbo);
-  u=use('cosShow',[0,0]);gl.uniform1i(u.uC,cFbo.bind(0));gl.uniform2f(u.res,canvas.width,canvas.height);gl.uniform1f(u.time,performance.now()*.001);gl.uniform1f(u.aspect,aspect);blit(null);}
+  u=use('cosShow',[0,0]);gl.uniform1i(u.uC,cFbo.bind(0));gl.uniform2f(u.res,outW(),outH());gl.uniform1f(u.time,performance.now()*.001);gl.uniform1f(u.aspect,aspect);blit(null);}
 function cosPuff(x,y,k){if(flow<.3)return;for(let i=0;i<8;i++){const a=i/8*6.283+Math.random()*.5;queue.push({x:x+Math.cos(a)*.01/aspect,y:y+Math.sin(a)*.01,dx:Math.cos(a)*520*k,dy:Math.sin(a)*520*k,r:.005,vOnly:true});}}
 
 /* ================= Splash: paint flung across the canvas ================= */
@@ -2560,7 +2577,7 @@ function setSplashBg(v){spBg=v?1:0;try{localStorage.setItem('hf-splbg',spBg?'1':
 /* ================= Main loop ================= */
 let last=performance.now(), snapReq=false;
 let frameErr=0;
-function frame(now){try{frameBody(now);}catch(e){if(!frameErr++){console.error(e);try{status('이 모드를 그리는 중 오류: '+String(e.message||e).slice(0,80));}catch(_){}}last=now;}   // one bad frame never stops the loop
+function frame(now){qualityTick(now);try{frameBody(now);}catch(e){if(!frameErr++){console.error(e);try{status('이 모드를 그리는 중 오류: '+String(e.message||e).slice(0,80));}catch(_){}}last=now;}   // one bad frame never stops the loop
   requestAnimationFrame(frame);}
 function frameBody(now){
   const dt=Math.min((now-last)/1000,1/30);last=now;
@@ -2604,10 +2621,10 @@ function frameBody(now){
   if(flow>.02){simTime+=dt*flow*timeScale;step(dt*flow*timeScale);}
   // display
   const u=use('display',[0,0]);gl.uniform3fv(u.pal,palFlat);gl.uniform1i(u.uDye,dye.r.bind(0));gl.uniform1i(u.uDet,det.r.bind(1));gl.uniform2f(u.dyeTexel,dye.r.tx,dye.r.ty);{const V=VIEW.paint;gl.uniform1f(u.vZ,V.z);gl.uniform2f(u.vO,V.o[0],V.o[1]);}
-  gl.uniform1f(u.dotSize,2.0*dpr);gl.uniform1f(u.relief,11.+7.*(1.-flow));gl.uniform1f(u.time,now*.001);blit(null);
+  gl.uniform1f(u.dotSize,2.0*dpr*(QS>.999?1:QS));gl.uniform1f(u.relief,11.+7.*(1.-flow));gl.uniform1f(u.time,now*.001);blit(null);
   }
   updateMusic(dt);
-  artGrabStep();drawTips();
+  presentScene();artGrabStep();drawTips();
   if(snapReq){const jpg=snapReq==='jpg';snapReq=false;           // read the canvas right after drawing (the buttons and menu are not part of it)
     canvas.toBlob(b=>{if(b)saveBlob(b,jpg?'jpg':'png');},jpg?'image/jpeg':'image/png',.94);}
 }

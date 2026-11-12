@@ -210,7 +210,7 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
     </div>
     <div class="row"><button class="btn" id="pinBtn">비밀번호 바꾸기</button></div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 110</p>
+    <p class="hint" id="ver">버전 111</p>
   </div>
 </div>
 <!-- 마음 남기기: write over the flowing art, then keep it (locked with a 4-digit PIN, on this phone only) or let it flow away -->
@@ -1091,7 +1091,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 110';
+const VER_TXT='버전 111';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -2115,7 +2115,7 @@ let bgm=players[0];
 let musicOn=true; try{musicOn=localStorage.getItem('hf-music')!=='off';}catch(e){}
 let curTrack=null, wantTrack=null;
 const MUSIC_VOL=.85, FADE_IN=2.2, FADE_OUT=1.8;          // seconds
-const TRACKS={cosmos:'audio/where_the_ocean_meets_sky.mp3',halo:'audio/beneath_the_haloed_glass.mp3',paint:'audio/where_the_stream_widens.mp3',water:'audio/glass_upon_the_lake.mp3',light:'audio/where_the_ocean_meets_sky.mp3',wave:'audio/where_the_ocean_meets_sky.mp3',ink:'audio/silk_and_moonlight.mp3'};
+const TRACKS={cloud:'audio/slow_drift_at_zenith.mp3',cosmos:'audio/where_the_ocean_meets_sky.mp3',halo:'audio/beneath_the_haloed_glass.mp3',paint:'audio/where_the_stream_widens.mp3',water:'audio/glass_upon_the_lake.mp3',light:'audio/where_the_ocean_meets_sky.mp3',wave:'audio/where_the_ocean_meets_sky.mp3',ink:'audio/silk_and_moonlight.mp3'};
 const trackURL={};
 function getTrack(path){ if(!trackURL[path])trackURL[path]=fetch(path).then(r=>r.blob()).then(b=>URL.createObjectURL(b)).catch(()=>null); return trackURL[path]; }
 // change song: the playing one fades out on its own player, the new one starts silent on the other player and fades in

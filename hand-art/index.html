@@ -214,7 +214,7 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
     <div class="row"><button class="btn" id="pinBtn">비밀번호 바꾸기</button></div>
     <div class="row"><button class="btn" id="bakOut">마음 백업 내보내기</button><button class="btn" id="bakIn">백업 가져오기</button></div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 119</p>
+    <p class="hint" id="ver">버전 120</p>
   </div>
 </div>
 <!-- 마음 남기기: write over the flowing art, then keep it (locked with a 4-digit PIN, on this phone only) or let it flow away -->
@@ -713,7 +713,7 @@ waterPoke: H+`uniform sampler2D uT;uniform float aspect,radius,amp;uniform vec2 
 void main(){vec4 s=texture(uT,vUv);vec2 p=vUv-point;p.x*=aspect;float g=exp(-dot(p,p)/radius);o=vec4(s.x,s.y-amp*g,0.,1.);}`,
 waterGrad: H+`uniform sampler2D uT;void main(){float l=texture(uT,vL).x,r=texture(uT,vR).x,b=texture(uT,vB).x,t=texture(uT,vT).x,c=texture(uT,vUv).x;
 o=vec4((r-l)*.5,(t-b)*.5,l+r+b+t-4.*c,c);}`,
-waterRender: H+`uniform sampler2D uH,uS;uniform vec2 simTexel;uniform float aspect,time,nk,floorType,rainN,rainVis,rough,swlN;uniform vec4 swl[4];uniform vec3 sunDir;uniform vec4 rain[100];uniform vec2 viewT;
+waterRender: H+`uniform sampler2D uH,uS;uniform vec2 simTexel;uniform float aspect,time,nk,floorType,rainN,rainVis,rough,swlN;uniform vec4 swl[4];uniform vec3 sunDir;uniform vec4 rain[100];uniform vec2 viewT,pan;
 // raindrop impacts: fine capillary ring packets, computed per pixel (crisp at any resolution)
 vec2 rainGrad(vec2 p,vec2 gsurf,out float spark){vec2 gr=vec2(0.);spark=0.;
  vec2 pw=p+gsurf*.0035+.0025*vec2(sin(p.y*61.+p.x*23.),sin(p.x*57.-p.y*31.));   // rings ride on and are bent by the existing waves
@@ -804,24 +804,26 @@ void main(){
  vec2 gb;{vec2 d=simTexel*1.6;gb=(texture(uH,uv+d).xy+texture(uH,uv-d).xy+texture(uH,uv+vec2(d.x,-d.y)).xy+texture(uH,uv+vec2(-d.x,d.y)).xy)*.25/simTexel.y*nk;
   gs=mix(gs,gb,smoothstep(.10,.35,length(gs-gb)));}                 /* churned water: fine crinkles are smoothed so the picture never breaks up */
  {float m=length(gs);if(m>.6)gs*=(.6+.45*tanh((m-.6)/.45))/m;}      /* slopes never steeper than ~1: the floor always shows through */
- float gk=min(1.,gustK(p,t)+rough),e=.0015;              /* rain roughens the whole surface */
- float s0=swellH(p,t)+ripH(p,t,gk);
- vec2 ga=vec2(swellH(p+vec2(e,0.),t)+ripH(p+vec2(e,0.),t,gk)-s0,swellH(p+vec2(0.,e),t)+ripH(p+vec2(0.,e),t,gk)-s0)/e;
+ vec2 pw=p+pan;                                           /* tilting looks around the lake: the floor and the lake's own waves belong to the place, the screen moves over them */
+ float gk=min(1.,gustK(pw,t)+rough),e=.0015;              /* rain roughens the whole surface */
+ float s0=swellH(pw,t)+ripH(pw,t,gk);
+ vec2 ga=vec2(swellH(pw+vec2(e,0.),t)+ripH(pw+vec2(e,0.),t,gk)-s0,swellH(pw+vec2(0.,e),t)+ripH(pw+vec2(0.,e),t,gk)-s0)/e;
  vec2 g=gs+ga;
  float spark;g+=rainGrad(p,gs+ga*.6,spark)*rainVis;spark*=rainVis;   /* heavier rain: rings and splashes show more */
  vec3 N=normalize(vec3(-g,1.));
  vec3 P=vec3(p,0.);vec3 cam=vec3(.5*aspect,-.6,.85)+vec3(viewT.x*aspect*.9,viewT.y*1.1,0.);vec3 V=normalize(cam-P);   // the phone's tilt moves the viewpoint
  float cosT=clamp(dot(N,V),0.,1.);float F=.02+.98*pow(1.-cosT,5.);
  vec3 rd=refract(-V,N,1./1.333);
- float depth=floorType<.5?.045+.30*pow(smoothstep(-.1,1.15,uv.y),1.4)+.03*(fbm4(p*2.2)-.5):.10+.10*smoothstep(-.1,1.1,uv.y);
+ float depth=floorType<.5?.045+.30*pow(smoothstep(-.1,1.15,uv.y+pan.y*.6),1.4)+.03*(fbm4(pw*2.2)-.5):.10+.10*smoothstep(-.1,1.1,uv.y+pan.y*.6);
  depth=max(.02,depth-texture(uH,uv).w*2.2);                                // a pressed-down surface really is deeper water
  float tt=depth/max(-rd.z,.08);vec2 hit=p+rd.xy*tt;if(swlN>0.)hit=twist(hit);
+ vec2 hw=hit+pan;                                          /* the floor seen there, in the lake's own place */
  float sh=1.;vec3 bc;
- if(floorType<.5)bc=bed(hit,sh);
- else if(floorType<1.5)bc=vec3(.075,.088,.098)*(.9+.2*vn(hit*2.5));     // dark smoked glass
- else if(floorType>2.5)bc=tiles(hit);                                    // dark gray tiles
- else bc=vec3(.030,.034,.038)*(.85+.3*vn(hit*2.5));                    // black glass (faint pattern shows through)
- vec2 gw=gb+ga;vec2 lq=hit-sunDir.xy/sunDir.z*depth*.6+gw*min(1.,.35/max(length(gw),1e-4))*depth*1.2;   /* rough water bends the light web, never scrambles it */
+ if(floorType<.5)bc=bed(hw,sh);
+ else if(floorType<1.5)bc=vec3(.075,.088,.098)*(.9+.2*vn(hw*2.5));     // dark smoked glass
+ else if(floorType>2.5)bc=tiles(hw);                                    // dark gray tiles
+ else bc=vec3(.030,.034,.038)*(.85+.3*vn(hw*2.5));                    // black glass (faint pattern shows through)
+ vec2 gw=gb+ga;vec2 lq=hw-sunDir.xy/sunDir.z*depth*.6+gw*min(1.,.35/max(length(gw),1e-4))*depth*1.2;   /* rough water bends the light web, never scrambles it */
  mat2 r1=mat2(.80,.60,-.60,.80),r2=mat2(.34,-.94,.94,.34);
  float c1=caus(r1*lq*8.,t*.8),c2=caus(r2*lq*12.5+vec2(3.1,1.7),t*1.0);
  float cs=(c1+c2)*.5;cs=cs*cs*1.9+cs*.18;
@@ -1099,7 +1101,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 119';
+const VER_TXT='버전 120';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -1585,7 +1587,9 @@ function waterFrame(dt){
     if(!dipMode&&live)whirlPress();
     waterStep();wAcc-=W_H;n++;} if(n>=30)wAcc=0;
   let u=use('waterGrad',[wat.r.tx,wat.r.ty]);gl.uniform1i(u.uT,wat.r.bind(0));blit(wgrad);
-  u=use('waterRender',[wat.r.tx,wat.r.ty]);gl.uniform1i(u.uH,wgrad.bind(0));gl.uniform1i(u.uS,wat.r.bind(1));gl.uniform2f(u.simTexel,wat.r.tx,wat.r.ty);
+  {const K=.8,lim=.5,tx=gyroOn?Math.max(-lim,Math.min(lim,viewTilt[0]*K)):0,ty=gyroOn?Math.max(-lim,Math.min(lim,viewTilt[1]*K)):0,r=1-Math.exp(-dt*3);   // tilt = look around the lake (bounded, like Cloud)
+   wPan[0]+=(tx-wPan[0])*r;wPan[1]+=(ty-wPan[1])*r;}
+  u=use('waterRender',[wat.r.tx,wat.r.ty]);gl.uniform2f(u.pan,wPan[0]*aspect,wPan[1]);gl.uniform1i(u.uH,wgrad.bind(0));gl.uniform1i(u.uS,wat.r.bind(1));gl.uniform2f(u.simTexel,wat.r.tx,wat.r.ty);
   gl.uniform1f(u.aspect,aspect);gl.uniform1f(u.time,waterTime);gl.uniform1f(u.nk,W_NK);gl.uniform1f(u.floorType,floorType);gl.uniform4fv(u.rain,rainBuf);gl.uniform1f(u.rainN,rainDrops.length);gl.uniform1f(u.rainVis,[1,1.1,1.3,1.6][rainLevel]);gl.uniform1f(u.rough,roughNow);
   {let n=0;swlBuf.fill(0);for(const w of wakes.values()){if(n>=4||w.whirl<.02)continue;const R=Math.max(.07,w.R*1.15);
     swlBuf.set([w.cx*aspect,w.cy,R*R,Math.sign(w.spin)*w.whirl*(.85+.12*Math.sin(waterTime*2.7+n))],n*4);n++;}
@@ -1972,7 +1976,7 @@ function inkFrame(dt){
   const u=use('inkShow',[0,0]);gl.uniform1i(u.uS,inkS.r.bind(0));gl.uniform1i(u.uA,inkA.r.bind(1));gl.uniform1f(u.aspect,aspect);
   gl.uniform2f(u.simTexel,inkS.r.tx,inkS.r.ty);blit(null);
 }
-let WATER_AMP=1, HAND_K=1.1;
+let WATER_AMP=1, HAND_K=1.1;const wPan=[0,0];
 /* ---- 비: raindrops on the lake ---- */
 let rainLevel=0; try{const v=parseInt(localStorage.getItem('hf-rain'));if(v>=0&&v<=3)rainLevel=v;}catch(e){}
 // 이슬비 → 비 → 소나기: more drops, bigger drops, a rougher lake (shower ≈ 3× the drops it had before)
@@ -2640,7 +2644,7 @@ function setMode(m){mode=m;document.body.classList.toggle('water',m==='water');d
   document.querySelectorAll('#modeSeg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.m===m));
   seedBtn.textContent=(m==='water'||m==='wave')?'잔잔하게':m==='ink'?'새 한지':'새 캔버스';hintTxt.innerHTML=(m==='water'&&dipMode)?HINTS.dip:HINTS[m];
   gliders.length=0;queue.length=0;drops.length=0;try{localStorage.setItem('hf-mode',m);}catch(e){}
-  if((m==='wave'||m==='cloud')&&!gyroOn)setGyro(true);                 // the aquarium lives on tilt and shake
+  if((m==='wave'||m==='cloud'||m==='water')&&!gyroOn)setGyro(true);                 // the aquarium lives on tilt and shake
   if(curTrack)switchTrack();}
 document.querySelectorAll('#modeSeg button').forEach(b=>b.onclick=()=>setMode(b.dataset.m));
 setMode(mode);

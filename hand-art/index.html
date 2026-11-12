@@ -210,7 +210,7 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
     </div>
     <div class="row"><button class="btn" id="pinBtn">비밀번호 바꾸기</button></div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 113</p>
+    <p class="hint" id="ver">버전 114</p>
   </div>
 </div>
 <!-- 마음 남기기: write over the flowing art, then keep it (locked with a 4-digit PIN, on this phone only) or let it flow away -->
@@ -1093,7 +1093,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 113';
+const VER_TXT='버전 114';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -1415,10 +1415,15 @@ function cloudWander(L,i){const side=Math.random()<.5?1:-1,a=(side>0?0:Math.PI)+
   L.wx=Math.cos(a)*m;L.wy=Math.sin(a)*m;L.next=(i===0?6:4)+Math.random()*(i===0?10:7);}
 function cloudWindStep(dt,live){const W=cWind;W.T+=dt;const now=performance.now();
   let touching=false;for(const p of pointers.values()){touching=true;break;}
-  for(const s of queue.splice(0)){if(!live||s.vx==null)continue;const k=s.hand||s.fi!=null?.8:1;   // a fingertip's move = the wind it makes
+  let hk=0;
+  for(const s of queue.splice(0)){if(!live||s.vx==null)continue;
+    // a fingertip's move = the wind it makes. In the air a hand moves less than a finger on glass, so gestures blow 1.5× harder,
+    // and the more fingers are spread, the stronger the gust (one finger 1×, two 1.35×, four ≈2×)
+    const k=s.virt?1.5*(1+.34*Math.max(0,(s.nv||1)-1)):(s.hand||s.fi!=null?.8*1.5:1);if(s.virt||s.hand)hk=Math.max(hk,k);
     W.fvx=W.fvx*.6+.4*s.vx*aspect*k;W.fvy=W.fvy*.6+.4*s.vy*k;W.lastMove=now;}
+  if(hk)W.hk=hk;else if(now-W.lastMove>300)W.hk=0;
   const moving=touching&&now-W.lastMove<140;
-  let fx=0,fy=0;if(moving){const g=.55,m=Math.hypot(W.fvx,W.fvy),cap=1.1,f=m*g>cap?cap/(m*g):1;fx=W.fvx*g*f;fy=W.fvy*g*f;}
+  let fx=0,fy=0;if(moving){const g=.55,m=Math.hypot(W.fvx,W.fvy),cap=W.hk>1.6?1.9:(W.hk?1.5:1.1),f=m*g>cap?cap/(m*g):1;fx=W.fvx*g*f;fy=W.fvy*g*f;}
   W.L.forEach((L,i)=>{
     if((L.next-=dt)<=0)cloudWander(L,i);                                            // every layer keeps its own changing breeze
     L.devT-=dt;if(L.devT<=0){L.devT=.8+Math.random()*1.4;L.dev=(Math.random()-.5)*(i===1?1.3:.4);}   // and its own small mind about where to go
@@ -2194,7 +2199,7 @@ function tMove(id,x,y,t){const p=pointers.get(id);if(!p)return;lastAct=performan
   else if(mode==='water'&&!dipMode)wakeStep('t'+id,x,y,Math.hypot((x-p.x)*aspect,y-p.y)/dtR,t);
   else if(mode==='splash')spMove(p,x,y,dtR);
   else if(mode!=='water'){if(vp){let n=0;for(const q of pointers.values())if(q.virt)n++;const k=Math.max(.72,1/Math.sqrt(n||1));   // several fingertips share the push, as one hand
-      queue.push({x,y,vx:(x-p.x)/dtR*.85,vy:(y-p.y)/dtR*.85,set:.85*k,c:p.c,r:.0042,s:.9*k});}
+      queue.push({x,y,vx:(x-p.x)/dtR*.85,vy:(y-p.y)/dtR*.85,set:.85*k,c:p.c,r:.0042,s:.9*k,virt:1,nv:n});}
     else queue.push({x,y,vx:(x-p.x)/dtR,vy:(y-p.y)/dtR,set:.85,c:p.c,r:.0042,s:.9});}p.x=x;p.y=y;p.t=t;
   if(dipMode&&!p.virt)dipMove('t'+id,x,y);}
 function tUp(id){if(mode==='halo')haloUp(id);

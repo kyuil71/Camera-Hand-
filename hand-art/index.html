@@ -214,7 +214,7 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
     <div class="row"><button class="btn" id="pinBtn">비밀번호 바꾸기</button></div>
     <div class="row"><button class="btn" id="bakOut">마음 백업 내보내기</button><button class="btn" id="bakIn">백업 가져오기</button></div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 124</p>
+    <p class="hint" id="ver">버전 125</p>
   </div>
 </div>
 <!-- 마음 남기기: write over the flowing art, then keep it (locked with a 4-digit PIN, on this phone only) or let it flow away -->
@@ -1116,13 +1116,20 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 124';
+const VER_TXT='버전 125';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
   a=((Math.round(a/90)*90)%360+360)%360;return a;}
 // 기기 기준 중력 방향(가속도계)으로 OS 화면 각도를 추정 — 각도 값이 안 바뀌거나 틀리게 오는 기기 대비
-addEventListener('devicemotion',e=>{const g=e.accelerationIncludingGravity;if(g&&g.x!=null)devG=[g.x,g.y];},{passive:true});
+addEventListener('devicemotion',e=>{if(extMotionT&&performance.now()-extMotionT<400)return;const g=e.accelerationIncludingGravity;if(g&&g.x!=null)devG=[g.x,g.y];},{passive:true});
+/* other ways to read the tilt that need no touch first: the Android app hands the accelerometer in directly (__hfGrav),
+   and Chrome's sensor API (Accelerometer) works from the start. When either is running, devicemotion is not needed. */
+let extMotionT=0;
+window.__hfGrav=(x,y,z)=>{extMotionT=performance.now();devG=[x,y];if(gyroOn)onMotion({accelerationIncludingGravity:{x,y,z},acceleration:null,ext:1});};
+(function startAccel(){try{if(!('Accelerometer' in window))return;const go=()=>{try{const a=new Accelerometer({frequency:60});
+    a.addEventListener('reading',()=>{if(a.x!=null)__hfGrav(a.x,a.y,a.z);});a.addEventListener('error',()=>{});a.start();}catch(e){}};
+  if(navigator.permissions&&navigator.permissions.query)navigator.permissions.query({name:'accelerometer'}).then(r=>{if(r.state!=='denied')go();}).catch(go);else go();}catch(e){}})();
 function gravAngle(){if(!devG)return null;const [x,y]=devG;if(Math.hypot(x,y)<4)return null;return Math.abs(x)>Math.abs(y)?(x>0?90:270):(y>0?0:180);}
 const md=v=>((v%360)+360)%360;
 function applyRot(){const a=devAngle();rawAng=a;const scrP=innerHeight>=innerWidth;
@@ -2125,6 +2132,7 @@ function toScreen(x,y){const ang=(lockAng||0)*Math.PI/180;   // 내용은 고정
   return [x*Math.cos(ang)+y*Math.sin(ang),-x*Math.sin(ang)+y*Math.cos(ang)];}
 let gView=null,viewRaw=[0,0];const viewTilt=[0,0];
 function onMotion(e){
+  if(!e.ext&&extMotionT&&performance.now()-extMotionT<400)return;   // a direct sensor is already feeding the tilt
   const a=e.accelerationIncludingGravity;if(!a||a.x==null)return;
   const now=performance.now(),dt=Math.min(.1,(now-(lastMotionT||now))/1000)||.016;lastMotionT=now;
   const g=toScreen(-a.x/9.81,-a.y/9.81);                    // gravity direction on the screen
@@ -2159,7 +2167,7 @@ async function setGyro(on,tap){gView=null;viewRaw=[0,0];
   }
   gyroOn=on;gBase=null;motionRaw=[0,0];
   if(on){addEventListener('devicemotion',onMotion);const t0=lastMotionT;
-    setTimeout(()=>{if(gyroOn&&lastMotionT===t0&&typeof DeviceMotionEvent!=='undefined'&&typeof DeviceMotionEvent.requestPermission==='function'&&!tap)gyroAskOnTouch();},1500);}   // nothing arrived: ask on the next touch
+    setTimeout(()=>{if(gyroOn&&lastMotionT===t0&&!extMotionT&&typeof DeviceMotionEvent!=='undefined'&&typeof DeviceMotionEvent.requestPermission==='function'&&!tap)gyroAskOnTouch();},1500);}   // nothing arrived: ask on the next touch
   else removeEventListener('devicemotion',onMotion);
   const b=document.getElementById('gyroBtn');if(b){b.textContent=on?'기울기 센서 끄기':'기울기 센서 켜기';b.classList.toggle('on',on);}
 }

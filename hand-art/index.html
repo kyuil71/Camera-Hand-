@@ -214,7 +214,7 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
     <div class="row"><button class="btn" id="pinBtn">비밀번호 바꾸기</button></div>
     <div class="row"><button class="btn" id="bakOut">마음 백업 내보내기</button><button class="btn" id="bakIn">백업 가져오기</button></div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 123</p>
+    <p class="hint" id="ver">버전 124</p>
   </div>
 </div>
 <!-- 마음 남기기: write over the flowing art, then keep it (locked with a 4-digit PIN, on this phone only) or let it flow away -->
@@ -1116,7 +1116,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 123';
+const VER_TXT='버전 124';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -2146,14 +2146,21 @@ function updateGyro(dt){
   motionF[0]+=(motionRaw[0]-motionF[0])*Math.min(1,dt*12);motionF[1]+=(motionRaw[1]-motionF[1])*Math.min(1,dt*12);
   if(shakeAmt>.12)feelFinger(Math.min(3,shakeAmt*1.6));     // shaking speeds the scene up
 }
-async function setGyro(on){gView=null;viewRaw=[0,0];
+// the tilt sensor: Android gives it without asking, so it starts at once. Only where the browser truly needs a tap to grant it
+// (iPhone/iPad), or if no reading ever arrives, it asks on the next touch instead of silently staying off.
+const gyroNeedsTap=()=>typeof DeviceMotionEvent!=='undefined'&&typeof DeviceMotionEvent.requestPermission==='function'&&/iPhone|iPad|iPod/.test(navigator.userAgent+(navigator.maxTouchPoints>1&&/Macintosh/.test(navigator.userAgent)?' iPad':''));
+let gyroAskArmed=false;
+function gyroAskOnTouch(){if(gyroAskArmed)return;gyroAskArmed=true;addEventListener('pointerdown',()=>{gyroAskArmed=false;setGyro(true,true);},{once:true,capture:true});}
+async function setGyro(on,tap){gView=null;viewRaw=[0,0];
   if(on){
-    try{if(typeof DeviceMotionEvent!=='undefined'&&typeof DeviceMotionEvent.requestPermission==='function'){
-      const r=await DeviceMotionEvent.requestPermission();if(r!=='granted'){status('기울기 센서 권한이 거부되었어요');on=false;}}}catch(e){on=false;}
-    if(on&&typeof DeviceMotionEvent==='undefined'){status('이 기기는 움직임 센서를 지원하지 않아요');on=false;}
+    if(typeof DeviceMotionEvent==='undefined'){status('이 기기는 움직임 센서를 지원하지 않아요');on=false;}
+    else if(gyroNeedsTap()){if(!tap){gyroAskOnTouch();return;}
+      try{const r=await DeviceMotionEvent.requestPermission();if(r!=='granted'){status('기울기 센서 권한이 거부되었어요');on=false;}}catch(e){on=false;}}
   }
   gyroOn=on;gBase=null;motionRaw=[0,0];
-  if(on)addEventListener('devicemotion',onMotion);else removeEventListener('devicemotion',onMotion);
+  if(on){addEventListener('devicemotion',onMotion);const t0=lastMotionT;
+    setTimeout(()=>{if(gyroOn&&lastMotionT===t0&&typeof DeviceMotionEvent!=='undefined'&&typeof DeviceMotionEvent.requestPermission==='function'&&!tap)gyroAskOnTouch();},1500);}   // nothing arrived: ask on the next touch
+  else removeEventListener('devicemotion',onMotion);
   const b=document.getElementById('gyroBtn');if(b){b.textContent=on?'기울기 센서 끄기':'기울기 센서 켜기';b.classList.toggle('on',on);}
 }
 
@@ -2713,13 +2720,12 @@ const musicBtn=document.getElementById('musicBtn');
 function setMusic(on){musicOn=on;musicBtn.textContent=on?'음악 끄기':'음악 켜기';musicBtn.classList.toggle('on',on);try{localStorage.setItem('hf-music',on?'on':'off');}catch(e){}
   if(on)tryMusic();}                                   // off: the song fades out by itself (updateMusic)
 musicBtn.onclick=()=>setMusic(!musicOn);setMusic(musicOn);
-document.getElementById('gyroBtn').onclick=()=>{const want=!gyroOn;setGyro(want);try{localStorage.setItem('hf-gyro',want?'1':'0');}catch(e){}};   // remembers the choice
+document.getElementById('gyroBtn').onclick=()=>{const want=!gyroOn;setGyro(want,true);try{localStorage.setItem('hf-gyro',want?'1':'0');}catch(e){}};   // remembers the choice
 // on a phone, 흔들기 starts switched on (unless it was switched off before); iOS needs a tap first to ask permission
 {const phone=(matchMedia&&matchMedia('(pointer:coarse)').matches)||/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
  let pref=null;try{pref=localStorage.getItem('hf-gyro');}catch(e){}
  if(phone&&pref!=='0'&&typeof DeviceMotionEvent!=='undefined'){
-  if(typeof DeviceMotionEvent.requestPermission==='function')addEventListener('pointerdown',()=>{if(!gyroOn)setGyro(true);},{once:true,capture:true});
-  else setGyro(true);}}
+  if(!gyroOn)setGyro(true);}}
 setDip(dipMode);
 document.getElementById('snapBtn').onclick=()=>{snapReq='png';};
 /* ================= Record (MP4) & capture (JPEG): only the artwork, never the buttons or the menu ================= */

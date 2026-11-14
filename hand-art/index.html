@@ -74,11 +74,13 @@ body.menu .dock{transform:translate(-50%,0)}
 .seg::-webkit-scrollbar{display:none}
 .seg button{flex:1 0 auto;padding:0 10px;min-height:42px;border:0;border-radius:11px;background:transparent;color:var(--mute);font:inherit;font-size:16px;font-weight:600}
 .seg button[aria-pressed=true]{background:var(--ink);color:#101826}
-body.water #palettes,body.halo #palettes,body.light #palettes,body.cloud #palettes,body.ink #palettes{display:none}
+body.water #palettes,body.pond #palettes,body.halo #palettes,body.light #palettes,body.cloud #palettes,body.ink #palettes{display:none}
 body:not(.cloud) #clouds{display:none}
 body:not(.ink) #inks{display:none}
 body:not(.light) #lights{display:none}
 body:not(.water) #plopRow,body:not(.water) #floors,body:not(.water) #rainRow{display:none}
+body:not(.pond) #pondRow{display:none}
+#pondRow{margin-bottom:10px}
 #rainRow{margin-bottom:10px}
 #rangeRow{margin-top:10px}
 #rangeRow[hidden],#camRow[hidden]{display:none}
@@ -180,13 +182,14 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
 <div class="dock" id="sheet">
   <div class="panel">
     <div class="head" id="sheetHead"><span class="bar"></span><div id="status">손 인식 꺼짐 · 화면을 문질러 보세요</div></div>
-    <div class="row seg" id="modeSeg"><button data-m="paint">Pigment</button><button data-m="water">Ripple</button><button data-m="light">Aurora</button><button data-m="cloud">Cloud</button><button data-m="halo">Halo</button><button data-m="ink">Ink</button></div>
+    <div class="row seg" id="modeSeg"><button data-m="paint">Pigment</button><button data-m="water">Ripple</button><button data-m="pond">Puddle</button><button data-m="light">Aurora</button><button data-m="cloud">Cloud</button><button data-m="halo">Halo</button><button data-m="ink">Ink</button></div>
     <div class="speed"><span>흐름 속도</span><input type="range" id="speed" min="0" max="100" step="1"><b id="speedVal"></b></div>
     <div class="speed" id="plopRow"><span>퐁당 크기</span><input type="range" id="plopSize" min="0" max="100" step="1" aria-label="퐁당 크기"><b id="plopVal"></b></div>
     <div class="row chips" id="palettes"></div>
     <div class="row chips" id="lights"></div>
     <div class="row chips" id="clouds"></div>
     <div class="row chips" id="inks"></div>
+    <div class="row chips" id="pondRow"><button class="chip" data-pr="0">비 그침</button><button class="chip" data-pr="1">약한 비</button><button class="chip" data-pr="2">장맛비</button><button class="chip" data-pr="3">폭우</button></div>
     <div class="row chips" id="rainRow"><button class="chip" data-r="0">비 없음</button><button class="chip" data-r="1">이슬비</button><button class="chip" data-r="2">비</button><button class="chip" data-r="3">소나기</button></div>
     <div class="row chips" id="haloColRow"><button class="chip" data-hc="white">링 화이트</button><button class="chip" data-hc="random">링 색 랜덤</button></div>
     <div class="speed" id="beadRow"><span>구슬 배경</span><input type="range" id="beadSize" min="20" max="100" step="1" aria-label="구슬 배경 범위"><b id="beadVal"></b></div>
@@ -206,7 +209,7 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
     <div class="row"><button class="btn" id="pinBtn">비밀번호 바꾸기</button></div>
     <div class="row"><button class="btn" id="bakOut">마음 백업 내보내기</button><button class="btn" id="bakIn">백업 가져오기</button></div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 129</p>
+    <p class="hint" id="ver">버전 130</p>
   </div>
 </div>
 <!-- 마음 남기기: write over the flowing art, then keep it (locked with a 4-digit PIN, on this phone only) or let it flow away -->
@@ -263,6 +266,8 @@ float hash(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract
 float vn(vec2 p){vec2 i=floor(p),f=clamp(p-i,0.,1.);f=f*f*(3.-2.*f);   /* f from p-floor(p): never disagrees with i on any GPU */return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+1.),f.x),f.y);}
 float bristle(vec2 uv,vec2 dims,float sd){vec2 q=uv*dims;return .55*vn(q/2.2+sd)+.3*vn(q/5.+sd*1.7)+.15*vn(q/11.-sd);}
 `;
+const PD_GL=`float fbm(vec2 p){float s=0.,a=.5;for(int i=0;i<5;i++){s+=a*vn(p);p=p*2.03+vec2(1.7,9.2);a*=.5;}return s;}
+`;   // Pond: soft multi-scale noise
 const FS = {
 splatVelSet: H+`uniform sampler2D uT;uniform float aspect,radius,strength;uniform vec2 point;uniform vec3 color;
 void main(){vec2 p=vUv-point;p.x*=aspect;float w=clamp(exp(-dot(p,p)/radius)*strength,0.,1.);vec2 b=texture(uT,vUv).xy;o=vec4(mix(b,color.xy,w),0.,1.);}`,
@@ -716,6 +721,99 @@ void main(){
  col=mix(col,vec3(.96,.98,1.),clamp(foam,0.,1.)*.8);
  col+=vec3(.92,.97,1.)*min(spark,1.)*.55;
  o=vec4(clamp(col,0.,1.),1.);}`,
+pdBed: H+PD_GL+`uniform float aspect,seed;uniform vec4 lf[10];uniform vec3 lc[10];
+/* one layer of pebbles: jittered cells, each stone its own size, shape, turn and colour; some cells stay empty → uneven gaps */
+vec4 pebbles(vec2 p,float sc,float sd,float dens,out float id){
+ p*=sc;vec2 c=floor(p);vec4 best=vec4(0.,0.,0.,9.);id=0.;
+ for(int j=-1;j<=1;j++)for(int i=-1;i<=1;i++){vec2 g=c+vec2(i,j);if(hash(g+sd*3.1)>dens)continue;
+  vec2 cen=g+.18+.64*vec2(hash(g+sd),hash(g+sd+19.19));
+  float ang=hash(g+sd*7.7)*3.1416,el=.55+.45*hash(g+sd*5.3),rad=.26+.42*hash(g+sd*2.9);
+  vec2 d=p-cen;d=mat2(cos(ang),-sin(ang),sin(ang),cos(ang))*d;d.y/=el;
+  float an=atan(d.y,d.x),wob=1.+.10*sin(an*2.+hash(g+sd*9.)*6.3)+.06*sin(an*5.+hash(g+sd*4.)*6.3);
+  float r=length(d)/(rad*wob);
+  if(r<best.w){best=vec4(d/rad,ang,r);id=hash(g+sd*11.1);}}
+ return best;}
+vec3 stone(vec4 pb,float id,vec2 q){
+ float r=clamp(pb.w,0.,1.),nz=sqrt(max(1.-r*r,0.));vec3 n=normalize(vec3(pb.xy*.85,nz+.35));
+ float dif=.62+.38*dot(n,normalize(vec3(-.35,.45,.82)));                       /* soft overcast light from above */
+ vec3 c=mix(vec3(.36,.36,.34),vec3(.62,.61,.57),id);                              /* grey, from slate to pale */
+ c=mix(c,c*vec3(1.08,.98,.86),step(.72,fract(id*7.3)));                           /* a few warmer, brownish stones */
+ c=mix(c,c*vec3(.86,.95,1.04),step(.8,fract(id*13.7)));                           /* and a few cooler ones */
+ c*=.86+.22*vn(q*190.+id*40.)+.08*vn(q*520.);                                     /* grain and speckles */
+ return c*dif*(1.-.35*smoothstep(.7,1.,r));}
+float leafMask(vec2 d,out float vein){float x=d.x,hw=.36*pow(max(1.-x*x,0.),.75)*(1.+.12*x);
+ vein=1.-smoothstep(0.,.025,abs(d.y))*(1.-.0);
+ float side=abs(fract((x-abs(d.y)*1.4)*4.)-.5);vein=max(vein*step(abs(x),.95),(1.-smoothstep(0.,.05,side))*.5*step(abs(d.y),hw*.9));
+ return smoothstep(.01,-.01,abs(d.y)-hw)*step(abs(x),1.);}
+void main(){vec2 q=vec2(vUv.x*aspect,vUv.y);
+ /* the bank: one edge (left), wobbly */
+ float bx=.15+.10*(fbm(vec2(vUv.y*2.2,seed))-.5)*2.+.025*sin(vUv.y*7.+seed)+.012*(vn(vec2(vUv.y*40.,seed))-.5);
+ float dist=(vUv.x-bx)*aspect;
+ float D=clamp(dist/max(.95*aspect-bx*aspect,.2),0.,1.);D=clamp(pow(D,.75)*(.8+.4*fbm(q*1.4+seed*1.3)),0.,1.);
+ /* under water: silt, then gravel, stones, big stones (fewer where it is deep), leaves */
+ vec3 col=mix(vec3(.15,.15,.12),vec3(.25,.24,.19),fbm(q*9.+seed));col*=.85+.25*vn(q*240.);
+ float id;vec4 pb;float ao=1.;
+ pb=pebbles(q,46.,seed+9.,mix(.9,.35,D),id);if(pb.w<1.)col=stone(pb,id,q)*.92;else ao=min(ao,.78+.22*smoothstep(1.,1.25,pb.w));
+ pb=pebbles(q,21.,seed+4.,mix(.8,.22,D),id);if(pb.w<1.){col=stone(pb,id,q);ao=1.;}else ao=min(ao,.7+.3*smoothstep(1.,1.3,pb.w));
+ pb=pebbles(q,9.5,seed,mix(.62,.08,D),id);if(pb.w<1.){col=stone(pb,id,q);ao=1.;}else ao=min(ao,.65+.35*smoothstep(1.,1.35,pb.w));
+ col*=ao;                                                                         /* stones shade the silt right around them */
+ for(int k=0;k<10;k++){vec4 L=lf[k];if(L.w<=0.)continue;vec2 d=q-L.xy;float a=L.z;d=mat2(cos(a),sin(a),-sin(a),cos(a))*d/L.w;
+  float vein;float m=leafMask(d,vein);if(m<=0.)continue;
+  vec3 lcol=lc[k]*(.82+.3*vn(d*14.+float(k)*7.))*(1.-.25*vein);
+  float rot=smoothstep(.62,.8,vn(d*7.+float(k)*3.));lcol=mix(lcol,col,rot*.8);                 /* old leaves: patches rotted thin */
+  col=mix(col,lcol,m*.92);}
+ /* the bank above the water: wet black soil, dark green moss */
+ vec3 soil=vec3(.045,.04,.034)*(.75+.7*fbm(q*16.+seed))+vec3(.03)*step(.8,vn(q*300.));
+ float moss=smoothstep(.48,.62,fbm(q*4.5+seed*2.)+(-dist)*.35)*smoothstep(-.01,-.05,dist);   /* moss in patches, not a strip */
+ vec3 mc=mix(vec3(.05,.13,.05),vec3(.15,.25,.08),vn(q*90.)*.7+vn(q*300.)*.3);mc*=.8+.4*fbm(q*30.);
+ soil=mix(soil,mc,moss);
+ float shore=smoothstep(.006,-.004,dist);
+ vec3 c2=mix(col,soil,shore);
+ c2*=1.-.35*smoothstep(-.03,0.,dist)*shore;                                        /* the wet band at the waterline */
+ float a=dist>-.004?smoothstep(-.004,.006,dist)*(.04+.96*D):0.;
+ o=vec4(c2,a);}`,
+pdStep: H+`uniform sampler2D uH,uB;uniform vec2 px;uniform float c2,damp,visc;
+void main(){vec4 s=texture(uH,vUv);float h=s.x,hp=s.y;
+ float n=texture(uH,vUv+vec2(0.,px.y)).x,so=texture(uH,vUv-vec2(0.,px.y)).x,e=texture(uH,vUv+vec2(px.x,0.)).x,w=texture(uH,vUv-vec2(px.x,0.)).x;
+ float ne=texture(uH,vUv+px).x,nw=texture(uH,vUv+vec2(-px.x,px.y)).x,se=texture(uH,vUv+vec2(px.x,-px.y)).x,sw=texture(uH,vUv-px).x;
+ float lap=(4.*(n+so+e+w)+(ne+nw+se+sw)-20.*h)/6.;               /* 9-point Laplacian: ripples stay round, not square */
+ float hn=h+(h-hp)*damp+c2*lap+visc*lap-.0004*h;                  /* wave equation + decay + the finest crinkles melting */
+ float water=smoothstep(0.,.03,texture(uB,vUv).a);
+ vec2 e2=min(vUv,1.-vUv);hn*=water*mix(.93,1.,smoothstep(0.,.025,min(e2.x,e2.y)));   /* the bank holds the water; screen edges let ripples out */
+ o=vec4(hn,h,0.,1.);}`,
+pdPoke: H+`uniform sampler2D uH,uB;uniform vec4 pk[48],pv[48];uniform int pn;uniform float aspect;
+void main(){vec4 s=texture(uH,vUv);float h=s.x;vec2 p=vec2(vUv.x*aspect,vUv.y);
+ for(int i=0;i<48;i++){if(i>=pn)break;vec4 k=pk[i];vec2 d=p-vec2(k.x*aspect,k.y);float r2=k.z*k.z,dd=dot(d,d);if(dd>r2*9.)continue;float g=exp(-dd/r2);
+  vec4 v=pv[i];if(v.z<.5)h-=k.w*g;                                  /* a drop (or a light press): a small dent that rebounds into rings */
+  else h+=k.w*dot(d,v.xy)/k.z*g;}                                   /* a moving finger: water pushed up in front, pulled down behind */
+ h*=smoothstep(0.,.03,texture(uB,vUv).a);
+ o=vec4(h,s.y,0.,1.);}`,
+pdRender: H+PD_GL+`uniform sampler2D uH,uB;uniform vec2 px,tilt;uniform float aspect,nsc,refr,refl,skyK,seed;
+vec3 sky(vec2 s){                                                     /* looking up from the puddle: overcast sky framed by the forest */
+ vec2 a=s*vec2(aspect,1.);float r=length(a);
+ vec3 c=mix(vec3(.70,.74,.74),vec3(.50,.55,.55),smoothstep(.0,1.,r));
+ float n=fbm(a*2.6+seed)*.75+fbm(a*9.+seed*2.)*.25;
+ float edge=r*.62-s.x*.35;                                          /* trees lean in from the edges, most of all over the bank */
+ float canopy=smoothstep(.44,.62,n*.72+edge);
+ float twig=smoothstep(.62,.66,fbm(a*22.+seed*3.))*smoothstep(.28,.5,n*.6+edge);   /* fine twigs at the canopy's edge */
+ return mix(c,vec3(.05,.075,.06),max(canopy*.92,twig*.6));}
+void main(){
+ float gx=texture(uH,vUv+vec2(px.x,0.)).x-texture(uH,vUv-vec2(px.x,0.)).x;
+ float gy=texture(uH,vUv+vec2(0.,px.y)).x-texture(uH,vUv-vec2(0.,px.y)).x;
+ vec2 sl=clamp(vec2(gx,gy)*nsc,-.9,.9);vec3 n=normalize(vec3(-sl,1.));   /* the surface normal from the height field's slope (steepest drops limited) */
+ vec4 b0=texture(uB,vUv);float water=smoothstep(0.,.05,b0.a),D=max(b0.a-.04,0.)/.96;
+ vec2 off=n.xy*refr*(.3+D);off.x/=aspect;                           /* refraction: the bed stays put, only the view of it bends (more where deeper) */
+ vec4 b=texture(uB,vUv+off*water);float Db=max(b.a-.04,0.)/.96;
+ vec3 under=b.rgb*vec3(.84,.92,.86);
+ under=mix(under,vec3(.055,.085,.07),(1.-exp(-Db*2.1))*.9);            /* deep side: calm grey-green */
+ vec2 sv=(vUv-.5)*vec2(1.,1.)+n.xy*vec2(1./aspect,1.)*skyK+tilt*.12;  /* reflection: the same normal bends the mirrored sky */
+ vec3 sk=sky(sv);
+ float F=.02+.98*pow(1.-n.z,5.);
+ float R=clamp((mix(.08,.20,smoothstep(0.,.8,D))+F*.8)*refl,0.,.6);
+ vec3 col=mix(under,sk,R*water);
+ col=mix(b0.rgb,col,water);
+ col=col*.94+.03;                                                    /* overcast: soft contrast, no black blacks */
+ o=vec4(col,1.);}`,
 haloEmit: H+`uniform sampler2D uS;uniform vec4 rp[48];uniform float aspect,amt,t;uniform vec4 puff;
 void main(){vec2 p=vec2(vUv.x*aspect,vUv.y);float d=9.;
  for(int i=0;i<48;i++){vec2 a=rp[i].xy,b=rp[i==47?0:i+1].xy,pa=p-a,ba=b-a;float h=clamp(dot(pa,ba)/max(dot(ba,ba),1e-8),0.,1.);d=min(d,length(pa-ba*h));}
@@ -854,7 +952,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 129';
+const VER_TXT='버전 130';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -1111,7 +1209,7 @@ function cloudFrame(dt){
 }
 
 /* ================= Water mode (lake) ================= */
-let mode='paint'; try{const m=localStorage.getItem('hf-mode');if(m==='water'||m==='halo'||m==='light'||m==='cloud'||m==='ink')mode=m;}catch(e){}
+let mode='paint'; try{const m=localStorage.getItem('hf-mode');if(m==='water'||m==='pond'||m==='halo'||m==='light'||m==='cloud'||m==='ink')mode=m;}catch(e){}
 let waterTime=0, wAcc=0, dropClock=0, glideClock=0; const gliders=[];
 const W_C=250, W_H=1/540, W_NK=.24, SUN=(()=>{const v=[.12,.82,.56],l=Math.hypot(...v);return v.map(x=>x/l);})();
 // strength budget: however hard and often the water is struck, it never gets rougher than ~3 plops at once
@@ -1216,6 +1314,90 @@ function waterFrame(dt){
    const sx=SUN[0]-tx*.55,sy=SUN[1]-ty*.55,sz=SUN[2],l=Math.hypot(sx,sy,sz);gl.uniform3f(u.sunDir,sx/l,sy/l,sz/l);}   // light swings the other way
   blit(null);
 }
+/* ================= Pond mode: a small forest puddle while the monsoon rain passes ================= */
+// one height field carries every raindrop and every touch; its slope bends both the mirrored sky and the view of the bed.
+// ---- tuning ----
+const PD={
+  SIM:256,              // height-field cells across the short side of the screen
+  HZ:120,               // fixed simulation steps per second → ripples run at the same speed at any frame rate
+  C2:.32,               // wave speed² (cells² per step²; keep below .7)
+  DAMP:.986,            // how much ripple motion survives each step (closer to 1 = ripples travel farther before fading)
+  VISC:.012,            // how fast the finest crinkles smooth out
+  RAIN:[0,.4,1,1.8],    // rain strength for each menu choice: 그침 · 약한 비 · 장맛비 · 폭우
+  DROPS:120,            // raindrops per second over the whole screen at strength 1
+  DROP_AMP:.05, DROP_R:[.0042,.0072],
+  BIG_EVERY:[1.6,5.5],  // seconds between drops falling from the leaves (per drip point, at strength 1)
+  BIG_AMP:.13, BIG_R:.012,
+  NORMAL:38,           // slope → surface normal (how strongly ripples show)
+  REFRACT:.032,         // how much the bed's outline wavers under ripples
+  REFLECT:1.0,          // how much sky and forest the water mirrors
+  SKY_BEND:.35          // how far a ripple bends the mirrored sky
+};
+let pondLevel=2;try{const v=parseInt(localStorage.getItem('hf-pondrain'));if(v>=0&&v<=3)pondLevel=v;}catch(e){}
+let pdH=null,pdBed=null,pdSeed=Math.random()*50,pdLeaves=null,pdDrips=[],pdAcc=0,pdT=Math.random()*200,pdDropAcc=0;
+const pdImp=[];                 // impulses waiting for the next step: [x,y,r,amp, dx,dy,type]
+const pdK=new Float32Array(48*4),pdV=new Float32Array(48*4);
+function pondLayout(){const R=Math.random;
+  const cols=[[.36,.22,.10],[.50,.36,.12],[.22,.16,.09],[.42,.40,.18],[.45,.19,.08],[.30,.26,.12]];
+  const lf=new Float32Array(40),lc=new Float32Array(30),n=6+(R()*4|0);
+  for(let i=0;i<n;i++){lf.set([(.30+.62*R())*aspect,.06+.88*R(),R()*6.283,.035+.035*R()],i*4);lc.set(cols[(R()*cols.length)|0],i*3);}
+  pdLeaves={lf,lc};
+  pdDrips=[];for(let i=0;i<5;i++)pdDrips.push({x:.3+.65*R(),y:.06+.88*R(),next:R()*4});}
+function pondBake(){const bw=Math.round(canvas.width*Math.min(1,1600/Math.max(canvas.width,canvas.height))),bh=Math.round(bw*canvas.height/canvas.width);
+  if(pdBed){gl.deleteTexture(pdBed.t);gl.deleteFramebuffer(pdBed.f);}pdBed=fbo(bw,bh);
+  if(!pdLeaves)pondLayout();
+  const u=use('pdBed',[1/bw,1/bh]);gl.uniform1f(u.aspect,aspect);gl.uniform1f(u.seed,pdSeed);gl.uniform4fv(u.lf,pdLeaves.lf);gl.uniform3fv(u.lc,pdLeaves.lc);blit(pdBed);}
+function pondClear(){if(!pdH)return;for(const t of [pdH.r,pdH.w]){gl.bindFramebuffer(gl.FRAMEBUFFER,t.f);gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT);}}
+function pondNew(){pdSeed=Math.random()*50;pdLeaves=null;pdBed=null;pondClear();}
+function pondAlloc(){const [sw,sh]=res(PD.SIM);
+  if(!pdH||pdH.r.w!==sw||pdH.r.h!==sh){pdH=dfbo(sw,sh);pondClear();pdBed=null;}
+  if(!pdBed)pondBake();}       // the bed is made once and reused (again only when the screen changes size or a new puddle is asked for)
+// ---- input: a drop or press = a dent; a moving finger = a push (bulge ahead, trough behind) ----
+function pondDrop(x,y,r,amp){pdImp.push([x,y,r,amp,0,0,0]);}
+function pondPush(x,y,dx,dy,r,amp){const l=Math.hypot(dx,dy)||1;pdImp.push([x,y,r,amp,dx/l,dy/l,1]);}
+function pondTouchDown(x,y,virt){pondDrop(x,y,.0065,virt?.10:.16);}
+function pondTouchMove(p,x,y,dtR){const dx=(x-p.x)*aspect,dy=y-p.y,d=Math.hypot(dx,dy),sp=d/dtR;if(d<1e-5)return;
+  const slow=sp<.7,step=slow?.012:.016;let pos=step-(p.prem||0);
+  while(pos<=d){const f=pos/d,px=p.x+(x-p.x)*f,py=p.y+(y-p.y)*f;
+    if(slow)pondPush(px,py,dx,dy,.028,.035*Math.min(1,.25+sp/.7));                           // slow: the water is gently pushed along with the finger
+    else pondDrop(px,py,.010,Math.min(.07,.025+.012*sp)*(.55+.45*f));                       // quick sweep: a short trough along the path → short waves left behind
+    pos+=step;}
+  p.prem=d-(pos-step);}
+// ---- rain that swells and fades by itself ----
+function pondRain(){const t=pdT,s=Math.sin;
+  const r=.55+.30*s(t*.09)+.22*s(t*.23+1.3)+.12*s(t*.61+4.1);                              // slow swells (about a minute) with shorter gusts
+  return Math.max(0,Math.min(1.25,r))*PD.RAIN[pondLevel];}
+function pondPatch(x,y){const t=pdT;return .5+.5*Math.sin(x*3.1+t*.21+Math.sin(y*2.2-t*.13)*1.7)*Math.sin(y*2.7-t*.17+1.1);}   // where the rain is heavier right now
+function pondFrame(dt){
+  dt=Math.max(dt,frameDtRaw)*flow;pdT+=dt;pondAlloc();
+  const rain=pondRain();
+  // raindrops: mostly small; denser where the shower drifts, calm patches in between
+  pdDropAcc+=PD.DROPS*Math.pow(rain,1.3)*dt;
+  let tries=0;while(pdDropAcc>=1&&tries<200){tries++;const x=Math.random(),y=Math.random();
+    if(Math.random()>.18+.82*Math.pow(pondPatch(x,y),2))continue;pdDropAcc-=1;
+    const rr=PD.DROP_R[0]+(PD.DROP_R[1]-PD.DROP_R[0])*Math.pow(Math.random(),2);
+    pondDrop(x,y,rr,PD.DROP_AMP*(.55+.9*Math.random())*rr/PD.DROP_R[1]);}
+  if(pdDropAcc>4)pdDropAcc=4;
+  // big drops from the leaves overhead: always the same few spots, more often in heavier rain
+  for(const d of pdDrips){d.next-=dt*Math.min(1.6,rain);if(d.next<=0&&rain>.05){d.next=PD.BIG_EVERY[0]+(PD.BIG_EVERY[1]-PD.BIG_EVERY[0])*Math.random();
+    pondDrop(d.x+(Math.random()-.5)*.01,d.y+(Math.random()-.5)*.01,PD.BIG_R*(.8+.4*Math.random()),PD.BIG_AMP*(.75+.5*Math.random()));}}
+  // fixed-step simulation
+  pdAcc+=dt;const step=1/PD.HZ;let n=0;
+  while(pdAcc>=step&&n<10){
+    if(pdImp.length){const k=Math.min(48,pdImp.length);pdK.fill(0);pdV.fill(0);
+      for(let i=0;i<k;i++){const q=pdImp[i];pdK.set([q[0],q[1],q[2],q[3]],i*4);pdV.set([q[4],q[5],q[6],0],i*4);}pdImp.splice(0,k);
+      const u=use('pdPoke',[pdH.r.tx,pdH.r.ty]);gl.uniform1i(u.uH,pdH.r.bind(0));gl.uniform1i(u.uB,pdBed.bind(1));gl.uniform4fv(u.pk,pdK);gl.uniform4fv(u.pv,pdV);
+      gl.uniform1i(u.pn,k);gl.uniform1f(u.aspect,aspect);blit(pdH.w);pdH.swap();}
+    const u=use('pdStep',[pdH.r.tx,pdH.r.ty]);gl.uniform1i(u.uH,pdH.r.bind(0));gl.uniform1i(u.uB,pdBed.bind(1));gl.uniform2f(u.px,pdH.r.tx,pdH.r.ty);
+    gl.uniform1f(u.c2,PD.C2);gl.uniform1f(u.damp,PD.DAMP);gl.uniform1f(u.visc,PD.VISC);blit(pdH.w);pdH.swap();
+    pdAcc-=step;n++;}
+  if(n>=10)pdAcc=0;                                       // after a long pause: do not try to catch up
+  if(pdImp.length>200)pdImp.splice(0,pdImp.length-200);
+  const u=use('pdRender',[0,0]);gl.uniform1i(u.uH,pdH.r.bind(0));gl.uniform1i(u.uB,pdBed.bind(1));gl.uniform2f(u.px,pdH.r.tx,pdH.r.ty);
+  gl.uniform2f(u.tilt,Math.max(-.6,Math.min(.6,viewTilt[0])),Math.max(-.6,Math.min(.6,viewTilt[1])));
+  gl.uniform1f(u.aspect,aspect);gl.uniform1f(u.nsc,PD.NORMAL);gl.uniform1f(u.refr,PD.REFRACT);gl.uniform1f(u.refl,PD.REFLECT);gl.uniform1f(u.skyK,PD.SKY_BEND);gl.uniform1f(u.seed,pdSeed);
+  blit(null);}
+function setPondRain(v){pondLevel=v;document.querySelectorAll('#pondRow .chip').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.pr===v));try{localStorage.setItem('hf-pondrain',v);}catch(e){}}
 /* ================= Halo mode: a ring of light wrapped in smoke above a field of water beads ================= */
 // the ring is a 3D body (position, velocity, orientation, spin) with a soft elastic rim; smoke is the shared fluid; the beads mirror the ring
 let haloColMode='white',haloBead=100;try{const v=localStorage.getItem('hf-halo-col');if(v==='white'||v==='random')haloColMode=v;const b=parseInt(localStorage.getItem('hf-halo-bead'));if(b>=20&&b<=100)haloBead=b;}catch(e){}
@@ -1542,7 +1724,7 @@ let bgm=players[0];
 let musicOn=true; try{musicOn=localStorage.getItem('hf-music')!=='off';}catch(e){}
 let curTrack=null, wantTrack=null;
 const MUSIC_VOL=.85, FADE_IN=2.2, FADE_OUT=1.8;          // seconds
-const TRACKS={cloud:'audio/velvet_horizon.mp3',halo:'audio/beneath_the_haloed_glass.mp3',paint:'audio/where_the_stream_widens.mp3',water:'audio/glass_upon_the_lake.mp3',light:'audio/where_the_ocean_meets_sky.mp3',ink:'audio/silk_and_moonlight.mp3'};
+const TRACKS={cloud:'audio/velvet_horizon.mp3',pond:'audio/glass_upon_the_lake.mp3',halo:'audio/beneath_the_haloed_glass.mp3',paint:'audio/where_the_stream_widens.mp3',water:'audio/glass_upon_the_lake.mp3',light:'audio/where_the_ocean_meets_sky.mp3',ink:'audio/silk_and_moonlight.mp3'};
 const trackURL={};
 function getTrack(path){ if(!trackURL[path])trackURL[path]=fetch(path).then(r=>r.blob()).then(b=>URL.createObjectURL(b)).catch(()=>null); return trackURL[path]; }
 // change song: the playing one fades out on its own player, the new one starts silent on the other player and fades in
@@ -1585,9 +1767,11 @@ function tDown(id,x,y,t,virt){lastAct=performance.now();if(mode==='ink'){x=vwx('
   if(virt&&flow>.3){const p=pointers.get(id);      // 손끝이 닿는 순간 바로 작은 반응 = '인식됐다'는 확인
     if(mode==='paint')queue.push({x,y,dx:0,dy:0,c:p.c,r:.0026,s:.8,t:.7});
     else if(mode==='water')addPlop(x,y,.3);
+    else if(mode==='pond')pondTouchDown(x,y,true);
     else if(mode==='light'||mode==='cloud')for(let i=0;i<4;i++){const a=i/4*6.283+.6;queue.push({x,y,dx:Math.cos(a)*140,dy:Math.sin(a)*140,r:.004,vOnly:true});}}
   if(mode==='halo'&&!virt)haloDown(id,x,y,t);
-  if(mode==='water'){if(!virt)addPlop(x,y,1);wakeEnd('t'+id);}          // 손가락은 '톡 굽히기'가 퐁당 (펴기만 해서는 퐁당 안 함)
+  if(mode==='pond'){if(!virt)pondTouchDown(x,y,false);}
+  else if(mode==='water'){if(!virt)addPlop(x,y,1);wakeEnd('t'+id);}          // 손가락은 '톡 굽히기'가 퐁당 (펴기만 해서는 퐁당 안 함)
   else if(mode==='ink'&&flow>.3){const p=pointers.get(id);p.ink=inkNext++;if(inkA)inkDrop(p.x,p.y,p.ink,virt?.4:1);}}   // each finger that lands = one 퐁당
 function tMove(id,x,y,t){const p=pointers.get(id);if(!p)return;lastAct=performance.now();if(mode==='ink'){x=vwx('ink',x);y=vwy('ink',y);}
   if(mode==='halo'&&halo&&halo.grab&&halo.grab.id===id){haloMove(id,x,y,t);p.x=x;p.y=y;p.t=t;return;}   // holding the ring: it carries the smoke itself
@@ -1605,6 +1789,7 @@ function tMove(id,x,y,t){const p=pointers.get(id);if(!p)return;lastAct=performan
       let L=0;for(let i=1;i<p.ib.length;i++)L+=Math.hypot((p.ib[i].x-p.ib[i-1].x)*aspect,p.ib[i].y-p.ib[i-1].y);
       while(p.ib.length>2&&L>INK_LAG){const a=p.ib[0],b=p.ib[1];inkStroke(a.x,a.y,b.x,b.y,p.ink||0,1,a.w,b.w);L-=Math.hypot((b.x-a.x)*aspect,b.y-a.y);p.ib.shift();}}}
   else if(mode==='water')wakeStep('t'+id,x,y,Math.hypot((x-p.x)*aspect,y-p.y)/dtR,t);
+  else if(mode==='pond'){if(flow>.3)pondTouchMove(p,x,y,dtR);}
   else if(mode!=='water'){if(vp){let n=0;for(const q of pointers.values())if(q.virt)n++;const k=Math.max(.72,1/Math.sqrt(n||1));   // several fingertips share the push, as one hand
       queue.push({x,y,vx:(x-p.x)/dtR*.85,vy:(y-p.y)/dtR*.85,set:.85*k,c:p.c,r:.0042,s:.9*k,virt:1,nv:n});}
     else queue.push({x,y,vx:(x-p.x)/dtR,vy:(y-p.y)/dtR,set:.85,c:p.c,r:.0042,s:.9});}p.x=x;p.y=y;p.t=t;}
@@ -1784,6 +1969,7 @@ function firePendingTaps(now){
 function fingerTap(x,y,fi){
   x=Math.min(.99,Math.max(.01,x));y=Math.min(.99,Math.max(.01,y));
   if(mode==='water')addPlop(x,y,.9);
+  else if(mode==='pond')pondDrop(x,y,.0075,.2);
   else if(mode==='ink'){if(inkA)inkDrop(vwx('ink',x),vwy('ink',y),inkNext++,.9);}
   else if(mode==='halo'&&halo){const [d,i]=haloNear(x,y);if(d<.08)haloKick(i,-.8);else haloPuff=[x*aspect,y,.005,.3];}
   else if(mode==='paint'){colorTick++;for(let i=0;i<6;i++){const a=i/6*Math.PI*2;queue.push({x:x+Math.cos(a)*.012,y:y+Math.sin(a)*.012*aspect,dx:Math.cos(a)*600,dy:Math.sin(a)*600,c:pickColor(i+fi),r:.0022,s:.9,t:.8,hand:1});}}
@@ -1828,7 +2014,7 @@ function frameBody(now){
   resize();
   flow+=(flowTarget-flow)*Math.min(1,dt*(flowTarget>flow?2.5:6));
   updateGyro(dt);updateTimeScale(dt);
-  if(mode==='water'){ waterFrame(dt); } else if(mode==='halo'){ haloFrame(dt); } else if(mode==='light'){ lightFrame(dt); } else if(mode==='cloud'){ cloudFrame(dt); } else if(mode==='ink'){ inkFrame(dt); } else {
+  if(mode==='water'){ waterFrame(dt); } else if(mode==='pond'){ queue.length=0; pondFrame(dt); } else if(mode==='halo'){ haloFrame(dt); } else if(mode==='light'){ lightFrame(dt); } else if(mode==='cloud'){ cloudFrame(dt); } else if(mode==='ink'){ inkFrame(dt); } else {
   viewStep('paint',dt);
   // left alone: two invisible brushes wander and stir the colours on their own
   if(isIdle()&&flow>.3){for(const g of ghosts){g.ph+=dt;g.a+=(Math.sin(g.ph*.7+g.s)*1.1+Math.sin(g.ph*1.9+g.s*2.)*.6)*dt;
@@ -1902,8 +2088,9 @@ const HINTS={paint:hintTxt.innerHTML,
   cloud:'<b>저절로</b> 여러 빛깔의 성운이 별 사이를 유선형으로 흘러다님<br><b>터치·손끝</b> 움직이면 성운이 부드럽게 휘어 흐름 · <b>집기</b> 회전 흐름 · <b>손 펼치기</b> 넓게 퍼짐 · <b>주먹</b> 멈춤',
   light:'<b>손가락</b> 빛의 흐름 밀기 · <b>검지만 펴기</b> 가리킨 방향으로 빛줄기<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 멈춤',
   halo:'<b>터치</b> 링 끌기 · <b>튕기기</b> 동전처럼 뒤집힘 · <b>톡</b> 빛이 돎 · <b>두 손가락</b> 확대·축소·회전<br><b>손</b> 검지 = 링 끌기 · <b>엄지를 펴면</b> 확대 · <b>엄지를 검지 끝에 붙이면</b> 축소 · <b>접은 손가락 활짝 펴기</b> = 링을 쳐서 회전 · <b>주먹</b> = 멈춤',
+  pond:'장맛비가 지나가는 숲속 웅덩이 · 비는 저절로 세졌다 잦아듦<br><b>톡</b> 작은 파문 · <b>천천히 끌기</b> 물이 부드럽게 밀림 · <b>빠르게 쓸기</b> 지나간 자리에 짧은 물결<br>메뉴에서 비의 세기 선택',
   water:'<b>톡 터치·손가락 톡 굽히기</b> 퐁당 · <b>끌며 원 그리기</b> 소용돌이<br><b>손가락</b> 움직여 물결 · <b>검지만 펴기</b> 가리킨 방향으로 물길<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 물 멈춤'};
-function setMode(m){mode=m;document.body.classList.toggle('water',m==='water');document.body.classList.toggle('halo',m==='halo');document.body.classList.toggle('light',m==='light');document.body.classList.toggle('cloud',m==='cloud');document.body.classList.toggle('ink',m==='ink');
+function setMode(m){mode=m;document.body.classList.toggle('water',m==='water');document.body.classList.toggle('pond',m==='pond');document.body.classList.toggle('halo',m==='halo');document.body.classList.toggle('light',m==='light');document.body.classList.toggle('cloud',m==='cloud');document.body.classList.toggle('ink',m==='ink');
   if(m==='halo')halo=null;   // starts fresh (built on the next frame)
   if(m==='cloud')cloudReset();
   if(m==='cloud'&&vel){const u=use('waterClear',[0,0]);blit(vel.w);vel.swap();blit(vel.w);vel.swap();}   // start calm: no leftover swirls from other modes
@@ -1914,7 +2101,7 @@ function setMode(m){mode=m;document.body.classList.toggle('water',m==='water');d
   if(curTrack)switchTrack();}
 document.querySelectorAll('#modeSeg button').forEach(b=>b.onclick=()=>setMode(b.dataset.m));
 setMode(mode);
-seedBtn.onclick=()=>{if(mode==='ink'){inkSeed=Math.random()*50;inkClear();}else if(mode==='halo'){halo=null;}else if(mode==='water'){waterClear();gliders.length=0;}else if(mode==='light'){lightSeedAll();}else if(mode==='cloud'){cloudReset();}else seed();};
+seedBtn.onclick=()=>{if(mode==='pond'){pondNew();}else if(mode==='ink'){inkSeed=Math.random()*50;inkClear();}else if(mode==='halo'){halo=null;}else if(mode==='water'){waterClear();gliders.length=0;}else if(mode==='light'){lightSeedAll();}else if(mode==='cloud'){cloudReset();}else seed();};
 const lightWrap=document.getElementById('lights');
 function renderLights(){lightWrap.innerHTML='';for(const name in LIGHTS){const b=document.createElement('button');b.className='chip';
   b.setAttribute('aria-pressed',name===lightName);b.innerHTML='<i>'+LIGHTS[name].map(c=>`<span style="background:${c}"></span>`).join('')+'</i>'+name;
@@ -1933,6 +2120,7 @@ function renderInks(){inkWrap.innerHTML='';for(const name of ['랜덤',...Object
   b.innerHTML='<i>'+cs.map(c=>`<span style="background:${c}"></span>`).join('')+'</i>'+name;
   b.onclick=()=>{inkName=name;try{localStorage.setItem('hf-ink',name);}catch(e){}renderInks();};inkWrap.appendChild(b);}}
 renderInks();
+document.querySelectorAll('#pondRow .chip').forEach(b=>b.onclick=()=>setPondRain(+b.dataset.pr));setPondRain(pondLevel);
 function setRain(v){rainLevel=v;document.querySelectorAll('#rainRow .chip').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.r===v));try{localStorage.setItem('hf-rain',v);}catch(e){}}
 document.querySelectorAll('#rainRow .chip').forEach(b=>b.onclick=()=>setRain(+b.dataset.r));setRain(rainLevel);
 function setFloor(v){floorType=v;document.querySelectorAll('#floors .chip').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.f===v));try{localStorage.setItem('hf-floor4',v);}catch(e){}}
@@ -2187,7 +2375,7 @@ function mindDissolve(text){return new Promise(done=>{
   spans.forEach((s,i)=>{const d=.15+Math.random()*1.1+i/n*.6,du=1.6+Math.random()*1.2;
     s.style.transitionDuration=du+'s';s.style.transitionDelay=d+'s';});
   requestAnimationFrame(()=>requestAnimationFrame(()=>spans.forEach(s=>{const r=s.getBoundingClientRect(),rx=Math.random(),ry=Math.random();let tf,fl;
-    if(mode==='water'){tf=`translate(${(rx-.5)*30}px,${60+ry*110}px) scale(.85)`;fl='blur(5px)';}
+    if(mode==='water'||mode==='pond'){tf=`translate(${(rx-.5)*30}px,${60+ry*110}px) scale(.85)`;fl='blur(5px)';}
     else if(mode==='ink'){tf=`translate(${(rx-.5)*14}px,${(ry-.5)*14}px) scale(${1.5+rx})`;fl='blur(9px)';}
     else if(mode==='halo'&&hc){const cx=(hc[0]/aspect)*innerWidth-(r.left+r.width/2),cy=(1-hc[1])*innerHeight-(r.top+r.height/2);
       tf=`translate(${cx*(.8+rx*.2)}px,${cy*(.8+ry*.2)}px) scale(.15) rotate(${(rx-.5)*180}deg)`;fl='blur(3px)';}
@@ -2195,13 +2383,13 @@ function mindDissolve(text){return new Promise(done=>{
     s.style.transform=tf;s.style.filter=fl;s.style.opacity='0';})));
   // and the art answers
   let k=0;const fx=setInterval(()=>{k++;const x=.15+.7*Math.random(),y=.3+.5*Math.random();
-    if(mode==='water')addPlop(x,y,.8);else if(mode==='ink'&&inkA)inkDrop(x,y,inkNext++,.7);
+    if(mode==='water')addPlop(x,y,.8);else if(mode==='pond')pondDrop(x,y,.009,.22);else if(mode==='ink'&&inkA)inkDrop(x,y,inkNext++,.7);
     else if(mode==='halo'&&halo)haloKick((Math.random()*HN)|0,.4);
     else if(mode==='paint'){const a=Math.random()*6.283;queue.push({x,y,vx:Math.cos(a)*.3,vy:Math.sin(a)*.3,set:.6,c:pickColor(k),r:.004,s:.6});}
     if(k>=6)clearInterval(fx);},420);
   setTimeout(done,3300);});}
 // ---- the kept ones ----
-const MODE_NAME_K={paint:'Pigment',water:'Ripple',light:'Aurora',cloud:'Cloud',ink:'Ink',halo:'Halo'};
+const MODE_NAME_K={paint:'Pigment',water:'Ripple',pond:'Puddle',light:'Aurora',cloud:'Cloud',ink:'Ink',halo:'Halo'};
 const OLD_MODE_K={wave:'Wave',silk:'Silk',splash:'Splash',cosmos:'Cosmos'};   // notes kept in modes that no longer exist still show their name
 const safeMode=m=>(typeof m==='string'&&(MODE_NAME_K[m]||OLD_MODE_K[m]))?m:'paint';   // anything else (e.g. from a tampered backup file) is never shown as is
 // a note read from a backup file: only the fields this app writes, each of the right kind

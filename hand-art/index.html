@@ -150,6 +150,7 @@ body.mind #grab,body.mind #cap,body.mind .dock{display:none}
 #mView{position:fixed;inset:0;z-index:10;display:none;flex-direction:column;background:transparent;touch-action:auto}
 #mView.on{display:flex}
 #mView .mbtn[hidden]{display:none}
+body.mlocked #mView .mbody,body.mlocked #mView .mfoot,body.mlocked #mView .mhead{visibility:hidden}   /* covered until the PIN is entered again */
 #mView .mveil{position:absolute;inset:0;background:rgba(0,0,0,.68)}
 body.mview #grab,body.mview #cap,body.mview .dock{display:none}
 #mView > *:not(.mveil){position:relative}
@@ -205,7 +206,7 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
     <div class="row"><button class="btn" id="pinBtn">비밀번호 바꾸기</button></div>
     <div class="row"><button class="btn" id="bakOut">마음 백업 내보내기</button><button class="btn" id="bakIn">백업 가져오기</button></div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 127</p>
+    <p class="hint" id="ver">버전 128</p>
   </div>
 </div>
 <!-- 마음 남기기: write over the flowing art, then keep it (locked with a 4-digit PIN, on this phone only) or let it flow away -->
@@ -851,7 +852,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 127';
+const VER_TXT='버전 128';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -1633,7 +1634,7 @@ function onHands(res){
   let list=(res.multiHandLandmarks||[]).map(camToView);
   if(viewAng)list=list.map(lm=>{const m=lm.map(p=>{const [u,v]=locXY(p.x*innerWidth,p.y*innerHeight);return {x:u,y:v,z:p.z};});m.world=lm.world;m.slot=lm.slot;return m;});   // 화면이 돌아가 있어도 손 좌표는 기기 기준으로
   if(!list.length){ for(const [id,q] of [...pointers])if(typeof id==='string'&&id[0]==='v'&&now-(q.seen||0)>VGRACE)tUp(id);
-    if(now-lastSeen>250){for(const k in tracks)delete tracks[k];for(const k in pointState)delete pointState[k];} handInfo=[]; setDetect(false); if(camOn)status('손 인식 켜짐 · 손을 카메라에 보여주세요'); fistSince=0; return; }
+    if(now-lastSeen>250){for(const k in tracks)delete tracks[k];for(const k in pointState)delete pointState[k];} handInfo=[]; setDetect(false); if(camOn)status('손 인식 켜짐 · 손을 카메라에 보여주세요'); fistSince=0; pendingTaps.length=0; return; }
   lastSeen=now; handInfo=[]; setDetect(true); lastAct=now;
   const vSeen=new Set(),vList=[];
   let anyFist=false;
@@ -1724,9 +1725,11 @@ async function loadTasks(){
     runningMode:'VIDEO',numHands:2,minHandDetectionConfidence:.6,minHandPresenceConfidence:.5,minTrackingConfidence:.4});
   try{tasksLM=await mk('GPU');}catch(e){console.warn('GPU 인식 실패 → CPU',e);tasksLM=await mk('CPU');}
 }
+let lastDetT=0;
 function tasksDetect(){
-  if(video.currentTime===lastVT)return;lastVT=video.currentTime;
-  const t=performance.now();let res;try{res=tasksLM.detectForVideo(video,t);}catch(e){console.warn(e);return;}
+  if(video.currentTime===lastVT)return;
+  const t=performance.now();if(QS<.999&&t-lastDetT<48)return;   // phone struggling (quality stepped down): ≈20 detections a second instead of every camera frame
+  lastVT=video.currentTime;lastDetT=t;let res;try{res=tasksLM.detectForVideo(video,t);}catch(e){console.warn(e);return;}
   const out=[],used=[false,false];
   (res.landmarks||[]).forEach((lm,i)=>{
     const lab=res.handedness?.[i]?.[0]?.categoryName;let slot=lab==='Right'?0:1;if(used[slot])slot=1-slot;used[slot]=true;
@@ -1796,7 +1799,7 @@ async function startCam(){
   }catch(err){console.error(err);status(err.name==='NotAllowedError'?'카메라 권한이 거부되었어요':'시작 실패: '+(err.message||err));}
   finally{camBtn.disabled=false;gestBtn.classList.remove('busy');}
 }
-function stopCam(){camOn=false;vTips.length=0;for(const id of [...pointers.keys()])if(typeof id==='string'&&id[0]==='v')tUp(id);stream&&stream.getTracks().forEach(t=>t.stop());stream=null;setDetect(false);
+function stopCam(){camOn=false;vTips.length=0;pendingTaps.length=0;fingerState[0]={};fingerState[1]={};for(const id of [...pointers.keys()])if(typeof id==='string'&&id[0]==='v')tUp(id);stream&&stream.getTracks().forEach(t=>t.stop());stream=null;setDetect(false);
   camBtn.textContent='손 인식 시작';camBtn.classList.remove('on');gestBtn.classList.remove('on');gestBtn.setAttribute('aria-label','손 인식 켜기');handInfo=[];flowTarget=1;fistSince=0;for(const k in tracks)delete tracks[k];
   try{wakeLock&&wakeLock.release();}catch(e){} status('손 인식 꺼짐 · 화면을 문질러 보세요');}
 async function detectLoop(){
@@ -1903,7 +1906,7 @@ function setMode(m){mode=m;document.body.classList.toggle('water',m==='water');d
   if(m==='cloud'&&vel){const u=use('waterClear',[0,0]);blit(vel.w);vel.swap();blit(vel.w);vel.swap();}   // start calm: no leftover swirls from other modes
   document.querySelectorAll('#modeSeg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.m===m));
   seedBtn.textContent=m==='water'?'잔잔하게':m==='ink'?'새 한지':'새 캔버스';hintTxt.innerHTML=HINTS[m];
-  gliders.length=0;queue.length=0;try{localStorage.setItem('hf-mode',m);}catch(e){}
+  gliders.length=0;queue.length=0;pendingTaps.length=0;try{localStorage.setItem('hf-mode',m);}catch(e){}
   if(!gyroOn)setGyro(true);                 // every mode looks around with the tilt
   if(curTrack)switchTrack();}
 document.querySelectorAll('#modeSeg button').forEach(b=>b.onclick=()=>setMode(b.dataset.m));
@@ -1946,20 +1949,22 @@ document.getElementById('snapBtn').onclick=()=>{snapReq='png';};
 function stamp(){const d=new Date(),z=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate())+'_'+z(d.getHours())+'-'+z(d.getMinutes())+'-'+z(d.getSeconds());}
 async function saveNative(b,ext,sfx=''){   // 안드로이드 앱(APK) 안에서는 갤러리에 바로 저장
   const S=window.AndroidSave;const id=S.begin('hand-flow-'+stamp()+sfx+'.'+ext,b.type||(ext==='mp4'?'video/mp4':ext==='webm'?'video/webm':'image/jpeg'));if(id<0)return false;
-  const CH=786432;for(let o=0;o<b.size;o+=CH){const u=new Uint8Array(await b.slice(o,o+CH).arrayBuffer());let t='';
-    for(let i=0;i<u.length;i+=32768)t+=String.fromCharCode.apply(null,u.subarray(i,i+32768));if(!S.append(id,btoa(t)))return false;}
+  const drop=()=>{try{S.cancel&&S.cancel(id);}catch(e){}return false;};   // a half-written file is removed, never left broken in the gallery
+  try{const CH=786432;for(let o=0;o<b.size;o+=CH){const u=new Uint8Array(await b.slice(o,o+CH).arrayBuffer());let t='';
+    for(let i=0;i<u.length;i+=32768)t+=String.fromCharCode.apply(null,u.subarray(i,i+32768));if(!S.append(id,btoa(t)))return drop();}}
+  catch(e){return drop();}
   return S.end(id);}
 function saveBlob(b,ext,sfx=''){if(window.AndroidSave)return saveNative(b,ext,sfx).then(ok=>{if(!ok)saveWeb(b,ext,sfx);}).catch(()=>saveWeb(b,ext,sfx));saveWeb(b,ext,sfx);return Promise.resolve();}
 function saveWeb(b,ext,sfx=''){const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='hand-flow-'+stamp()+sfx+'.'+ext;
   document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),8000);}
 const recBtn=document.getElementById('recBtn'),recTime=document.getElementById('recTime'),flashEl=document.getElementById('flash');
-let rec=null,recChunks=[],recT0=0,recTimer=0,recExt='mp4';
+let rec=null,recChunks=[],recT0=0,recTimer=0,recExt='mp4';const REC_MAX=180;   // seconds: a long recording would pile up in memory
 function recAudioTracks(){try{
   if(!musicOn)return [];
   const cs=bgm.captureStream||bgm.mozCaptureStream;if(cs&&!bgm.paused)return cs.call(bgm).getAudioTracks();}catch(e){}return [];}
 function recStart(){
   if(!canvas.captureStream||typeof MediaRecorder==='undefined'){status('이 브라우저는 화면 녹화를 지원하지 않아요');return;}
-  const vs=canvas.captureStream(60),stream=new MediaStream([...vs.getVideoTracks(),...recAudioTracks()]);
+  const vs=canvas.captureStream(30),stream=new MediaStream([...vs.getVideoTracks(),...recAudioTracks()]);
   const types=['video/mp4;codecs=avc1.42E01E,mp4a.40.2','video/mp4;codecs=avc1','video/mp4','video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'];
   const type=types.find(t=>MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported(t))||'';
   recExt=type.startsWith('video/mp4')?'mp4':'webm';
@@ -1968,7 +1973,7 @@ function recStart(){
   rec.onstop=()=>{const b=new Blob(recChunks,{type:rec&&rec.mimeType||type||'video/mp4'});vs.getTracks().forEach(t=>t.stop());rec=null;
     if(b.size)saveBlob(b,recExt);if(recExt!=='mp4')status('이 브라우저는 MP4 녹화를 지원하지 않아 WebM으로 저장했어요');};
   rec.start(1000);recT0=performance.now();recBtn.classList.add('on');document.body.classList.add('rec');recBtn.setAttribute('aria-label','녹화 중지');
-  const tick=()=>{const t=Math.floor((performance.now()-recT0)/1000);recTime.textContent=Math.floor(t/60)+':'+String(t%60).padStart(2,'0');};
+  const tick=()=>{const t=Math.floor((performance.now()-recT0)/1000);if(t>=REC_MAX){recStop();status('녹화는 최대 3분까지예요 · 저장했어요');return;}recTime.textContent=Math.floor(t/60)+':'+String(t%60).padStart(2,'0');};
   tick();recTimer=setInterval(tick,500);}
 function recStop(){if(rec&&rec.state!=='inactive')rec.stop();clearInterval(recTimer);recBtn.classList.remove('on');document.body.classList.remove('rec');recBtn.setAttribute('aria-label','녹화');}
 // act on touch-down (not on click): a finger that moves a little while pressing still counts
@@ -2010,7 +2015,7 @@ swipe(document.getElementById('sheetHead'),-1,()=>openMenu(false));   // swipe d
 /* ================= 마음 남기기: write, then keep (locked, on this phone only) or let it flow away ================= */
 const mindEl=document.getElementById('mind'),mText=document.getElementById('mText'),mFly=document.getElementById('mFly'),mModal=document.getElementById('mModal'),mCard=document.getElementById('mCard'),mToastEl=document.getElementById('mToast');
 let mArmT=0;function mShow(list){mCard.classList.toggle('klist',!!list);mModal.classList.add('on');mCard.classList.add('arming');clearTimeout(mArmT);mArmT=setTimeout(()=>mCard.classList.remove('arming'),550);}
-const fmtDate=t=>{const d=new Date(t),h=d.getHours();return d.getFullYear()+'년 '+(d.getMonth()+1)+'월 '+d.getDate()+'일 '+(h<12?'AM':'PM')+' '+((h%12)||12)+':'+String(d.getMinutes()).padStart(2,'0');};   // e.g. 2026년 11월 9일 PM 7:46
+const fmtDate=t=>{const d=new Date(t),h=d.getHours();if(isNaN(h))return '날짜 모름';return d.getFullYear()+'년 '+(d.getMonth()+1)+'월 '+d.getDate()+'일 '+(h<12?'AM':'PM')+' '+((h%12)||12)+':'+String(d.getMinutes()).padStart(2,'0');};   // e.g. 2026년 11월 9일 PM 7:46
 let mindToastT=0;function mToast(t){mToastEl.textContent=t;mToastEl.classList.add('on');clearTimeout(mindToastT);mindToastT=setTimeout(()=>mToastEl.classList.remove('on'),2200);}
 function openMind(){openMenu(false);document.body.classList.add('mind');mindEl.setAttribute('aria-hidden','false');document.getElementById('mDate').textContent=fmtDate(Date.now());
   for(const id of [...pointers.keys()])tUp(id);mFly.innerHTML='';mText.style.visibility='';setTimeout(()=>{try{mText.focus();}catch(e){}},250);}
@@ -2079,6 +2084,19 @@ function mindDB(){return new Promise((res,rej)=>{const q=indexedDB.open('hf-mind
 async function dbDo(mode,fn){const db=await mindDB();return new Promise((res,rej)=>{const tx=db.transaction('notes',mode),st=tx.objectStore('notes');const q=fn(st);
   tx.oncomplete=()=>{res(q&&q.result);db.close();};tx.onerror=()=>{rej(tx.error);db.close();};});}
 document.addEventListener('visibilitychange',()=>{if(document.hidden)mindKey=null;});   // leaving the app locks the box again
+// …and if the app was away for a minute or more, what was already open (the list, a kept note) is covered again:
+// a kept note being edited is not lost — after the PIN it is right where it was; cancelling keeps the edits and closes it
+const MIND_RELOCK=60000;let mindAwayT=0,viewCloseFn=null;
+document.addEventListener('visibilitychange',()=>{if(document.hidden){mindAwayT=Date.now();return;}
+  const away=mindAwayT&&Date.now()-mindAwayT>=MIND_RELOCK;mindAwayT=0;if(away)mindRelock();});
+async function mindRelock(){
+  const listOpen=mModal.classList.contains('on')&&mCard.querySelector('.mlist'),viewOpen=document.body.classList.contains('mview');
+  if(!listOpen&&!viewOpen)return;
+  if(listOpen&&!viewOpen){mModal.classList.remove('on');viewRestore();mToast('잠시 자리를 비워 다시 잠갔어요');return;}
+  document.body.classList.add('mlocked');
+  let ok=false;try{ok=!!(await mindUnlock());}catch(e){ok=false;}
+  document.body.classList.remove('mlocked');
+  if(!ok&&viewCloseFn)await viewCloseFn();}
 // PIN pad: 'create' (twice) or 'unlock' → resolves with the key, or null
 function askPin(kind,opt){opt=opt||{};return new Promise(done=>{let entered='',first=null;
   const draw=(title,sub)=>{mCard.innerHTML=`<h3>${title}</h3><p>${sub}</p><div class="mdots">${[0,1,2,3].map(i=>`<i class="${i<entered.length?'f':''}"></i>`).join('')}</div>
@@ -2093,7 +2111,8 @@ function askPin(kind,opt){opt=opt||{};return new Promise(done=>{let entered='',f
     if(k==='f'){mCard.innerHTML=`<h3>비밀번호를 잊으셨나요?</h3><p>번호는 이 휴대폰 어디에도 따로 남지 않아 찾을 수 없어요.<br>처음부터 다시 시작하면 간직한 마음이 모두 지워져요.</p>
       <div class="mbtns"><button class="mbtn danger" id="mR">모두 지우고 새로 시작</button><button class="mbtn" id="mRc">돌아가기</button></div>`;
       document.getElementById('mRc').onclick=()=>{entered='';draw(...T());};
-      document.getElementById('mR').onclick=async()=>{try{await dbDo('readwrite',st=>st.clear());}catch(e){}try{localStorage.removeItem(MIND_META);}catch(e){}mindKey=null;fin(null);mToast('모두 지웠어요');};return;}
+      document.getElementById('mR').onclick=async()=>{try{await dbDo('readwrite',st=>st.clear());}catch(e){fin(null);return mToast('지우지 못했어요 · 잠시 뒤 다시 해 주세요');}   // the lock goes only after the notes are really gone
+        try{localStorage.removeItem(MIND_META);}catch(e){}mindKey=null;fin(null);mToast('모두 지웠어요');};return;}
     if(k==='b'){entered=entered.slice(0,-1);return draw(...T());}
     if(entered.length>=4)return;entered+=k;draw(...T());if(entered.length<4)return;
     await new Promise(r=>setTimeout(r,120));
@@ -2181,19 +2200,23 @@ function mindDissolve(text){return new Promise(done=>{
 // ---- the kept ones ----
 const MODE_NAME_K={paint:'Pigment',water:'Ripple',light:'Aurora',cloud:'Cloud',ink:'Ink',halo:'Halo'};
 const OLD_MODE_K={wave:'Wave',silk:'Silk',splash:'Splash',cosmos:'Cosmos'};   // notes kept in modes that no longer exist still show their name
+const safeMode=m=>(typeof m==='string'&&(MODE_NAME_K[m]||OLD_MODE_K[m]))?m:'paint';   // anything else (e.g. from a tampered backup file) is never shown as is
+// a note read from a backup file: only the fields this app writes, each of the right kind
+function cleanNote(d){if(!d||typeof d!=='object'||typeof d.text!=='string')return null;
+  const t=Number(d.t),e=Number(d.edited);return {text:d.text.slice(0,3000),t:isFinite(t)&&t>0?t:Date.now(),mode:safeMode(d.mode),...(isFinite(e)&&e>0?{edited:e}:{})};}
 const TRASH_SVG='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9.5 7V4.8h5V7M6.5 7l1 12.2h9l1-12.2M10.2 10.5v5.8M13.8 10.5v5.8"/></svg>';
 async function openKept(){let recs=[];try{recs=await dbDo('readonly',st=>st.getAll());}catch(e){}
   if(!recs||!recs.length){viewRestore();return mToast('아직 간직한 마음이 없어요');}
   const key=await mindUnlock();if(!key){viewRestore();return;}
   for(const r of recs)if(r.img){delete r.img;try{await dbDo('readwrite',st=>st.put(r));}catch(e){}}   // older notes carried a picture: keep only the words now
   const items=[];for(const r of recs.sort((a,b)=>b.id-a.id)){try{items.push({r,d:await openNote(key,r)});}catch(e){}}
-  mCard.innerHTML=`<h3>간직한 마음</h3><p>${items.length}개 · 이 휴대폰에만 있어요</p><div class="mlist">${items.map((it,i)=>{const m=it.d.mode||'paint';
-      return `<div class="mrow"><button class="mitem" data-i="${i}"><img class="mthumb" alt="" src="thumbs/${MODE_NAME_K[m]?m:'paint'}.jpg"><div><b>${fmtDate(it.d.t)} · ${MODE_NAME_K[m]||OLD_MODE_K[m]||m}</b><span></span></div></button><button class="mtrash" aria-label="지우기">${TRASH_SVG}</button></div>`;}).join('')}</div>
+  mCard.innerHTML=`<h3>간직한 마음</h3><p>${items.length}개 · 이 휴대폰에만 있어요</p><div class="mlist">${items.map((it,i)=>{const m=safeMode(it.d.mode);
+      return `<div class="mrow"><button class="mitem" data-i="${i}"><img class="mthumb" alt="" src="thumbs/${MODE_NAME_K[m]?m:'paint'}.jpg"><div><b></b><span></span></div></button><button class="mtrash" aria-label="지우기">${TRASH_SVG}</button></div>`;}).join('')}</div>
     <div class="mbtns"><button class="mbtn" id="mLc">닫기</button></div>`;
-  mCard.querySelectorAll('.mitem').forEach((b,i)=>{const it=items[i];b.querySelector('span').textContent=it.d.text.split('\n')[0];
+  mCard.querySelectorAll('.mitem').forEach((b,i)=>{const it=items[i],m=safeMode(it.d.mode);b.querySelector('b').textContent=fmtDate(it.d.t)+' · '+(MODE_NAME_K[m]||OLD_MODE_K[m]);b.querySelector('span').textContent=String(it.d.text).split('\n')[0];
     b.onclick=()=>{mModal.classList.remove('on');viewKept(it,()=>openKept());};
     b.parentNode.querySelector('.mtrash').onclick=async()=>{const ok=await mMenu('이 마음을 지울까요?','지우면 다시 꺼낼 수 없어요',[{t:'지우기',v:1,cls:'danger'},{t:'취소',v:0}]);
-      if(ok){try{await dbDo('readwrite',st=>st.delete(it.r.id));}catch(e){}mToast('지웠어요');}openKept();};});
+      if(ok){try{await dbDo('readwrite',st=>st.delete(it.r.id));mToast('지웠어요');}catch(e){mToast('지우지 못했어요');}}openKept();};});
   document.getElementById('mLc').onclick=()=>{mModal.classList.remove('on');viewRestore();};
   mShow(true);}
 // reading a kept note: the mode it was written in comes back underneath (with its music), the words over it
@@ -2223,8 +2246,9 @@ function viewKept(it,back){const v=document.getElementById('mView');
     try{vT.blur();}catch(e){}close(false);};
   document.getElementById('vShot').onclick=async()=>{const text=cur();try{vT.blur();}catch(e){}const art=await grabArt();await mindFont(text);await saveMind(composeMind(art,text,it.d.t));};
   vShr.onclick=()=>{try{vT.blur();}catch(e){}close(true);};   // back to the list of kept notes
+  viewCloseFn=async()=>{try{vT.blur();}catch(e){}if(dirty())await save();close(false);};   // re-lock cancelled: edits are kept (sealing needs no PIN), then it closes
 document.getElementById('vDel').onclick=async()=>{const ok=await mMenu('이 마음을 지울까요?','지우면 다시 꺼낼 수 없어요',[{t:'지우기',v:1,cls:'danger'},{t:'취소',v:0}]);
-    if(!ok)return;try{await dbDo('readwrite',st=>st.delete(it.r.id));}catch(e){}close(false);mToast('지웠어요');
+    if(!ok)return;try{await dbDo('readwrite',st=>st.delete(it.r.id));}catch(e){return mToast('지우지 못했어요');}close(false);mToast('지웠어요');
     try{const left=await dbDo('readonly',st=>st.count());if(left)back();}catch(e){}};}
 capPress(document.getElementById('penBtn'),openMind);
 document.getElementById('pinBtn').onclick=changePin;
@@ -2249,7 +2273,7 @@ async function mindExport(){openMenu(false);if(apkTooOld())return apkUpdateNote(
   const blob=new Blob([JSON.stringify(data)],{type:'application/json'}),d=new Date(),z=n=>String(n).padStart(2,'0');
   const name=`hand-flow-maeum-backup-${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}.json`,file=new File([blob],name,{type:'application/json'});
   const canShare=!window.AndroidSave&&navigator.canShare&&(()=>{try{return navigator.canShare({files:[file]});}catch(e){return false;}})();
-  const v=await mMenu(`마음 ${notes.length}개를 백업했어요`,'파일은 비밀번호로 잠겨 있어 이 번호 없이는 아무도 읽을 수 없어요.<br>새 휴대폰으로 옮긴 뒤 메뉴의 \'백업 가져오기\'로 불러오세요.',
+  const v=await mMenu(`마음 ${notes.length}개를 백업했어요`,'파일은 비밀번호로 잠겨 있지만 4자리 번호라 완벽하지는 않아요.<br>백업 파일은 남에게 보내지 말고 나만 아는 곳에 두세요.<br>새 휴대폰으로 옮긴 뒤 메뉴의 \'백업 가져오기\'로 불러오세요.',
     [{t:'휴대폰에 파일로 저장',v:'save',cls:'solid'},...(canShare?[{t:'다른 곳으로 보내기',v:'share'}]:[]),{t:'취소',v:0}]);
   if(v==='share'){try{await navigator.share({files:[file],title:'Hand Flow Art 마음 백업'});}catch(e){if(!(e&&e.name==='AbortError'))mToast('보내지 못했어요');}}
   else if(v==='save'){if(window.AndroidSave){const ok=await saveNative(blob,'json','_maeum-backup').catch(()=>false);if(!ok)mToast('저장하지 못했어요');}
@@ -2265,8 +2289,11 @@ async function mindImport(file){
   let added=0,skip=0,bad=0;
   for(const n of data.notes){if(haveS.has(n.id)){skip++;continue;}
     try{const r={iv:n.iv,ct:b64d(n.ct),wk:b64d(n.wk)};
-      if(fresh){await openNote({priv:bpriv,pin},r);await dbDo('readwrite',st=>st.put({id:n.id,...r}));}   // check it opens, then keep it exactly as sealed
-      else{const d=await openNote({priv:bpriv,pin},r);const s2=await sealNote(d);await dbDo('readwrite',st=>st.put({id:n.id,...s2}));}   // sealed again with this phone's lock
+      if(typeof n.id!=='number'||!isFinite(n.id))throw 0;
+      const raw=await openNote({priv:bpriv,pin},r),d=cleanNote(raw);if(!d)throw 0;
+      const same=JSON.stringify(raw)===JSON.stringify(d);
+      if(fresh&&same)await dbDo('readwrite',st=>st.put({id:n.id,...r}));   // checked, then kept exactly as sealed
+      else{const s2=await sealNote(d);await dbDo('readwrite',st=>st.put({id:n.id,...s2}));}   // sealed again (this phone's lock, or with odd fields cleaned out)
       added++;}catch(e){bad++;}}
   const msg=`마음 ${added}개를 가져왔어요`+(skip?` · ${skip}개는 이미 있어 건너뜀`:'')+(bad?` · ${bad}개는 열지 못함`:'');
   const v=await mMenu(msg,fresh?'비밀번호는 백업을 만들 때와 같아요':'이 휴대폰의 비밀번호로 다시 잠가 두었어요',[{t:'리스트 보기',v:'list',cls:'solid'},{t:'닫기',v:0}]);

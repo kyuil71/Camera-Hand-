@@ -74,22 +74,17 @@ body.menu .dock{transform:translate(-50%,0)}
 .seg::-webkit-scrollbar{display:none}
 .seg button{flex:1 0 auto;padding:0 10px;min-height:42px;border:0;border-radius:11px;background:transparent;color:var(--mute);font:inherit;font-size:16px;font-weight:600}
 .seg button[aria-pressed=true]{background:var(--ink);color:#101826}
-body.water #palettes,body.wave #palettes,body.halo #palettes,body.light #palettes,body.silk #palettes,body.cloud #palettes{display:none}
+body.water #palettes,body.halo #palettes,body.light #palettes,body.cloud #palettes,body.ink #palettes{display:none}
 body:not(.cloud) #clouds{display:none}
 body:not(.ink) #inks{display:none}
-body.ink #palettes,body.splash #palettes,body.cosmos #palettes{display:none}
-body:not(.splash) #splashRow{display:none}
-body:not(.silk) #silks{display:none}
 body:not(.light) #lights{display:none}
-body:not(.water) #plopRow,body:not(.water) #floors,body:not(.water) #dipRow,body:not(.water) #rainRow{display:none}
+body:not(.water) #plopRow,body:not(.water) #floors,body:not(.water) #rainRow{display:none}
 #rainRow{margin-bottom:10px}
 #rangeRow{margin-top:10px}
-#rangeRow[hidden],#engRow[hidden],#camRow[hidden]{display:none}
+#rangeRow[hidden],#camRow[hidden]{display:none}
 #gyroBtn{flex:1.45;white-space:nowrap;padding-left:6px;padding-right:6px}   /* removed from the menu (hand tracking: the ✋ button at the top) */
 body:not(.halo) #haloColRow,body:not(.halo) #beadRow{display:none}
-#dipRow{margin-bottom:10px}
 #dipRow[hidden]{display:none}
-#dipBtn.on{background:var(--ink);color:#101826}
 .chip i.sw{width:24px;height:18px;border-radius:9px;border:1px solid rgba(255,255,255,.25)}
 .hint{font-size:16px;color:var(--mute);text-align:center;margin-top:10px;line-height:1.5}
 .hint b{color:var(--ink);font-weight:600}
@@ -184,22 +179,18 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
 <div class="dock" id="sheet">
   <div class="panel">
     <div class="head" id="sheetHead"><span class="bar"></span><div id="status">손 인식 꺼짐 · 화면을 문질러 보세요</div></div>
-    <div class="row seg" id="modeSeg"><button data-m="paint">Pigment</button><button data-m="water">Ripple</button><button data-m="wave">Wave</button><button data-m="light">Aurora</button><button data-m="silk">Silk</button><button data-m="cloud">Cloud</button><button data-m="halo">Halo</button><button data-m="ink">Ink</button><button data-m="splash">Splash</button><button data-m="cosmos">Cosmos</button></div>
+    <div class="row seg" id="modeSeg"><button data-m="paint">Pigment</button><button data-m="water">Ripple</button><button data-m="light">Aurora</button><button data-m="cloud">Cloud</button><button data-m="halo">Halo</button><button data-m="ink">Ink</button></div>
     <div class="speed"><span>흐름 속도</span><input type="range" id="speed" min="0" max="100" step="1"><b id="speedVal"></b></div>
     <div class="speed" id="plopRow"><span>퐁당 크기</span><input type="range" id="plopSize" min="0" max="100" step="1" aria-label="퐁당 크기"><b id="plopVal"></b></div>
     <div class="row chips" id="palettes"></div>
     <div class="row chips" id="lights"></div>
-    <div class="row chips" id="silks"></div>
     <div class="row chips" id="clouds"></div>
     <div class="row chips" id="inks"></div>
-    <div class="row chips" id="splashRow"><button class="chip" data-sb="0"><i class="sw" style="background:#000"></i>검은 배경</button><button class="chip" data-sb="1"><i class="sw" style="background:#f6f5f2"></i>흰 배경</button></div>
     <div class="row chips" id="rainRow"><button class="chip" data-r="0">비 없음</button><button class="chip" data-r="1">이슬비</button><button class="chip" data-r="2">비</button><button class="chip" data-r="3">소나기</button></div>
-    <div class="row" id="dipRow" hidden><button class="btn" id="dipBtn">손 담그기 켜기</button></div>
     <div class="row chips" id="haloColRow"><button class="chip" data-hc="white">링 화이트</button><button class="chip" data-hc="random">링 색 랜덤</button></div>
     <div class="speed" id="beadRow"><span>구슬 배경</span><input type="range" id="beadSize" min="20" max="100" step="1" aria-label="구슬 배경 범위"><b id="beadVal"></b></div>
     <div class="row chips" id="floors"><button class="chip" data-f="2"><i class="sw" style="background:linear-gradient(135deg,#000,#1b1d20 50%,#000)"></i>검은 유리</button><button class="chip" data-f="1"><i class="sw" style="background:linear-gradient(135deg,#1c2328,#3a464e 50%,#11171b)"></i>다크 그레이</button><button class="chip" data-f="3"><i class="sw" style="background:#1d2024;background-image:linear-gradient(#5a5f66 1.5px,transparent 1.5px),linear-gradient(90deg,#5a5f66 1.5px,transparent 1.5px);background-size:8px 8px"></i>그레이 타일</button><button class="chip" data-f="0"><i class="sw" style="background:linear-gradient(135deg,#8c8270,#c9bda4 45%,#6e675c)"></i>자갈</button></div>
     <div class="speed" id="rangeRow" hidden><span>손 인식 범위</span><input type="range" id="handRange" min="0" max="100" step="1" aria-label="손 인식 범위"><b id="handRangeVal"></b></div>
-    <div class="row chips" id="engRow" hidden><button class="chip" data-e="tasks">새 손 인식</button><button class="chip" data-e="legacy">기존 손 인식</button></div>
     <div class="row" id="camRow" hidden>
       <button class="btn main" id="camBtn">손 인식 시작</button>
       <button class="btn" id="seedBtn">새 캔버스</button>
@@ -214,7 +205,7 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
     <div class="row"><button class="btn" id="pinBtn">비밀번호 바꾸기</button></div>
     <div class="row"><button class="btn" id="bakOut">마음 백업 내보내기</button><button class="btn" id="bakIn">백업 가져오기</button></div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 125</p>
+    <p class="hint" id="ver">버전 126</p>
   </div>
 </div>
 <!-- 마음 남기기: write over the flowing art, then keep it (locked with a 4-digit PIN, on this phone only) or let it flow away -->
@@ -232,7 +223,6 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
 <div id="mToast"></div>
 </div><!-- #app -->
 
-<script src="mediapipe/hands.js"></script>
 <script>
 'use strict';
 /* ================= Palettes ================= */
@@ -277,92 +267,6 @@ splatVelSet: H+`uniform sampler2D uT;uniform float aspect,radius,strength;unifor
 void main(){vec2 p=vUv-point;p.x*=aspect;float w=clamp(exp(-dot(p,p)/radius)*strength,0.,1.);vec2 b=texture(uT,vUv).xy;o=vec4(mix(b,color.xy,w),0.,1.);}`,
 splatVel: H+`uniform sampler2D uT;uniform float aspect,radius;uniform vec2 point;uniform vec3 color;
 void main(){vec2 p=vUv-point;p.x*=aspect;o=vec4(texture(uT,vUv).xyz+exp(-dot(p,p)/radius)*color,1.);}`,
-cosNeb: H+`uniform sampler2D uD;uniform float time,aspect,seed;
-float fb(vec2 p){return .5*vn(p)+.27*vn(p*2.03+7.1)+.15*vn(p*4.07+3.3)+.08*vn(p*8.1+1.7);}
-void main(){vec3 dd=texture(uD,vUv).xyz;vec2 uv=vUv-dd.xy;vec2 p=vec2(uv.x*aspect,uv.y)*1.25+seed;float t=time;
- /* the gas is folded over itself again and again, each fold drifting at its own pace: long silky currents */
- vec2 q=p;
- q+=.55*vec2(sin(q.y*1.3+t*.050+1.7),cos(q.x*1.1-t*.041+.3));
- q+=.38*vec2(sin(q.y*2.4-t*.063+4.1),cos(q.x*2.1+t*.057+2.2));
- vec2 w=vec2(fb(q*.9+vec2(0.,t*.03)),fb(q*.9+vec2(5.2,-t*.027)+3.1))-.5;q+=w*1.5;
- vec2 w2=vec2(fb(q*1.7+vec2(t*.02,1.3)),fb(q*1.7+vec2(8.3,t*.024)))-.5;q+=w2*.55;
- float f=fb(q*1.05);                       /* the folds */
- float body=smoothstep(.41,.63,fb(q*1.7+vec2(3.7,9.1)+w*.5));        /* where there is gas at all: the rest stays open space */
- float hue=.5+(fb(q*1.05+vec2(11.3,2.9))-.5)*1.5+.2*(f-.5);                         /* which gas: blue, cyan, ember, cream */
- vec3 cB=vec3(.03,.16,.95),cC=vec3(.0,.72,.92),cR=vec3(1.,.24,.08),cW=vec3(1.,.86,.72);
- vec3 cO=vec3(1.,.45,.16);vec3 col=mix(cB,cC,smoothstep(.30,.42,hue));col=mix(col,cW,smoothstep(.44,.49,hue));col=mix(col,cO,smoothstep(.50,.56,hue));col=mix(col,cR,smoothstep(.58,.68,hue));float warm=smoothstep(.44,.52,hue);
- float sheet=.35+.65*smoothstep(.2,.8,f);
- float th=f*58.+fb(q*3.6)*4.;float g2=fb(q*1.5+vec2(4.4,7.7));float silk=pow(.5+.5*sin(th),6.)*.5+pow(.5+.5*sin(g2*71.+f*9.),10.)*.45+pow(.5+.5*sin(th*.37+2.),3.)*.25;   /* fine threads running along the folds */
- float edge=smoothstep(.0,.5,body)*(1.-smoothstep(.55,1.,body));        /* thin veils at the rim glow bluer */
- vec3 neb=col*body*sheet*1.2+col*body*silk*.7+vec3(1.,.93,.84)*body*silk*warm*.4+vec3(.04,.28,1.)*edge*.3*(1.-warm);
- neb*=1.-.55*dd.z;                                                     /* where a hand has just passed the gas thins */
- o=vec4(1.-exp(-neb*1.9),body);}`,
-cosShow: H+`uniform sampler2D uC;uniform vec2 res;uniform float time,aspect;
-float star(vec2 fc,float cell,float seed,float thr,float sz){vec2 g=fc/cell;vec2 id=floor(g);float a=0.;
- for(int j=-1;j<=1;j++)for(int i=-1;i<=1;i++){vec2 c=id+vec2(float(i),float(j));float h=hash(c+seed);if(h<thr)continue;
-  vec2 pos=c+vec2(hash(c*1.7+seed+3.1),hash(c*2.3+seed+7.7));float d=length(g-pos)*cell;
-  float b=pow((h-thr)/(1.-thr),2.2);float ph=hash(c+seed*3.+11.)*6.283,sp=.6+2.4*hash(c*.37+seed+5.);
-  float tw=.6+.4*sin(time*sp+ph)*sin(time*sp*.37+ph*1.7);                       /* each star breathes at its own pace */
-  float r=sz*(.55+.9*b);a+=(exp(-d*d/(r*r))+.18*exp(-d/(r*2.6)))*(.25+.75*b)*tw;}
- return a;}
-void main(){vec4 n=texture(uC,vUv);
- vec2 q=vUv-.5;vec3 sky=mix(vec3(.003,.010,.06),vec3(.010,.030,.15),smoothstep(.95,.0,length(q*vec2(1.,.8))));
- vec2 fc=gl_FragCoord.xy+vec2(time*.8,time*.3);float px=res.y/900.;
- float st=star(fc,22.*px,1.3,.78,.8*px)*.5+star(fc,52.*px,7.9,.85,1.2*px)*.9+star(fc,140.*px,3.7,.9,2.*px)*1.3;
- vec3 sc=mix(vec3(.72,.84,1.),vec3(1.,.9,.78),hash(floor(fc/(52.*px))+2.));
- vec3 col=sky+sc*st*1.35*(1.-.75*n.a)+n.rgb;col+=(hash(gl_FragCoord.xy+fract(time)*53.)-.5)*.006;
- o=vec4(col,1.);}`,
-spStamp: `#version 300 es
-precision highp float;in vec2 vUv;layout(location=0) out vec4 o;layout(location=1) out vec4 o2;
-uniform float aspect,kind,seed,thick,len,wid,bend,brk,g0,g1,spread,dens;uniform vec2 point,dir,pb;uniform vec3 color,color2;
-float hash(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}
-float vn(vec2 p){vec2 i=floor(p),f=clamp(p-i,0.,1.);f=f*f*(3.-2.*f);return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+1.),f.x),f.y);}
-float fbm(vec2 p){return .5*vn(p)+.3*vn(p*2.03+7.1)+.2*vn(p*4.1+3.3);}
-void main(){vec2 p=vUv-point;p.x*=aspect;float m=0.,h=0.;vec3 col=color;
- if(kind<.5){                                       /* a thrown sheet of paint: full at the hand end, torn into fingers and holes as it flies */
-  float a=dot(p,dir),b=dot(p,vec2(-dir.y,dir.x));float s=a/len;b-=bend*a*a/len;
-  b+=(vn(vec2(s*2.3+seed,seed*1.7))-.5)*wid*.9*max(s,0.);
-  float prof=s<0.?sqrt(max(0.,1.-s*s/.05)):mix(1.,.22,pow(clamp(s,0.,1.),.75));
-  float w=wid*prof*(.75+.6*vn(vec2(s*3.1,seed*3.3)));
-  float e=1.-abs(b)/max(w,1e-5);e=min(e,(1.12-s)*4.);
-  vec2 q=vec2(s*len/wid*1.5,b/wid*3.1);q+=(vec2(vn(q*.6+seed),vn(q*.6-seed+9.))-.5)*2.1;
-  float n=fbm(q+seed*5.3);float n2=fbm(vec2(q.x*.8,q.y*1.3)-seed*2.1);float n3=vn(q*.42+seed*2.7);
-  float v=e+(n-.56)*brk*(.3+1.9*max(s,0.))-.04-smoothstep(.56,.8,n3)*1.5*brk*smoothstep(.05,.5,s);   /* holes open in the sheet */
-  float fw=max(fwidth(v),1e-4);m=smoothstep(0.,fw*1.6,v)*smoothstep(g0-.02,g0+.02,s)*(1.-smoothstep(g1-.02,g1+.02,s));
-  h=m*(.3+.7*smoothstep(0.,.5,v))*(.7+.6*n2);
-  col=mix(color,color2,smoothstep(.62,.74,vn(q*vec2(.6,1.4)+seed*8.))*.85);     /* a second colour marbled in, streaked the same way */
- }else if(kind<1.5){                                /* the spray: droplets of every size flung outward, the far ones drawn into needles */
-  float r=length(p);float th=atan(dot(p,vec2(-dir.y,dir.x)),dot(p,dir));
-  float cone=spread>3.?1.:smoothstep(spread,spread*.45,abs(th));
-  for(int k=0;k<3;k++){float K=k==0?3.6:(k==1?8.5:19.);float Kt=floor(K*6.2832+.5)/6.2832;
-   vec2 g=vec2(log(max(r,1e-4)/len)*K,th*Kt)+seed*(1.+float(k)*3.7);vec2 id=floor(g),f=fract(g)-.5;
-   float h1=hash(id+seed),h2=hash(id*1.31+4.2+seed),h3=hash(id*.77+9.1-seed),h4=hash(id+31.7);
-   f-=(vec2(h3,h4)-.5)*.5;
-   float fall=smoothstep(g1*1.15,g1*.25,r)*smoothstep(g0*.5,g0,r);
-   float keep=step(h1,dens*cone*fall*(k==0?.5:(k==1?.75:1.)));
-   float far=smoothstep(g0,g1,r);float st=1.+6.*pow(h4,9.)*far;float rad=(.06+(k==0?.2:.33)*pow(h2,3.6))*(k==2?.8:1.)*mix(1.,.36,far);
-   float d=length(vec2(f.x/st,f.y));float fw=max(fwidth(d),1e-4);
-   float mm=keep*(1.-smoothstep(rad-fw*1.5,rad,d));
-   if(mm>m){m=mm;h=mm*(.35+.65*sqrt(max(0.,1.-d*d/(rad*rad))))*(.55+.5*h3);col=h1<dens*.12?color2:color;}}
- }else{                                              /* a thread of paint: a tapering line with an uneven edge, a bead where it ends */
-  vec2 A=vec2(0.),B=pb-point;B.x*=aspect;vec2 ab=B-A;float t=clamp(dot(p-A,ab)/max(dot(ab,ab),1e-9),0.,1.);
-  float tr=dot(p-A,ab)/max(dot(ab,ab),1e-9);float rr=mix(wid,len,t);float d=length(p-A-ab*t);float fw=max(fwidth(d),1e-5);
-  m=1.-smoothstep(rr-fw*1.5,rr,d);if(dot(ab,ab)>1e-9)m*=step(0.,tr)*step(tr,1.);   /* no round caps: the pieces of a thread meet without beading */h=m*(.4+.6*sqrt(max(0.,1.-d*d/(rr*rr))));}
- o=vec4(col,m);o2=vec4(0.,0.,0.,h*thick);}`,
-spFade: `#version 300 es
-precision highp float;layout(location=0) out vec4 o;layout(location=1) out vec4 o2;void main(){o=vec4(0.);o2=vec4(0.);}`,
-spShow: H+`uniform sampler2D uC,uH;uniform vec2 hTexel;uniform float bg,time;
-float ht(vec2 uv){float h=texture(uH,uv).a;return 1.-exp(-h*1.35);}
-void main(){vec3 c=texture(uC,vUv).rgb;float h=ht(vUv);
- float hx=ht(vUv+vec2(hTexel.x,0.))-ht(vUv-vec2(hTexel.x,0.)),hy=ht(vUv+vec2(0.,hTexel.y))-ht(vUv-vec2(0.,hTexel.y));
- vec3 N=normalize(vec3(-hx*26.,-hy*26.,1.));vec3 L=normalize(vec3(-.45,.62,.64)),V=vec3(0.,0.,1.),Hh=normalize(L+V);
- float dif=clamp(dot(N,L),0.,1.);float sp=pow(max(dot(N,Hh),0.),70.)*.95+pow(max(dot(N,Hh),0.),14.)*.16;
- float cov=smoothstep(.012,.05,h);
- float lum=dot(c,vec3(.3,.59,.11));
- vec3 paint=c*(.50+.62*dif)*mix(.74,1.,smoothstep(0.,.22,h))+sp*mix(vec3(1.),c,.15)*(.55+.6*lum);
- vec3 back=vec3(bg);
- if(bg>.5){float sh=.5*(ht(vUv+vec2(.0028,-.0032))+ht(vUv+vec2(.0045,-.0052)));back=vec3(.965,.962,.955)*(1.-.17*smoothstep(.0,.3,sh)*(1.-cov));}   /* on white: the thick paint casts a soft shadow */
- o=vec4(mix(back,paint,cov),1.);}`,
 splatDye: H+`uniform sampler2D uT;uniform float aspect,radius,strength;uniform vec2 point;uniform vec4 color;
 void main(){vec2 p=vUv-point;p.x*=aspect;float g=exp(-dot(p,p)/radius);
 float w=clamp(smoothstep(.06,.5,g)*strength,0.,1.);vec4 b=texture(uT,vUv);
@@ -383,8 +287,6 @@ void main(){vec2 e=vec2(vR.x-vUv.x,vT.y-vUv.y)*2.2;vec4 c=texture(uT,vUv);
  o=mix(c,a/1.,k);}`,
 detail: H+`uniform sampler2D uT;uniform vec2 dims;uniform float rate,sd;
 void main(){float n=bristle(vUv,dims,sd);o=vec4(mix(rate<1.?texture(uT,vUv).x:n,n,min(rate,1.)),0.,0.,1.);}`,
-advect: H+`uniform sampler2D uVel,uSrc;uniform vec2 simTexel;uniform float dt;uniform vec4 diss;
-void main(){vec2 c=vUv-dt*texture(uVel,vUv).xy*simTexel;o=texture(uSrc,c)/(1.+diss*dt);}`,
 advectVel: H+`uniform sampler2D uVel;uniform vec2 simTexel;uniform float dt,diss,bounce;
 void main(){vec2 c=vUv-dt*texture(uVel,vUv).xy*simTexel;vec2 f=vec2(1.);
 if(c.x<0.){c.x=-c.x;f.x=-bounce;}else if(c.x>1.){c.x=2.-c.x;f.x=-bounce;}
@@ -452,25 +354,6 @@ c=mix(c*.94,c*(1.02+.04*h1),dm);
 c+=step(.988,hash(id+floor(time*4.)))*spec*.7;
 c+=(hash(gl_FragCoord.xy+fract(time)*91.)-.5)*.025;
 c=1.-exp(-c*1.6);c=clamp(mix(vec3(dot(c,vec3(.3,.55,.15))),c,1.18),0.,1.);o=vec4(c,1.);}`,
-wallVel: H+`uniform sampler2D uVel;uniform float aspect,dt;uniform vec2 simTexel;
-void main(){vec2 v=texture(uVel,vUv).xy;
-vec4 d=vec4(vUv.x*aspect,(1.-vUv.x)*aspect,vUv.y,1.-vUv.y);
-vec2 wp[4];wp[0]=vec2(simTexel.x*1.5,vUv.y);wp[1]=vec2(1.-simTexel.x*1.5,vUv.y);wp[2]=vec2(vUv.x,simTexel.y*1.5);wp[3]=vec2(vUv.x,1.-simTexel.y*1.5);
-vec2 n[4];n[0]=vec2(-1.,0.);n[1]=vec2(1.,0.);n[2]=vec2(0.,-1.);n[3]=vec2(0.,1.);
-for(int i=0;i<4;i++){float k=smoothstep(.0,.012,d[i])*smoothstep(.08,.02,d[i]);if(k<=0.)continue;
- vec2 vw=texture(uVel,wp[i]).xy;float hit=max(dot(vw,n[i]),0.);
- vec2 tg=vec2(-n[i].y,n[i].x);float st=dot(vw,tg);
- v-=n[i]*hit*k*dt*22.;                         // rebound off the wall (출렁) — exaggerated
- v+=tg*sign(st+1e-4)*hit*k*dt*5.;}              // and run along it
-o=vec4(v,0.,1.);}`,
-wallPile: H+`uniform sampler2D uDye,uVel;uniform float aspect,dt;
-void main(){vec4 c=texture(uDye,vUv);vec2 v=texture(uVel,vUv).xy;
-vec4 d=vec4(vUv.x*aspect,(1.-vUv.x)*aspect,vUv.y,1.-vUv.y);
-float imp=max(-v.x,0.)*smoothstep(.02,0.,d.x)+max(v.x,0.)*smoothstep(.02,0.,d.y)+max(-v.y,0.)*smoothstep(.02,0.,d.z)+max(v.y,0.)*smoothstep(.02,0.,d.w);
-float band=smoothstep(.03,0.,min(min(d.x,d.y),min(d.z,d.w)));
-c.a=min(c.a+max(imp-50.,0.)*dt*.016,3.2);
-c.a-=max(c.a-1.,0.)*dt*.9*band;                 // the surge slides back down the wall
-o=c;}`,
 waterClear: H+`void main(){o=vec4(0.,0.,0.,1.);}`,
 inkClear: H+`void main(){o=vec4(0.);}`,
 inkPerm: H+`uniform float aspect,seed;
@@ -564,17 +447,6 @@ void main(){vec2 uv=(vUv-.5)*vZ+.5+vO;vec2 p=vec2(uv.x*aspect,uv.y);   /* the ha
  col*=1.-.07*pow(length(vUv-.5)*1.3,2.);
  o=vec4(col,1.);}`,
 
-cloudDisp: H+`uniform sampler2D uD,uVel;uniform vec2 simTexel;uniform float dt,relax,clearK;
-// displacement (RG) + thinning (B) left behind by the hands; advected, then slowly healing → clouds part and drift back together
-void main(){vec2 v=texture(uVel,vUv).xy*simTexel;vec2 c=vUv-v*dt;
- vec4 d=texture(uD,c);
- vec2 oc=max(-c,c-1.);float inside=1.-smoothstep(0.,.015,max(oc.x,oc.y));d.xy*=inside;   /* what flows in from beyond the edge is calm gas, never a streak copied from the border */
- vec2 tx=vR-vUv,ty=vT-vUv;vec4 nb=.25*(texture(uD,c+tx)+texture(uD,c-tx)+texture(uD,c+ty)+texture(uD,c-ty));
- d=mix(d,nb,.5);                                            /* a little diffusion every step: the field stays smooth, never creased */
- d.xy+=v*dt;d.xy*=exp(-dt*relax);
- d.xy=d.xy/sqrt(1.+dot(d.xy,d.xy)/(.17*.17));                                    /* soft limit: no flat plateau with a hard rim */
- d.z=max(d.z*exp(-dt*.45),min(1.,length(v)*clearK));
- o=vec4(d.xy,d.z,1.);}`,
 cloudPass: H+`uniform sampler2D uD,uN;uniform float aspect;uniform vec3 pal[6],bgc;uniform vec4 thm;uniform vec4 sty;uniform vec3 lay;uniform vec2 lo[3];uniform vec4 lw[3],lc[3],lm[3];uniform vec2 pan;
 /* tiling noise (period 8) whose every octave is folded back into [0,8): the numbers stay small on any GPU, at any time,
    so the gas can never break into flat facets with straight edges — only smooth curves */
@@ -632,15 +504,6 @@ void main(){vec4 n=texture(uC,vUv);vec3 c=n.rgb;float white=step(1.5,bg);
  else c+=st*occ;
  c*=1.-(white>.5?.05:.18)*pow(length(vUv-.5)*1.2,2.);
  c+=(hash(gl_FragCoord.xy+fract(time)*53.)-.5)*.008;o=vec4(c,1.);}`,
-silkBg: H+`uniform vec3 c1,c2;uniform float time,aspect;
-void main(){vec2 uv=vUv;vec2 p=vec2(uv.x*aspect,uv.y);
- vec3 col=mix(vec3(.010,.012,.022),vec3(.022,.026,.045),uv.y);
- vec2 a=vec2(.30*aspect+.18*aspect*sin(time*.031),.62+.20*cos(time*.027));
- vec2 b=vec2(.72*aspect+.16*aspect*cos(time*.023),.30+.18*sin(time*.035));
- col+=c1*.10*exp(-dot(p-a,p-a)/.16)+c2*.08*exp(-dot(p-b,p-b)/.12);   // two very soft glows drifting behind the silk
- col*=1.-.25*pow(length(uv-.5)*1.2,2.);
- col+=(hash(gl_FragCoord.xy+fract(time)*37.)-.5)*.006;                // anti-banding grain
- o=vec4(col,1.);}`,
 partInit: H+`uniform float seed;
 void main(){vec2 q=gl_FragCoord.xy;o=vec4(vec2(hash(q+seed),hash(q*1.31+seed+7.))*2.-.5,hash(q*.77+seed+3.),hash(q*2.13+seed+11.));}`,   /* the light lives in a space 4× the screen (2×2), the screen is its middle */
 partStep: H+`uniform sampler2D uP,uVel;uniform vec2 simTexel,force,tilt,pan;uniform float dt,t,seed,aspect,emitFrac;uniform vec4 emit[4];uniform float emitK[4],emitHue[4];
@@ -852,81 +715,6 @@ void main(){
  col=mix(col,vec3(.96,.98,1.),clamp(foam,0.,1.)*.8);
  col+=vec3(.92,.97,1.)*min(spark,1.)*.55;
  o=vec4(clamp(col,0.,1.),1.);}`,
-waveRender: H+`uniform sampler2D uW;uniform vec2 simTexel;uniform float aspect,time;uniform vec3 sunDir;uniform vec2 viewT;
-vec2 h2(vec2 p){return vec2(hash(p),hash(p+19.19));}
-float fbm4(vec2 p){float s=0.,a=.5;for(int i=0;i<4;i++){s+=a*vn(p);p=p*2.07+13.7;a*=.5;}return s;}
-float caus(vec2 q,float t){
- q+=.55*vec2(vn(q*.55+t*.11),vn(q*.55+5.2-t*.09))+.18*vec2(vn(q*1.7-t*.2),vn(q*1.7+9.1+t*.17));
- vec2 ip=floor(q),fp=q-ip;float d1=8.,d2=8.;
- for(int y=-1;y<=1;y++)for(int x=-1;x<=1;x++){vec2 o2=vec2(x,y);vec2 h=h2(ip+o2);
-  vec2 r=o2+.5+.2*sin(t*.7+6.2831*h)-fp;float d=dot(r,r);if(d<d1){d2=d1;d1=d;}else if(d<d2)d2=d;}
- float e=sqrt(d2)-sqrt(d1);float w=.30+.25*vn(q*.9+3.3);return pow(1.-smoothstep(0.,w,e),2.4)*(.55+.7*vn(q*.6-t*.07));}
-vec3 sky(vec3 R,float t){
- float h=clamp(R.z,0.,1.);
- vec3 c=mix(vec3(.80,.89,.96),vec3(.20,.47,.82),pow(h,.6));
- vec2 cp=R.xy/(R.z+.25)+vec2(t*.012,t*.004);
- float cl=smoothstep(.5,.85,fbm4(cp*.8));
- c=mix(c,vec3(.97,.98,.99),cl*.8);
- float sd=max(dot(R,sunDir),0.);
- c+=vec3(1.,.95,.84)*(pow(sd,900.)*40.+pow(sd,60.)*.3)*(1.-cl*.8);
- return c;}
-float Hh(vec2 uv){return texture(uW,uv).x;}
-float rip(vec2 p,float t){return .00030*(sin(dot(p,vec2(.93,.37))*71.-t*3.1)+sin(dot(p,vec2(-.41,.91))*83.-t*3.4+1.7)
- +.8*sin(dot(p,vec2(.12,-.99))*97.-t*3.8+4.1)+.6*sin(dot(p,vec2(-.85,-.53))*121.-t*4.2+2.6));}
-vec3 sandCol(vec2 q,float wet){                     // beach sand: warm grains, wind ripple marks, darker when wet
- float n=fbm4(q*2.6);
- vec3 c=mix(vec3(.93,.85,.69),vec3(.85,.75,.58),smoothstep(.3,.7,vn(q*5.+3.)));
- float ph=dot(q,vec2(.28,.96))*88.+n*10.;
- c*=.95+.065*cos(ph)*smoothstep(.2,.6,vn(q*3.1+7.));
- float g=vn(q*700.);c*=.90+.18*g;
- vec2 gc=floor(q*1100.);
- c=mix(c,vec3(.50,.42,.34),step(.955,hash(gc))*.65);              /* dark grains */
- c=mix(c,vec3(1.,.99,.96),step(.986,hash(gc+3.1))*.55);           /* bright quartz grains */
- return mix(c,c*vec3(.60,.565,.52),wet);}
-void main(){
- vec2 uv=vUv;vec2 p=vec2(uv.x*aspect,uv.y);float t=time;
- vec4 W=texture(uW,uv);float h=max(W.x,0.),foam=W.y,wet=W.z,spd=W.w;
- vec2 dx=vec2(simTexel.x,0.),dy=vec2(0.,simTexel.y);
- float hl=Hh(uv-dx),hr=Hh(uv+dx),hb=Hh(uv-dy),ht=Hh(uv+dy);
- vec2 g=vec2((hr-hl)/(2.*simTexel.x*aspect),(ht-hb)/(2.*simTexel.y));
- float steep=length(g);                                             /* a wall of water: a bore / breaking front */
- g*=1.9/(1.+steep*.9);                                              /* exaggerate gentle swells, tame razor fronts */
- float lap=hl+hr+hb+ht-4.*W.x;
- float wm=smoothstep(.0012,.006,h);
- float rk=wm*(.35+1.3*min(spd,1.)),e=.0012,r0=rip(p,t);
- g+=rk*vec2(rip(p+vec2(e,0.),t)-r0,rip(p+vec2(0.,e),t)-r0)/e;
- vec3 N=normalize(vec3(-g,1.));
- vec3 cam=vec3(.5*aspect+viewT.x*aspect*.8,.30+viewT.y*.9,1.5);vec3 V=normalize(cam-vec3(p,h));
- float F=.02+.98*pow(1.-clamp(dot(N,V),0.,1.),5.);
- vec3 rd=refract(-V,N,1./1.333);
- vec2 hit=p+rd.xy*(h/max(-rd.z,.25));
- vec3 sd=sandCol(hit,max(wet,wm));
- vec2 lq=hit+g*h*1.4;
- mat2 r1=mat2(.80,.60,-.60,.80),r2=mat2(.34,-.94,.94,.34);
- float cs=(caus(r1*lq*13.,t*1.1)+caus(r2*lq*19.+vec2(3.1,1.7),t*1.3))*.5;cs=cs*cs*.9+cs*.08;
- cs*=smoothstep(.002,.03,h)*(1.+clamp(-lap*90.,-.8,2.5));            /* light focuses under crests */
- vec3 lit=sd*(.80+1.5*cs);
- float path=h*(1.+1./max(-rd.z,.25))*8.;                           /* shallow = clear over sand, deep = turquoise */
- vec3 under=lit*exp(-vec3(1.15,.30,.24)*path)+vec3(.01,.16,.20)*(1.-exp(-1.2*path));
- vec3 R=reflect(-V,N);R.z=abs(R.z);
- float sun=pow(max(dot(R,sunDir),0.),1400.)*3.5;                     /* small sparkles, not white blobs */
- vec3 col=mix(sd*(.88+.10*wet),mix(under,sky(R,t),F)+vec3(1.,.96,.88)*sun,wm);
- // white water: bubbly lace that turns solid where the foam is thick
- vec2 fp=p+g*.004;
- float fn=fbm4(fp*21.+vec2(t*.15,-t*.11)),lace=caus(fp*52.+fn*2.3,t*1.3),lace2=vn(fp*90.+t*.7);
- float bore=smoothstep(.6,1.6,steep)*smoothstep(.01,.04,h);
- float fa=clamp(max(foam,bore*(.45+.4*fn)),0.,1.6)*mix(.35,1.,smoothstep(.0005,.005,h));   /* on bare sand only a thin residue */
- fa=1.-exp(-fa*1.3);
- float dens=fa*(1.05+(fn-.5)*1.9+lace*.45);                             /* organic patches with bubbly holes and lacy rims */
- float cover=smoothstep(.32,.78,dens)*(.80+.20*lace2);
- col=mix(col,vec3(1.06,1.08,1.08)*(.86+.10*lace+.06*lace2),cover);
- float edge=smoothstep(.0008,.003,h)*smoothstep(.012,.004,h);       /* swash line on the sand */
- col=mix(col,vec3(.96),edge*min(1.,spd*2.5)*(.4+.6*lace)*.8);
- float dw=min(min(p.x,aspect-p.x),min(p.y,1.-p.y));
- col+=vec3(.75,.9,1.)*exp(-dw/.0035)*wm*.28;                         /* glass wall: bright meniscus */
- col*=1.-.12*pow(length(uv-.5)*1.25,2.);
- col=(col*(2.51*col+.03))/(col*(2.43*col+.59)+.14);
- o=vec4(clamp(col,0.,1.),1.);}`,
 haloEmit: H+`uniform sampler2D uS;uniform vec4 rp[48];uniform float aspect,amt,t;uniform vec4 puff;
 void main(){vec2 p=vec2(vUv.x*aspect,vUv.y);float d=9.;
  for(int i=0;i<48;i++){vec2 a=rp[i].xy,b=rp[i==47?0:i+1].xy,pa=p-a,ba=b-a;float h=clamp(dot(pa,ba)/max(dot(ba,ba),1e-8),0.,1.);d=min(d,length(pa-ba*h));}
@@ -1012,63 +800,6 @@ const PTP=(()=>{const p=gl.createProgram();gl.attachShader(p,compile(gl.VERTEX_S
   if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(p));
   const u={};['uP','psize','t','bigPass','pal','emCol','pan','psc'].forEach(k=>u[k]=gl.getUniformLocation(p,k));return {p,u};})();
 const vaoPts=gl.createVertexArray();
-const SILK_VS=`#version 300 es
-precision highp float;
-layout(location=0) in vec2 aP;layout(location=1) in vec4 aU;layout(location=2) in vec2 aT;
-out vec4 vU;out vec2 vT;
-void main(){gl_Position=vec4(aP*2.-1.,0.,1.);vU=aU;vT=aT;}`;
-const SILK_FS=`#version 300 es
-precision highp float;
-in vec4 vU;in vec2 vT;out vec4 o;
-uniform vec3 colA,colB,Ldir;uniform float alpha,time,seedR,far;
-void main(){
- float u=vU.x,v=vU.y;
- vec2 t2=normalize(vT+1e-5);vec3 T=vec3(t2,0.);vec2 side=vec2(-t2.y,t2.x);
- // surface: the twist of the ribbon + a soft cup across the width + travelling pleats and fine creases
- float pleat=.20*sin(v*5.5+u*24.-time*.55+seedR)+.08*sin(v*13.+u*41.+time*.33+seedR*2.)+.035*sin(v*31.-u*57.+time*.7);
- pleat*=smoothstep(.08,.45,abs(vU.z));                          // no zig-zag where the ribbon turns edge-on
- float ang=atan(vU.w,vU.z)+v*.35+pleat;
- vec3 n=normalize(vec3(side*sin(ang),cos(ang)));
- float front=step(0.,vU.z);
- vec3 V=vec3(0.,0.,1.),H=normalize(Ldir+V);
- float diff=.80+.42*dot(n,Ldir);
- // silk sheen: soft, broad lobe stretched along the weave (not metallic)
- vec3 B=normalize(cross(n,T)+1e-5);float bh=dot(B,H);
- float sheen=pow(max(0.,1.-bh*bh),6.)*pow(max(dot(n,H),0.),3.)*.55;
- float rim=pow(1.-abs(n.z),2.2);
- vec3 base=mix(colA,colB,.5+.5*v+.25*sin(u*3.1+time*.05));
- base*=mix(.80,1.,front);                                   // the back side is a touch deeper
- base=mix(vec3(dot(base,vec3(.3,.55,.15))),base,1.35);              // keep pastel colours clear, not greyed
- vec3 c=base*diff*1.12+vec3(1.,.98,.95)*sheen+base*rim*.5;
- float hem=smoothstep(.80,.97,abs(v))*.18;c+=vec3(1.)*hem*diff;   // a faint hemmed edge
- float a=alpha*(.55+.45*rim+.10*abs(pleat));                // more opaque where the fabric turns away (folds)
- a*=smoothstep(1.,.86,abs(v))*smoothstep(0.,.07,u)*smoothstep(1.,.86,u);
- c=mix(c,c*.72+vec3(.02,.025,.04),far);a*=1.-.30*far;     // far layers: dimmer, hazier
- o=vec4(c*a,a);}`;
-const SILKP=(()=>{const p=gl.createProgram();gl.attachShader(p,compile(gl.VERTEX_SHADER,SILK_VS));gl.attachShader(p,compile(gl.FRAGMENT_SHADER,SILK_FS));gl.linkProgram(p);
-  if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(p));
-  const u={};['colA','colB','Ldir','alpha','time','seedR','far'].forEach(k=>u[k]=gl.getUniformLocation(p,k));return {p,u};})();
-const SILK_N=9, SILK_M=56;
-const silkVAO=gl.createVertexArray(), silkVBO=gl.createBuffer(), silkData=new Float32Array(SILK_N*SILK_M*2*8);
-gl.bindVertexArray(silkVAO);gl.bindBuffer(gl.ARRAY_BUFFER,silkVBO);gl.bufferData(gl.ARRAY_BUFFER,silkData.byteLength,gl.DYNAMIC_DRAW);
-gl.enableVertexAttribArray(0);gl.vertexAttribPointer(0,2,gl.FLOAT,false,32,0);
-gl.enableVertexAttribArray(1);gl.vertexAttribPointer(1,4,gl.FLOAT,false,32,8);
-gl.enableVertexAttribArray(2);gl.vertexAttribPointer(2,2,gl.FLOAT,false,32,24);
-gl.bindVertexArray(null);
-const SPRAY_VS=`#version 300 es
-in vec4 aP;out float vA;
-void main(){gl_Position=vec4(aP.x*2.-1.,aP.y*2.-1.,0.,1.);gl_PointSize=aP.z;vA=aP.w;}`;
-const SPRAY_FS=`#version 300 es
-precision mediump float;in float vA;out vec4 o;
-void main(){vec2 q=gl_PointCoord-.5;float d=length(q)*2.;if(d>1.)discard;
- float a=smoothstep(1.,.4,d)*vA;vec3 c=mix(vec3(.80,.90,.96),vec3(1.),smoothstep(.8,.1,length(q+vec2(.15,-.15))*2.));
- o=vec4(c*a,a);}`;
-const SPRAYP=(()=>{const p=gl.createProgram();gl.attachShader(p,compile(gl.VERTEX_SHADER,SPRAY_VS));gl.attachShader(p,compile(gl.FRAGMENT_SHADER,SPRAY_FS));
-  gl.bindAttribLocation(p,0,'aP');gl.linkProgram(p);if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(p));return p;})();
-const SPRAY_MAX=900, sprayVAO=gl.createVertexArray(), sprayVBO=gl.createBuffer(), sprayData=new Float32Array(SPRAY_MAX*4);
-gl.bindVertexArray(sprayVAO);gl.bindBuffer(gl.ARRAY_BUFFER,sprayVBO);gl.bufferData(gl.ARRAY_BUFFER,sprayData.byteLength,gl.DYNAMIC_DRAW);
-gl.enableVertexAttribArray(0);gl.vertexAttribPointer(0,4,gl.FLOAT,false,16,0);
-gl.bindVertexArray(null);
 const P = {};
 const P_FAIL=[];   // a shader this GPU cannot build only disables what uses it — never the whole app
 for(const k in FS){try{const p=gl.createProgram();gl.attachShader(p,vs);gl.attachShader(p,compile(gl.FRAGMENT_SHADER,FS[k]));
@@ -1116,7 +847,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 125';
+const VER_TXT='버전 126';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -1128,7 +859,7 @@ addEventListener('devicemotion',e=>{if(extMotionT&&performance.now()-extMotionT<
 let extMotionT=0;
 window.__hfGrav=(x,y,z)=>{extMotionT=performance.now();devG=[x,y];if(gyroOn)onMotion({accelerationIncludingGravity:{x,y,z},acceleration:null,ext:1});};
 (function startAccel(){try{if(!('Accelerometer' in window))return;const go=()=>{try{const a=new Accelerometer({frequency:60});
-    a.addEventListener('reading',()=>{if(a.x!=null)__hfGrav(a.x,a.y,a.z);});a.addEventListener('error',()=>{});a.start();}catch(e){}};
+    a.addEventListener('reading',()=>{if(a.x!=null)window.__hfGrav(a.x,a.y,a.z);});a.addEventListener('error',()=>{});a.start();}catch(e){}};
   if(navigator.permissions&&navigator.permissions.query)navigator.permissions.query({name:'accelerometer'}).then(r=>{if(r.state!=='denied')go();}).catch(go);else go();}catch(e){}})();
 function gravAngle(){if(!devG)return null;const [x,y]=devG;if(Math.hypot(x,y)<4)return null;return Math.abs(x)>Math.abs(y)?(x>0?90:270):(y>0?0:180);}
 const md=v=>((v%360)+360)%360;
@@ -1290,127 +1021,7 @@ function lightFrame(dt){
   drawPoints(null,1);                                   // soft bokeh orbs on top (no trails)
 }
 
-/* ================= Silk mode: translucent silk ribbons dancing in air and water ================= */
-const SILKS={
-  'Pastel':['#F7B8D0','#C9B6F2','#A9D8F5','#A8EBD5'],
-  'Pearl': ['#FFF4E2','#E8EDF4','#C7CCD5','#E6CF9E'],
-  'Ocean': ['#0B3C8C','#0FA3B1','#5FE1E8','#A9DDF7'],
-  'Sunset':['#FF7F6E','#FF9F43','#FF6FAE','#9B6BDE'],
-  'Aurora':['#1FD1B2','#2F7BFF','#8E5CF7','#F06BC8']};
-let silkName='Pastel'; try{const v=localStorage.getItem('hf-silk');if(v&&SILKS[v])silkName=v;}catch(e){}
-let silkT=0, silkRibs=null, silkSpread=1, silkWide=1, silkPrevF={}, silkFlap=0;
-function silkCol(k){const P=SILKS[silkName].map(hex2rgb);k=((k%4)+4)%4;const i=Math.floor(k),f=k-i,a=P[i],b=P[(i+1)%4],e=f*f*(3-2*f);
-  return [a[0]+(b[0]-a[0])*e,a[1]+(b[1]-a[1])*e,a[2]+(b[2]-a[2])*e];}
-// 실크 천들이 바람에 날림. 손가락을 움직이면 그 방향으로 바람이 일어 천이 날아가고, 바람이 불어오는 쪽에서 새 천이 들어옴
-let silkWind={x:0,y:0},silkAmbA=Math.random()*6.283,silkGustT=0;
-function silkMake(R,depth,place){             // place: null = anywhere on screen, else {x,y} = upwind spawn direction
-  const len=.75+.45*Math.random(),seg=len/(SILK_M-1);let hx,hy,a0;
-  if(!place){a0=Math.random()*6.283;const cx=(.15+.7*Math.random())*aspect,cy=.15+.7*Math.random();hx=cx+Math.cos(a0)*len*.5;hy=cy+Math.sin(a0)*len*.5;}   // the middle of the silk on screen
-  else{const dl=Math.hypot(place.x,place.y)||1,dx=place.x/dl,dy=place.y/dl;
-    const px=(.1+.8*Math.random())*aspect,py=.1+.8*Math.random();     // a random spot, traced back upwind until just off screen
-    const tx=dx>1e-3?px/dx:dx<-1e-3?(aspect-px)/-dx:1e9,ty=dy>1e-3?py/dy:dy<-1e-3?(1-py)/-dy:1e9,t=Math.min(tx,ty)+.03;
-    hx=px-dx*t;hy=py-dy*t;a0=Math.atan2(dy,dx)+(Math.random()-.5)*.6;}   // head points downwind, the body trails behind (off screen)
-  const pts=[];for(let i=0;i<SILK_M;i++){const x=hx-Math.cos(a0)*seg*i,y=hy-Math.sin(a0)*seg*i;pts.push({x,y,px:x,py:y});}
-  Object.assign(R,{pts,seg,depth,w:(.09+.10*depth)*(.85+.3*Math.random()),ph:Math.random()*6.283,
-    ph0:(Math.random()<.5?0:Math.PI)+(Math.random()-.5)*.35,ck:Math.random()*4,fl:.8+.4*Math.random(),age:0,blow:{x:0,y:0},
-    ent:place?{x:place.x/(Math.hypot(place.x,place.y)||1)*.16,y:place.y/(Math.hypot(place.x,place.y)||1)*.16}:{x:0,y:0}});   // a new silk keeps floating in even if the wind drops
-  return R;}
-function silkInit(){silkRibs=[];
-  for(let r=0;r<SILK_N;r++){const R=silkMake({},r/(SILK_N-1),null);R.ck=r*.7+Math.random();silkRibs.push(R);}}
-function silkField(x,y,t){const X=x/aspect;                          // soft eddies in the air
-  return [ .10*Math.sin(y*3.1+t*.21)+.06*Math.sin(y*5.3+X*2.+t*.33)+.04*Math.cos(X*4.1-t*.17),
-           .08*Math.cos(X*2.7-t*.19)+.05*Math.sin(X*4.9+y*2.3-t*.29)+.03*Math.sin(y*6.1+t*.4)];}
-function silkFrame(dt){
-  if(!silkRibs)silkInit();
-  const live=flow>.3, k=Math.min(dt,1/30)*flow*(.35+timeScale);   // fist → flow eases to 0 → silk slows gradually
-  silkT+=k;
-  // fingers (hands + touch) only make wind — they never grab or shove the silk
-  let gx=0,gy=0,gn=0;const fing=[];
-  const vlim=(vx,vy)=>{const m=Math.hypot(vx,vy),L=3.;return m>L?[vx*L/m,vy*L/m]:[vx,vy];};
-  handInfo.forEach((h,i)=>{if(h.virt||h.fist||!h.pts||!h.pts[1])return;const p=h.pts[1],x=p.x*aspect,y=p.y,pr=silkPrevF['h'+i];
-    let vx=pr?(x-pr.x)/Math.max(dt,.016):0,vy=pr?(y-pr.y)/Math.max(dt,.016):0;silkPrevF['h'+i]={x,y};[vx,vy]=vlim(vx,vy);fing.push({x,y,vx,vy});});
-  for(const [id,p] of pointers){const x=p.x*aspect,y=p.y,pr=silkPrevF['t'+id];
-    let vx=pr?(x-pr.x)/Math.max(dt,.016):0,vy=pr?(y-pr.y)/Math.max(dt,.016):0;silkPrevF['t'+id]={x,y};[vx,vy]=vlim(vx,vy);fing.push({x,y,vx,vy});}
-  if(!handInfo.length)for(const kk in silkPrevF)if(kk[0]==='h')delete silkPrevF[kk];
-  for(const kk in silkPrevF)if(kk[0]==='t'&&!pointers.has(isNaN(+kk.slice(1))?kk.slice(1):+kk.slice(1)))delete silkPrevF[kk];
-  for(const f of fing){const sp=Math.hypot(f.vx,f.vy);if(sp>.15&&live){gx+=f.vx;gy+=f.vy;gn++;}}
-  if(gn){const tx=gx/gn*1.4,ty=gy/gn*1.4,a=Math.min(1,dt*4);         // a stroke sets the wind going its way
-    silkWind.x+=(tx-silkWind.x)*a;silkWind.y+=(ty-silkWind.y)*a;silkGustT=0;}
-  else{silkGustT+=dt;const d=Math.exp(-dt/(silkGustT<1.?4.:1.8));silkWind.x*=d;silkWind.y*=d;}   // then it dies down slowly
-  {const m=Math.hypot(silkWind.x,silkWind.y);if(m>2.2){silkWind.x*=2.2/m;silkWind.y*=2.2/m;}}
-  silkAmbA+=dt*.05*Math.sin(silkT*.07)+dt*.02;                         // a light breeze that slowly changes direction
-  const amb=.035+.02*Math.sin(silkT*.11);
-  const WX=Math.cos(silkAmbA)*amb+silkWind.x,WY=Math.sin(silkAmbA)*amb*.6+silkWind.y,Wm=Math.hypot(WX,WY);
-  {const gm=Math.hypot(silkWind.x,silkWind.y);                          // a real gust carries the silk all the way off — it keeps flying even as the wind drops
-   if(gm>.35&&gn)for(const R of silkRibs){const bm=Math.hypot(R.blow.x,R.blow.y),want=.32;if(bm<want||(R.blow.x*silkWind.x+R.blow.y*silkWind.y)<0){R.blow.x=silkWind.x/gm*want;R.blow.y=silkWind.y/gm*want;}}
-   const bd=Math.exp(-dt/7);for(const R of silkRibs){R.blow.x*=bd;R.blow.y*=bd;}}
-  const SUB=4,ks=k/SUB;
-  for(let sub=0;sub<SUB;sub++){
-  const damp=Math.pow(.99,ks*60);
-  for(const R of silkRibs){const P=R.pts,par=.55+.45*R.depth;      // far silk drifts a little slower (depth)
-    for(let i=0;i<P.length;i++){const q=P[i],u=i/(P.length-1);
-      let vx=(q.x-q.px)*damp,vy=(q.y-q.py)*damp;q.px=q.x;q.py=q.y;
-      const G=silkField(q.x,q.y,silkT*1.2+i*.04+R.ph);
-      let ux=(WX+G[0]*.55)*par*R.fl+R.ent.x+R.blow.x,uy=(WY+G[1]*.55)*par*R.fl+R.ent.y+R.blow.y;          // the air's velocity here
-      if(live)for(const f of fing){const ex=q.x-f.x,ey=q.y-f.y,fa=Math.exp(-(ex*ex+ey*ey)/.06);if(fa>.02){ux+=f.vx*.35*fa;uy+=f.vy*.35*fa;}}   // a little stronger gust right by the finger
-      const cd=i===0?.16:.05+.04*(1-u);                                   // the leading edge catches the air most → the rest streams behind it
-      if(i>0){const a=P[i-1],tx=q.x-a.x,ty=q.y-a.y,tl=Math.hypot(tx,ty)||1;   // silk in moving air: a wave runs down it from the leading edge
-        const Af=(.12+.5*Math.min(Wm,1.5))*R.fl*Math.pow(u,.7)*Math.sin(u*8.5-silkFlap*1.6+R.ph);ux+=-ty/tl*Af;uy+=tx/tl*Af;}
-      vx+=(ux*ks-vx)*cd;vy+=(uy*ks-vy)*cd;
-      const sp=Math.hypot(vx,vy),cap=R.seg*.45;if(sp>cap){vx*=cap/sp;vy*=cap/sp;}
-      q.x+=vx;q.y+=vy;}
-    // a continuous ribbon: length constraints + smoothing (no kinks, no folds)
-    for(let it=0;it<4;it++){
-      for(let i=1;i<P.length;i++){const a=P[i-1],b=P[i],ex=b.x-a.x,ey=b.y-a.y,d=Math.hypot(ex,ey)||1e-6,c=(d-R.seg)/d;
-        if(i===1){b.x-=ex*c;b.y-=ey*c;}else{a.x+=ex*c*.25;a.y+=ey*c*.25;b.x-=ex*c*.75;b.y-=ey*c*.75;}}
-      for(let i=1;i<P.length-1;i++){const a=P[i-1],b=P[i],c=P[i+1];
-        const ux=b.x-a.x,uy=b.y-a.y,wx=c.x-b.x,wy=c.y-b.y,cs=(ux*wx+uy*wy)/((Math.hypot(ux,uy)*Math.hypot(wx,wy))||1e-9);
-        const kb=cs<.8?.45:.05;                                              // gentle curves stay, sharp bends are eased out
-        b.x+=(a.x+c.x-2*b.x)*kb;b.y+=(a.y+c.y-2*b.y)*kb;}}
-  }}
-  // blown off screen → a new silk drifts in from where the wind comes from
-  const mg=.08;
-  for(const R of silkRibs){R.age+=dt;const ed=Math.exp(-dt/5);R.ent.x*=ed;R.ent.y*=ed;if(R.age<3)continue;let out=true;for(const q of R.pts)if(q.x>-mg&&q.x<aspect+mg&&q.y>-mg&&q.y<1+mg){out=false;break;}
-    if(out){const ck=R.ck,dir=Wm>.01?{x:WX,y:WY}:{x:Math.cos(silkAmbA),y:Math.sin(silkAmbA)};silkMake(R,R.depth,dir);R.ck=ck+1.3;}}
-  silkWide=1+.25*Math.min(Wm,1.2);                                     // stronger wind → the silk flutters a little wider
-  silkFlap+=dt*(1.5+5*Math.min(Wm,1.2))*flow;
-  // ---- build triangle strips ----
-  let o=0;
-  for(const R of silkRibs){const P=R.pts,M=P.length;
-    for(let i=0;i<M;i++){const a=P[Math.max(0,i-1)],b=P[Math.min(M-1,i+1)];let tx=b.x-a.x,ty=b.y-a.y;const tl=Math.hypot(tx,ty)||1;tx/=tl;ty/=tl;
-      const u=i/(M-1);
-      const th=R.ph0+.18*Math.sin(silkT*.2+u*2.4+R.ph);                                    // lies open, only breathes — never twists over
-      const c=Math.cos(th),sn=Math.sin(th);
-      const w=R.w*silkWide*Math.pow(Math.sin(Math.PI*Math.min(1,u*1.06+.02)),.55)*(.85+.15*Math.sin(u*7+silkT*.4+R.ph));
-      let ww=w*(.25+.75*Math.abs(c));
-      const nx=-ty,ny=tx;
-      let wav=(.022+.02*(silkWide-1)*3)*Math.sin(u*7.5-silkT*1.3-silkFlap*1.0+R.ph)*Math.pow(u,.6)*Math.sin(Math.PI*Math.min(1,u*.9+.1));   // flutter runs to the trailing end
-      if(i>0&&i<M-1){const p0=P[i-1],p1=P[i],p2=P[i+1],ux=p1.x-p0.x,uy=p1.y-p0.y,vx2=p2.x-p1.x,vy2=p2.y-p1.y;   // the inside of a bend must not cross over
-        const turn=Math.abs(Math.atan2(ux*vy2-uy*vx2,ux*vx2+uy*vy2))+1e-4,rad=R.seg/turn,lim=rad*.72;
-        if(ww*.5+Math.abs(wav)>lim){const s2=lim/(ww*.5+Math.abs(wav));ww*=s2;wav*=s2;}}
-      for(const sd of [-1,1]){const x=P[i].x+nx*(ww*sd*.5+wav),y=P[i].y+ny*(ww*sd*.5+wav);
-        silkData.set([x/aspect,y,u,sd,c,sn,tx,ty],o);o+=8;}}}
-  // ---- draw ----
-  const pal=SILKS[silkName].map(hex2rgb),drift=silkT*.012;
-  let u2=use('silkBg',[0,0]);gl.uniform3fv(u2.c1,new Float32Array(silkCol(drift)));gl.uniform3fv(u2.c2,new Float32Array(silkCol(drift+2)));
-  gl.uniform1f(u2.time,silkT);gl.uniform1f(u2.aspect,aspect);blit(null);
-  gl.useProgram(SILKP.p);gl.bindVertexArray(silkVAO);gl.bindBuffer(gl.ARRAY_BUFFER,silkVBO);gl.bufferSubData(gl.ARRAY_BUFFER,0,silkData);
-  gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE_MINUS_SRC_ALPHA);
-  const la=silkT*.07,L=[Math.cos(la)*.45,.55+.15*Math.sin(la*.7),.70],ll=Math.hypot(...L);gl.uniform3f(SILKP.u.Ldir,L[0]/ll,L[1]/ll,L[2]/ll);
-  gl.uniform1f(SILKP.u.time,silkT);
-  silkRibs.forEach((R,r)=>{const ca=silkCol(R.ck+drift),cb=silkCol(R.ck+.9+drift);         // colours drift very slowly
-    gl.uniform3f(SILKP.u.colA,...ca);gl.uniform3f(SILKP.u.colB,...cb);
-    gl.uniform1f(SILKP.u.alpha,.72+.22*R.depth);gl.uniform1f(SILKP.u.far,1-R.depth);gl.uniform1f(SILKP.u.seedR,R.ph);
-    gl.drawArrays(gl.TRIANGLE_STRIP,r*SILK_M*2,SILK_M*2);});
-  gl.disable(gl.BLEND);gl.bindVertexArray(vao);
-}
-
 /* ================= Cloud mode: clouds and mist that form, drift, merge and thin out ================= */
-const CLOUDS={
-  'Mist':      {top:'#AEBBCB',bot:'#E4E9EF',lit:'#FFFFFF',shd:'#B9C4D2',sun:'#FFFFFF',sunP:[.7,.85],cov:.66,soft:.50,sc:2.0,spd:.010,warp:1.1,al:.70,relax:.30},
-  'Dream Cloud':{top:'#8FB2F5',bot:'#F4D3E6',lit:'#FFF7FB',shd:'#C2AEE3',sun:'#FFE8F2',sunP:[.25,.8],cov:.62,soft:.28,sc:2.8,spd:.018,warp:1.6,al:1.0,relax:.40},
-  'Twilight':  {top:'#231845',bot:'#E58AA6',lit:'#FFC4D2',shd:'#4C2F6E',sun:'#FFB27A',sunP:[.55,.18],cov:.55,soft:.20,sc:3.0,spd:.014,warp:2.0,al:1.0,relax:.35},
-  'Moonlight': {top:'#03060F',bot:'#0E1C36',lit:'#93AEDB',shd:'#121C33',sun:'#CFE0FF',sunP:[.72,.82],cov:.47,soft:.24,sc:2.6,spd:.008,warp:1.5,al:.72,relax:.28}};
 const NEB_STY={cov:.573,soft:.34,sc:2.5,spd:.016,warp:1.15,al:1.0,relax:.40};
 // colour tones for the Cloud cosmos: [name, 6 colour stops, background, mode(0 glow / 1 watercolour), brightness, saturation, rim]
 const NEB_TONES=[
@@ -1492,7 +1103,7 @@ function cloudFrame(dt){
 }
 
 /* ================= Water mode (lake) ================= */
-let mode='paint'; try{const m=localStorage.getItem('hf-mode');if(m==='water'||m==='wave'||m==='halo'||m==='light'||m==='silk'||m==='cloud'||m==='ink'||m==='splash'||m==='cosmos')mode=m;}catch(e){}
+let mode='paint'; try{const m=localStorage.getItem('hf-mode');if(m==='water'||m==='halo'||m==='light'||m==='cloud'||m==='ink')mode=m;}catch(e){}
 let waterTime=0, wAcc=0, dropClock=0, glideClock=0; const gliders=[];
 const W_C=250, W_H=1/540, W_NK=.24, SUN=(()=>{const v=[.12,.82,.56],l=Math.hypot(...v);return v.map(x=>x/l);})();
 // strength budget: however hard and often the water is struck, it never gets rougher than ~3 plops at once
@@ -1506,30 +1117,6 @@ function waterPoke(x,y,amp,r,bw,minK){const I=Math.abs(amp)*r*(bw==null?1:bw);  
 function waterStep(){const u=use('waterStep',[wat.r.tx,wat.r.ty]);gl.uniform1i(u.uT,wat.r.bind(0));
   gl.uniform1f(u.c2,W_C*W_C);gl.uniform1f(u.sm,wSmooth);gl.uniform1f(u.damp,Math.exp(-(.55+wExtra)*W_H));gl.uniform1f(u.w2,4.);gl.uniform1f(u.hs,W_H);
   gl.uniform1f(u.aspect,aspect);gl.uniform2f(u.tilt,-motionF[0]*.35,-motionF[1]*.35);blit(wat.w);wat.swap();}
-/* ---- 손 담그기: dipping a hand into the water ---- */
-let dipMode=false;   // 손 담그기 removed from the menu: always off
-const dips=new Map();                 // id → {x,y,t0,depth,on,r,entered}
-const DIP_MAX=.16;
-function dipStart(id,x,y,r){dips.set(id,{x,y,t0:performance.now(),depth:0,on:true,r,entered:false});}
-function dipMove(id,x,y){const d=dips.get(id);if(d&&d.on){d.x+=(x-d.x)*.5;d.y+=(y-d.y)*.5;}}
-function dipEnd(id){const d=dips.get(id);if(d)d.on=false;}
-function waterPress(x,y,depth,r){const u=use('waterPress',[wat.r.tx,wat.r.ty]);gl.uniform1i(u.uT,wat.r.bind(0));
-  gl.uniform1f(u.aspect,aspect);gl.uniform2f(u.point,x,y);gl.uniform1f(u.depth,depth);gl.uniform1f(u.k,.35);gl.uniform1f(u.radius,r*(aspect>1?aspect:1));blit(wat.w);wat.swap();}
-function updateDips(dt){
-  const now=performance.now();
-  for(const [id,d] of dips){
-    if(d.on){
-      if(!d.entered){d.entered=true;waterPoke(d.x,d.y,WATER_AMP*1.0,d.r*.35);}            // touching the surface: first ring
-      const hold=(now-d.t0)/1000;
-      const target=DIP_MAX*(1-Math.exp(-hold/1.1));                                       // short = a light touch, long = deep
-      d.depth+=(target-d.depth)*Math.min(1,dt*5);
-    } else {                                                                              // hand lifted: the hollow refills on its own → rings spread
-      dips.delete(id);
-    }
-  }
-}
-const wTip={}, wWind=[{x:.5,y:.5,dx:0,dy:1,k:0,px:null,py:null},{x:.5,y:.5,dx:0,dy:1,k:0,px:null,py:null}];
-const windBuf=new Float32Array(8), windK=new Float32Array(2);
 /* ---- Ripple input: "퐁당" — every new contact drops ONE small stone; moving only leaves a faint wake ---- */
 // pond-style plop: a finger-wide push → a clear lens dome that magnifies the floor, then one broad ring spreading out
 // 퐁당 크기 slider
@@ -1564,6 +1151,8 @@ function whirlFrame(dt,live){
     w.phi+=w.spin*dt*.85;const ro=w.R*.62;                                    // inner water turns a little slower than the hand
     for(let k=0;k<3;k++){const ph=w.phi+k*2.094;
       waterPoke(w.cx+Math.cos(ph)*ro/aspect,w.cy+Math.sin(ph)*ro,WATER_AMP*.3*w.whirl,.0009,.2,.6);}}}
+function waterPress(x,y,depth,r){const u=use('waterPress',[wat.r.tx,wat.r.ty]);gl.uniform1i(u.uT,wat.r.bind(0));
+  gl.uniform1f(u.aspect,aspect);gl.uniform2f(u.point,x,y);gl.uniform1f(u.depth,depth);gl.uniform1f(u.k,.35);gl.uniform1f(u.radius,r*(aspect>1?aspect:1));blit(wat.w);wat.swap();}
 function whirlPress(){for(const w of wakes.values())if(!w.up&&w.depth>.004){const r=Math.max(.035,w.R*.55);waterPress(w.cx,w.cy,w.depth,r*r);}}
 let WHIRL_D=.12;const swlBuf=new Float32Array(16);
 function wakeEnd(id){const w=wakes.get(id);if(w&&w.whirl>.02){w.up=true;w.spin*=.8;}else wakes.delete(id);}   // let go: the swirl unwinds for a moment
@@ -1573,7 +1162,6 @@ function waterFrame(dt){
   const sdt=dt*flow*wts; waterTime+=sdt;
   wExtra=Math.max(0,wBudget/(W_BCAP*wCapK)-.8)*1.5;wSmooth=Math.min(.06,Math.max(0,wBudget/(W_BCAP*wCapK)-.3)*.12); wBudget*=Math.exp(-(.3+wExtra*.5)*sdt);   // rough water settles faster
   const live=flow>.3;
-  if(dipMode){queue.length=0;plops.length=0;updateDips(dt);}
   if(plops.length){const n=plops.length,kk=1/Math.sqrt(n);            // many stones at once: each a little softer, total energy stays calm
     const ps=plopScale;
     if(live)for(const p of plops){const ek=waterPoke(p.x,p.y,WATER_AMP*PLOP_A*p.k*kk*Math.pow(ps,-.4),PLOP_R*ps*ps,.4,.8);   // 탭은 매번 또렷하게: 예산에 가볍게 계산, 많이 쳐도 80% 이상   // 퐁당 크기: wider push, a little gentler per area
@@ -1593,22 +1181,20 @@ function waterFrame(dt){
     waterPoke(s.x,s.y,Math.min((s.hand?.3:.15)+sp*(s.hand?1.25:1),3.2)*(main?WATER_AMP:WATER_AMP*.7)*(s.vOnly?.5:1)*hk,main?.0007:.00045,s.hand?.3:1);}   // hands stir clearly (only lightly counted against the calm-water budget)
   // pointing → wake travelling the way the finger points
   glideClock+=dt;
-  if(dipMode)gliders.length=0;
-  for(const h of handInfo){const p=h.point;if(!p||!live||dipMode)continue;
+  for(const h of handInfo){const p=h.point;if(!p||!live)continue;
     if(glideClock>.06){gliders.push({x:p.x,y:p.y,dx:p.dx,dy:p.dy,life:1.8});}}
   if(glideClock>.06)glideClock=0;
   for(let i=gliders.length-1;i>=0;i--){const g=gliders[i];g.life-=sdt;
     g.x+=g.dx/aspect*.30*sdt;g.y+=g.dy*.30*sdt;
     if(g.life<=0||g.x<-.05||g.x>1.05||g.y<-.05||g.y>1.05){gliders.splice(i,1);continue;}
     if(live)waterPoke(g.x,g.y,WATER_AMP*.22*Math.min(1,g.life),.0004);}
-  if(!dipMode)whirlFrame(sdt,live);
+  whirlFrame(sdt,live);
   // a calm lake: now and then a tiny drop / fish rise
   updateRain(dt*flow);
   dropClock-=sdt; if(dropClock<0){dropClock=1.8+Math.random()*3.5;waterPoke(Math.random(),Math.random(),WATER_AMP*(.4+Math.random()*.5),.00012);}
   // wave equation sub-steps
   wAcc+=sdt; let n=0; while(wAcc>=W_H&&n<30){
-    if(dipMode&&live)for(const d of dips.values())if(d.on)waterPress(d.x,d.y,d.depth,d.r);   // the hand holds the water down
-    if(!dipMode&&live)whirlPress();
+    if(live)whirlPress();
     waterStep();wAcc-=W_H;n++;} if(n>=30)wAcc=0;
   let u=use('waterGrad',[wat.r.tx,wat.r.ty]);gl.uniform1i(u.uT,wat.r.bind(0));blit(wgrad);
   {const K=.8,lim=.5,tx=gyroOn?Math.max(-lim,Math.min(lim,viewTilt[0]*K)):0,ty=gyroOn?Math.max(-lim,Math.min(lim,viewTilt[1]*K)):0,r=1-Math.exp(-dt*3);   // tilt = look around the lake (bounded, like Cloud)
@@ -1621,140 +1207,6 @@ function waterFrame(dt){
   {const tx=Math.max(-.6,Math.min(.6,viewTilt[0])),ty=Math.max(-.6,Math.min(.6,viewTilt[1]));gl.uniform2f(u.viewT,tx,ty);
    const sx=SUN[0]-tx*.55,sy=SUN[1]-ty*.55,sz=SUN[2],l=Math.hypot(sx,sy,sz);gl.uniform3f(u.sunDir,sx/l,sy/l,sz/l);}   // light swings the other way
   blit(null);
-}
-/* ================= Wave mode: the phone is a closed aquarium ================= */
-// shallow-water equations on a staggered grid (CPU): depth h per cell, velocities on cell edges, the screen edges are glass walls
-const WV={NY:100,NX:0,G:6.75,H0:.09,TK:1.0,SK:.6};
-let wvMx=new Float32Array(512),wvMy=new Float32Array(512),wvH=null,wvU,wvV,wvF,wvW,wvSp,wvS,wvT,wvFx,wvFy,wvBuf,wvTex=null,wvTime=0,wvRef=null,wvAmb=0,wvLin=[0,0];
-let waveG=[0,0],waveLin=[0,0],waveMotionT=0;
-const spray=[];
-const waveDims=()=>{const NY=Math.round(Math.min(110,Math.max(60,Math.sqrt(5200/aspect))));return [Math.max(24,Math.round(NY*aspect)),NY];};   // ~5000 cells on any screen shape
-function waveInit(){const [NX,NY]=waveDims(),N=NX*NY;WV.NX=NX;WV.NY=NY;
-  wvH=new Float32Array(N);for(let j=0;j<NY;j++)for(let i=0;i<NX;i++)wvH[j*NX+i]=WV.H0*(1+.06*Math.sin(i*.31+j*.17)*Math.sin(j*.23-i*.11+1.));wvU=new Float32Array((NX+1)*NY);wvV=new Float32Array(NX*(NY+1));
-  wvF=new Float32Array(N);wvW=new Float32Array(N).fill(1);wvSp=new Float32Array(N);wvS=new Float32Array(N);wvT=new Float32Array(N);
-  wvFx=new Float32Array((NX+1)*NY);wvFy=new Float32Array(NX*(NY+1));wvBuf=new Float32Array(N*4);
-  if(!wvTex)wvTex=gl.createTexture();
-  gl.bindTexture(gl.TEXTURE_2D,wvTex);
-  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
-  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA16F,NX,NY,0,gl.RGBA,gl.FLOAT,null);
-  spray.length=0;wvRef=null;}
-function waveStep(dt,ax,ay){
-  const NX=WV.NX,NY=WV.NY,G=WV.G,lx=aspect/NX,ly=1/NY,h=wvH,u=wvU,v=wvV,Fx=wvFx,Fy=wvFy,S=wvS,E=.0004,vmax=.45*Math.min(lx,ly)/dt,VI=Math.min(.2,.0008*dt/(lx*lx)),VJ=Math.min(.2,.0008*dt/(ly*ly));
-  for(let j=0;j<NY;j++){const r=j*NX,ru=j*(NX+1);                      // x momentum (interior edges)
-    for(let i=1;i<NX;i++){const k=ru+i,hl=h[r+i-1],hr=h[r+i];
-      if(hl<E&&hr<E){u[k]=0;Fx[k]=0;continue;}
-      let uu=u[k]+dt*(-G*(hr-hl)/lx+ax*wvMx[j]);
-      if(j>0&&j<NY-1)uu+=VI*(u[k-1]+u[k+1]-2*uu)+VJ*(u[k-NX-1]+u[k+NX+1]-2*uu);   // a little viscosity: rounded swells, not razor fronts
-      if((hl<E&&uu>0)||(hr<E&&uu<0))uu=0;                                 // nothing flows out of a dry cell
-      const hm=Math.max(.5*(hl+hr),.003);
-      uu/=1+dt*(.06+.004*Math.abs(uu)/hm);                                 // light damping + bottom friction in the shallows
-      if(uu>vmax)uu=vmax;else if(uu<-vmax)uu=-vmax;
-      u[k]=uu;Fx[k]=uu*(uu>0?hl:hr);}}
-  for(let j=1;j<NY;j++){const r0=(j-1)*NX,r1=j*NX;                     // y momentum
-    for(let i=0;i<NX;i++){const k=r1+i,hb=h[r0+i],ht=h[r1+i];
-      if(hb<E&&ht<E){v[k]=0;Fy[k]=0;continue;}
-      let vv=v[k]+dt*(-G*(ht-hb)/ly+ay*wvMy[i]);
-      if(i>0&&i<NX-1)vv+=VI*(v[k-1]+v[k+1]-2*vv)+VJ*(v[k-NX]+v[k+NX]-2*vv);
-      if((hb<E&&vv>0)||(ht<E&&vv<0))vv=0;
-      const hm=Math.max(.5*(hb+ht),.003);
-      vv/=1+dt*(.06+.004*Math.abs(vv)/hm);
-      if(vv>vmax)vv=vmax;else if(vv<-vmax)vv=-vmax;
-      v[k]=vv;Fy[k]=vv*(vv>0?hb:ht);}}
-  for(let j=0;j<NY;j++)for(let i=0;i<NX;i++){const c=j*NX+i,ku=j*(NX+1)+i;   // never take out more water than a cell holds
-    const out=(Math.max(Fx[ku+1],0)+Math.max(-Fx[ku],0))/lx+(Math.max(Fy[c+NX],0)+Math.max(-Fy[c],0))/ly;
-    S[c]=out*dt>h[c]?h[c]/(out*dt):1;}
-  for(let j=0;j<NY;j++){const r=j*NX,ru=j*(NX+1);for(let i=1;i<NX;i++){const k=ru+i;Fx[k]*=Fx[k]>0?S[r+i-1]:S[r+i];}}
-  for(let j=1;j<NY;j++){const r=j*NX;for(let i=0;i<NX;i++){const k=r+i;Fy[k]*=Fy[k]>0?S[k-NX]:S[k];}}
-  for(let j=0;j<NY;j++)for(let i=0;i<NX;i++){const c=j*NX+i,ku=j*(NX+1)+i;
-    const hn=h[c]+dt*((Fx[ku]-Fx[ku+1])/lx+(Fy[c]-Fy[c+NX])/ly);h[c]=hn>0?hn:0;}
-}
-function wavePost(dt){
-  const NX=WV.NX,NY=WV.NY,G=WV.G,lx=aspect/NX,ly=1/NY,h=wvH,u=wvU,v=wvV,F=wvF,T=wvT;
-  for(let j=0;j<NY;j++)for(let i=0;i<NX;i++){const c=j*NX+i,ku=j*(NX+1)+i,hc=h[c];
-    const uc=.5*(u[ku]+u[ku+1]),vc=.5*(v[c]+v[c+NX]),sp=Math.hypot(uc,vc);wvSp[c]=sp;
-    if(hc<.0015){F[c]*=Math.exp(-dt*3);continue;}
-    const div=(u[ku+1]-u[ku])/lx+(v[c+NX]-v[c])/ly, fr=sp/(Math.sqrt(G*hc)+.05);
-    let gen=Math.max(0,-div-15)*.02+Math.max(0,fr-.9)*.8;          // water piling up fast / running faster than its own waves → breaks white
-    if(hc<.02&&hc>.0015)gen+=sp*.45;                                              // swash running over the sand
-    F[c]+=gen*dt;}
-  // walls: water slamming into the glass → white water + spray
-  const wall=(c,a,nx,ny,x,y,tx,ty)=>{const hc=h[c];if(a<.08||hc<.008)return;
-    F[c]+=dt*(a-.08)*9;
-    let n=dt*260*(a-.15)*Math.min(hc/WV.H0,2.5);
-    while(n>0&&spray.length<SPRAY_MAX){if(n<1&&Math.random()>n)break;n-=1;
-      const r=Math.random(),vin=(.15+.55*Math.random())*a+.06,vt=(Math.random()-.5)*.5*a;
-      spray.push({x:x+(Math.random()-.5)*tx,y:y+(Math.random()-.5)*ty,z:.002,vx:nx*vin+tx/lx*vt*lx,vy:ny*vin+ty/ly*vt*ly,vz:(.45+.95*Math.random())*a*1.15,s:.4+r*r*1.2});}};
-  for(let j=0;j<NY;j++){const r=j*NX,ru=j*(NX+1),y=(j+.5)*ly;
-    wall(r,Math.max(-u[ru+1],-u[ru+2]),1,0,lx*.5,y,0,ly);wall(r+NX-1,Math.max(u[ru+NX-1],u[ru+NX-2]),-1,0,aspect-lx*.5,y,0,ly);}
-  for(let i=0;i<NX;i++){const x=(i+.5)*lx;
-    wall(i,Math.max(-v[NX+i],-v[2*NX+i]),0,1,x,ly*.5,lx,0);wall((NY-1)*NX+i,Math.max(v[(NY-1)*NX+i],v[(NY-2)*NX+i]),0,-1,x,1-ly*.5,lx,0);}
-  // foam drifts with the water and slowly fades
-  for(let j=0;j<NY;j++)for(let i=0;i<NX;i++){const c=j*NX+i,ku=j*(NX+1)+i;
-    const uc=.5*(u[ku]+u[ku+1]),vc=.5*(v[c]+v[c+NX]);
-    let x=i-uc*dt/lx,y=j-vc*dt/ly;x=x<0?0:x>NX-1?NX-1:x;y=y<0?0:y>NY-1?NY-1:y;
-    const i0=x|0,j0=y|0,i1=Math.min(i0+1,NX-1),j1=Math.min(j0+1,NY-1),fx=x-i0,fy=y-j0;
-    const a=F[j0*NX+i0]+(F[j0*NX+i1]-F[j0*NX+i0])*fx,b=F[j1*NX+i0]+(F[j1*NX+i1]-F[j1*NX+i0])*fx;
-    T[c]=Math.min(1.6,(a+(b-a)*fy)*Math.exp(-dt/2.2));}
-  F.set(T);
-  for(let c=0;c<NX*NY;c++){if(h[c]>.002)wvW[c]=1;else wvW[c]*=Math.exp(-dt/7);}   // sand stays dark where water just was
-}
-function sprayStep(dt){const NX=WV.NX,NY=WV.NY;
-  for(let k=spray.length-1;k>=0;k--){const d=spray[k];
-    d.x+=d.vx*dt;d.y+=d.vy*dt;d.z+=d.vz*dt;d.vz-=4.5*dt;
-    if(d.x<0){d.x=0;d.vx=-d.vx*.3;}else if(d.x>aspect){d.x=aspect;d.vx=-d.vx*.3;}
-    if(d.y<0){d.y=0;d.vy=-d.vy*.3;}else if(d.y>1){d.y=1;d.vy=-d.vy*.3;}
-    if(d.z<=0){const i=Math.min(NX-1,d.x/aspect*NX|0),j=Math.min(NY-1,d.y*NY|0);wvF[j*NX+i]=Math.min(1.6,wvF[j*NX+i]+.12*d.s);spray.splice(k,1);}}}
-function drawSpray(){const n=spray.length;if(!n)return;
-  for(let k=0;k<n;k++){const d=spray[k],o=k*4;sprayData[o]=d.x/aspect;sprayData[o+1]=d.y;
-    sprayData[o+2]=Math.min(18,(1.3+d.z*42)*d.s)*dpr*(QS>.999?1:QS);sprayData[o+3]=Math.min(.9,d.vz>0?.85:.45+d.z*10);}
-  bindScreen();gl.useProgram(SPRAYP);gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE_MINUS_SRC_ALPHA);
-  gl.bindVertexArray(sprayVAO);gl.bindBuffer(gl.ARRAY_BUFFER,sprayVBO);gl.bufferSubData(gl.ARRAY_BUFFER,0,sprayData,0,n*4);
-  gl.drawArrays(gl.POINTS,0,n);gl.bindVertexArray(vao);gl.disable(gl.BLEND);}
-function wavePush(x,y,vx,vy,R,k){           // a hand / finger moving through the water drags it along
-  const NX=WV.NX,NY=WV.NY,lx=aspect/NX,ly=1/NY,u=wvU,v=wvV;
-  let sx=vx*aspect,sy=vy;const m=Math.hypot(sx,sy);if(m>2.2){sx*=2.2/m;sy*=2.2/m;}
-  const px=x*aspect,py=y,R2=R*R,i0=Math.max(1,Math.floor((px-2*R)/lx)),i1=Math.min(NX-1,Math.ceil((px+2*R)/lx)),j0=Math.max(1,Math.floor((py-2*R)/ly)),j1=Math.min(NY-1,Math.ceil((py+2*R)/ly));
-  for(let j=Math.max(0,j0-1);j<=Math.min(NY-1,j1);j++)for(let i=i0;i<=i1;i++){const ex=i*lx-px,ey=(j+.5)*ly-py,w=Math.exp(-(ex*ex+ey*ey)/R2)*k;
-    if(w>.002){const q=j*(NX+1)+i;u[q]+=(sx-u[q])*w;}}
-  for(let j=j0;j<=j1;j++)for(let i=Math.max(0,i0-1);i<=Math.min(NX-1,i1);i++){const ex=(i+.5)*lx-px,ey=j*ly-py,w=Math.exp(-(ex*ex+ey*ey)/R2)*k;
-    if(w>.002){const q=j*NX+i;v[q]+=(sy-v[q])*w;}}}
-function wavePoke(x,y,a){                  // a tap: water pushed outward → a ring
-  const NX=WV.NX,NY=WV.NY,lx=aspect/NX,ly=1/NY,px=x*aspect,py=y,R=.035;
-  for(let j=0;j<NY;j++)for(let i=1;i<NX;i++){const ex=i*lx-px,ey=(j+.5)*ly-py,d=Math.hypot(ex,ey);if(d>3*R||d<1e-5)continue;
-    wvU[j*(NX+1)+i]+=ex/d*a*(d/R)*Math.exp(-d*d/(R*R));}
-  for(let j=1;j<NY;j++)for(let i=0;i<NX;i++){const ex=(i+.5)*lx-px,ey=j*ly-py,d=Math.hypot(ex,ey);if(d>3*R||d<1e-5)continue;
-    wvV[j*NX+i]+=ey/d*a*(d/R)*Math.exp(-d*d/(R*R));}}
-function waveForce(dt){                    // tilt (relative to how the phone is held) + shake (the water lags behind the phone)
-  let ax=0,ay=0;const live=gyroOn&&performance.now()-waveMotionT<600;
-  const lk=Math.min(1,dt*18);wvLin[0]+=(waveLin[0]-wvLin[0])*lk;wvLin[1]+=(waveLin[1]-wvLin[1])*lk;
-  if(live){if(!wvRef)wvRef=waveG.slice();const rk=Math.min(1,dt/7);wvRef[0]+=(waveG[0]-wvRef[0])*rk;wvRef[1]+=(waveG[1]-wvRef[1])*rk;
-    ax=(waveG[0]-wvRef[0])*WV.TK+wvLin[0]*WV.SK;ay=(waveG[1]-wvRef[1])*WV.TK+wvLin[1]*WV.SK;}
-  else wvRef=null;
-  wvAmb+=dt;const am=live?.012:.05;                                      // a gentle swell so the tank is never dead still
-  ax+=am*Math.sin(wvAmb*.53)+am*.5*Math.sin(wvAmb*1.31+1.);ay+=am*.8*Math.sin(wvAmb*.41+2.)+am*.4*Math.sin(wvAmb*1.07);
-  const m=Math.hypot(ax,ay);if(m>1.3){ax*=1.3/m;ay*=1.3/m;}
-  return [ax*WV.G,ay*WV.G];}
-function waveFrame(dt){
-  if(!wvH||WV.NX!==waveDims()[0])waveInit();
-  const sdt=Math.min(dt,1/30)*flow;wvTime+=sdt;
-  for(const s of queue.splice(0)){if(flow<.3||s.vOnly||s.vx==null)continue;
-    wavePush(s.x,s.y,s.vx,s.vy,s.hand?.045:.04,s.hand?(s.set>.6?.22:.1):.3);}
-  if(sdt>0){const [ax,ay]=waveForce(sdt);
-    let hm=0,um=0;for(let c=0;c<wvH.length;c++)if(wvH[c]>hm)hm=wvH[c];
-    for(let c=0;c<wvU.length;c++){const a=Math.abs(wvU[c]);if(a>um)um=a;}for(let c=0;c<wvV.length;c++){const a=Math.abs(wvV[c]);if(a>um)um=a;}
-    {const t=wvTime;for(let j=0;j<WV.NY;j++)wvMx[j]=1+.24*Math.sin(j*.083+t*.61+1.3)+.13*Math.sin(j*.197-t*1.07+4.);   // the push is never perfectly even → fronts bend
-     for(let i=0;i<WV.NX;i++)wvMy[i]=1+.24*Math.sin(i*.091-t*.53+2.1)+.13*Math.sin(i*.213+t*.97);}
-    const lmin=Math.min(aspect/WV.NX,1/WV.NY),dtMax=.55*lmin/(Math.sqrt(WV.G*hm)+um+.01),n=Math.min(16,Math.ceil(sdt/dtMax)),h=sdt/n;
-    for(let k=0;k<n;k++)waveStep(h,ax,ay);
-    wavePost(sdt);sprayStep(sdt);}
-  const N=WV.NX*WV.NY,B=wvBuf;for(let c=0;c<N;c++){const o=c*4;B[o]=wvH[c];B[o+1]=wvF[c];B[o+2]=wvW[c];B[o+3]=wvSp[c];}
-  gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,wvTex);gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,WV.NX,WV.NY,gl.RGBA,gl.FLOAT,B);
-  const u=use('waveRender',[1/WV.NX,1/WV.NY]);gl.uniform1i(u.uW,0);gl.uniform2f(u.simTexel,1/WV.NX,1/WV.NY);
-  gl.uniform1f(u.aspect,aspect);gl.uniform1f(u.time,wvTime);
-  {const tx=Math.max(-.6,Math.min(.6,viewTilt[0])),ty=Math.max(-.6,Math.min(.6,viewTilt[1]));gl.uniform2f(u.viewT,tx,ty);
-   const sx=SUN[0]-tx*.55,sy=SUN[1]-ty*.55,sz=SUN[2],l=Math.hypot(sx,sy,sz);gl.uniform3f(u.sunDir,sx/l,sy/l,sz/l);}
-  blit(null);drawSpray();
 }
 /* ================= Halo mode: a ring of light wrapped in smoke above a field of water beads ================= */
 // the ring is a 3D body (position, velocity, orientation, spin) with a soft elastic rim; smoke is the shared fluid; the beads mirror the ring
@@ -2028,103 +1480,6 @@ function updateRain(dt){
 }
 let floorType=2; try{const v=parseInt(localStorage.getItem('hf-floor4'));if(v>=0&&v<=3)floorType=v;}catch(e){}
 
-/* ================= Wall splashes: droplets that leap off the walls ================= */
-const drops=[]; const MAX_DROPS=320;
-let edgeTick=0, canRead=true; const edgeCool={};
-const rbuf={}; function rd(fb,x,y,w,h){const n=w*h*4;let b=rbuf[n];if(!b)b=rbuf[n]=new Float32Array(n);
-  gl.bindFramebuffer(gl.FRAMEBUFFER,fb.f);gl.readPixels(x,y,w,h,gl.RGBA,gl.FLOAT,b);return b;}
-// walls: 0 left,1 right,2 bottom,3 top  (inward normal in uv)
-const WALLN=[[1,0],[-1,0],[0,1],[0,-1]];
-function spawnDrop(wall,t,strength,col,water){
-  return;                                         // droplets removed (요청에 따라 방울 튀김 없음)
-  if(drops.length>=MAX_DROPS)return;
-  const [nx,ny]=WALLN[wall];
-  const x=wall<2?(wall===0?.004:.996):t, y=wall<2?t:(wall===2?.004:.996);
-  const st=Math.min(strength,3),sp=(.06+Math.random()*.22)*(.7+.35*st), side=(Math.random()-.5)*.8*sp;
-  drops.push({x,y,z:.002,vx:(nx*sp+(wall<2?0:side))/aspect,vy:ny*sp+(wall<2?side:0),
-    vz:(.30+Math.random()*.55)*(.7+.3*st),r:(.0025+Math.pow(Math.random(),2)*.008)*(water?1:1.2),c:col,water,life:3});
-}
-function edgeSplash(dt){
-  if(!canRead||flow<.3)return;
-  if((++edgeTick)%3)return;
-  try{
-    if(mode==='water'){
-      const f=wat.r,W=f.w,Hh=f.h;
-      const strips=[rd(f,1,0,1,Hh),rd(f,W-2,0,1,Hh),rd(f,0,1,W,1),rd(f,0,Hh-2,W,1)];
-      strips.forEach((b,wall)=>{const n=b.length/4;
-        for(let i=2;i<n-2;i+=2){const v=b[i*4+1],h=b[i*4];const key='w'+wall+'_'+(i>>2);
-          if((edgeCool[key]||0)>performance.now())continue;
-          if(v>SPLASH_V&&h>0){edgeCool[key]=performance.now()+140;
-            const k=Math.min(3,(v-SPLASH_V)/SPLASH_V);const cnt=1+Math.floor(k*2.5+Math.random());
-            for(let q=0;q<cnt;q++)spawnDrop(wall,(i+Math.random()*2)/n,k,null,true);}}});
-    } else {
-      const f=vel.r,W=f.w,Hh=f.h,d=dye.r;
-      const strips=[rd(f,4,0,1,Hh),rd(f,W-5,0,1,Hh),rd(f,0,4,W,1),rd(f,0,Hh-5,W,1)];
-      const dstr=[rd(d,3,0,1,d.h).slice(),rd(d,d.w-4,0,1,d.h).slice(),rd(d,0,3,d.w,1).slice(),rd(d,0,d.h-4,d.w,1).slice()];
-      strips.forEach((b,wall)=>{const n=b.length/4;const [nx,ny]=WALLN[wall];
-        for(let i=1;i<n-1;i++){const imp=-(b[i*4]*nx+b[i*4+1]*ny);const key='p'+wall+'_'+i;
-          if((edgeCool[key]||0)>performance.now())continue;
-          if(imp>SPLASH_P){edgeCool[key]=performance.now()+120;
-            const k=Math.min(3,(imp-SPLASH_P)/SPLASH_P);const tt=(i+Math.random())/n;
-            const db=dstr[wall],dn=db.length/4,j=Math.min(dn-1,Math.floor(tt*dn))*4;const col=[db[j],db[j+1],db[j+2]];
-            const cnt=1+Math.floor(k*2+Math.random());for(let q=0;q<cnt;q++)spawnDrop(wall,tt,k,col,false);}}});
-    }
-  }catch(e){canRead=false;}
-  if(gl.getError()!==gl.NO_ERROR)canRead=false;
-}
-let SPLASH_V=.07, SPLASH_P=140;
-// paint: a finger flicking toward a wall, or a pointing jet aimed at one, bursts against it
-function wallDist(x,y){return [x*aspect,(1-x)*aspect,y,1-y];}
-function gestureSplash(x,y,vx,vy,col,force){
-  const d=wallDist(x,y),a=[-vx*aspect,vx*aspect,-vy,vy];               // approach speed toward each wall (height units/s)
-  for(let w=0;w<4;w++){ if(d[w]>.14||a[w]<.5)continue;
-    const t=w<2?y:x,key='g'+w+'_'+Math.round(t*40);if((edgeCool[key]||0)>performance.now())continue;edgeCool[key]=performance.now()+90;
-    const k=Math.min(3.2,(a[w]-.5)/.7+(1-d[w]/.14));const cnt=2+Math.floor(k*2.5);
-    for(let q=0;q<cnt;q++)spawnDrop(w,Math.min(.99,Math.max(.01,t+(Math.random()-.5)*.05)),k,col(),false);
-    if(mode==='paint'){const wx=w<2?(w===0?.01:.99):x,wy=w<2?y:(w===2?.01:.99);splatDye(wx,wy,col(),.0012*(1+k*.4),1,1.6+k*.3);}}
-}
-function jetSplash(p,col){
-  const ts=[];if(p.dx<0)ts.push([0,(p.x*aspect)/-p.dx]);if(p.dx>0)ts.push([1,((1-p.x)*aspect)/p.dx]);
-  if(p.dy<0)ts.push([2,p.y/-p.dy]);if(p.dy>0)ts.push([3,(1-p.y)/p.dy]);
-  let best=null;for(const q of ts)if(!best||q[1]<best[1])best=q;if(!best||best[1]>.38)return;
-  const [w,L]=best,hx=p.x+p.dx/aspect*L,hy=p.y+p.dy*L,t=w<2?hy:hx,key='j'+w;
-  if((edgeCool[key]||0)>performance.now())return;edgeCool[key]=performance.now()+70;
-  const k=.4+1.6*(1-L/.38);for(let q=0;q<1+Math.floor(k*1.5);q++)spawnDrop(w,Math.min(.99,Math.max(.01,t+(Math.random()-.5)*.04)),k,col,false);
-}
-function updateDrops(dt){
-  const g=3.2, k=dt*flow*Math.max(.8,Math.min(timeScale+.6,1.6));
-  for(let i=drops.length-1;i>=0;i--){const d=drops[i];
-    d.vz-=g*k;d.x+=d.vx*k;d.y+=d.vy*k;d.z+=d.vz*k;
-    if(d.x<.002||d.x>.998){d.vx*=-.5;d.x=Math.min(.998,Math.max(.002,d.x));}
-    if(d.y<.002||d.y>.998){d.vy*=-.5;d.y=Math.min(.998,Math.max(.002,d.y));}
-    if(d.z<=0){                                   // lands: ripple / paint splat
-      if(d.water){ if(mode==='water')waterPoke(d.x,d.y,WATER_AMP*(.6+d.r*60),.00004+d.r*d.r*.6); }
-      else if(mode==='paint'){ splatDye(d.x,d.y,d.c,.00025+d.r*d.r*1.2,1,1.4); splatVel(d.x,d.y,d.vx*900,d.vy*900,.0012); }
-      drops.splice(i,1);}
-  }
-}
-function drawDrops(){
-  fxc.clearRect(0,0,fx.width,fx.height);
-  if(!drops.length)return;
-  const W=fx.width,H=fx.height;
-  for(const d of drops){const sx=d.x*W,sy=(1-d.y)*H,lift=d.z*H*.6,r=Math.max(1.2,d.r*H*(1+Math.min(d.z*5,.8)));
-    // shadow on the surface
-    fxc.fillStyle=d.water?'rgba(0,25,35,.16)':'rgba(0,0,0,.22)';fxc.beginPath();fxc.ellipse(sx+lift*.25,sy+lift*.15,r*.9,r*.6,0,0,7);fxc.fill();
-    const y=sy-lift;
-    if(d.water){
-      const gr=fxc.createRadialGradient(sx-r*.3,y-r*.35,r*.1,sx,y,r);
-      gr.addColorStop(0,'rgba(255,255,255,1)');gr.addColorStop(.3,'rgba(240,250,255,.85)');gr.addColorStop(.75,'rgba(200,230,240,.55)');gr.addColorStop(1,'rgba(200,230,240,0)');
-      fxc.fillStyle=gr;fxc.beginPath();fxc.arc(sx,y,r,0,7);fxc.fill();
-    } else {
-      const c=d.c.map(v=>Math.round(Math.min(1,Math.max(0,v))*255));
-      const gr=fxc.createRadialGradient(sx-r*.35,y-r*.35,r*.1,sx,y,r);
-      gr.addColorStop(0,`rgb(${Math.min(255,c[0]+90)},${Math.min(255,c[1]+90)},${Math.min(255,c[2]+90)})`);
-      gr.addColorStop(.45,`rgb(${c[0]},${c[1]},${c[2]})`);gr.addColorStop(1,`rgb(${c[0]*.45|0},${c[1]*.45|0},${c[2]*.45|0})`);
-      fxc.fillStyle=gr;fxc.beginPath();fxc.ellipse(sx,y,r,r*(1+Math.min(.6,Math.abs(d.vz)*.15)),0,0,7);fxc.fill();
-      fxc.fillStyle='rgba(255,255,255,.85)';fxc.beginPath();fxc.arc(sx-r*.35,y-r*.38,r*.22,0,7);fxc.fill();
-    }}
-}
-
 /* ================= Gyro: tilt and shake the phone ================= */
 let PAINT_TILT_K=.35, PAINT_TILT_DEAD=.12;   // 물감 기울기 민감도 (예전 1, 0)
 let gyroOn=false, gBase=null, motionF=[0,0], motionRaw=[0,0], shakeAmt=0, lastMotionT=0;
@@ -2146,7 +1501,6 @@ function onMotion(e){
   const fx=(g[0]-gBase[0])*1.6+lin[0]*1.1, fy=(g[1]-gBase[1])*1.6+lin[1]*1.1;
   const m=Math.hypot(fx,fy),cap=m>2.5?2.5/m:1;motionRaw=[fx*cap,fy*cap];
   shakeAmt=Math.hypot(lin[0],lin[1]);
-  waveG=g;waveLin=lin;waveMotionT=now;
 }
 function updateGyro(dt){
   const vk=Math.min(1,dt*(gyroOn?5:2));viewTilt[0]+=((gyroOn?viewRaw[0]:0)-viewTilt[0])*vk;viewTilt[1]+=((gyroOn?viewRaw[1]:0)-viewTilt[1])*vk;
@@ -2180,7 +1534,7 @@ let bgm=players[0];
 let musicOn=true; try{musicOn=localStorage.getItem('hf-music')!=='off';}catch(e){}
 let curTrack=null, wantTrack=null;
 const MUSIC_VOL=.85, FADE_IN=2.2, FADE_OUT=1.8;          // seconds
-const TRACKS={cloud:'audio/velvet_horizon.mp3',cosmos:'audio/where_the_ocean_meets_sky.mp3',halo:'audio/beneath_the_haloed_glass.mp3',paint:'audio/where_the_stream_widens.mp3',water:'audio/glass_upon_the_lake.mp3',light:'audio/where_the_ocean_meets_sky.mp3',wave:'audio/where_the_ocean_meets_sky.mp3',ink:'audio/silk_and_moonlight.mp3'};
+const TRACKS={cloud:'audio/velvet_horizon.mp3',halo:'audio/beneath_the_haloed_glass.mp3',paint:'audio/where_the_stream_widens.mp3',water:'audio/glass_upon_the_lake.mp3',light:'audio/where_the_ocean_meets_sky.mp3',ink:'audio/silk_and_moonlight.mp3'};
 const trackURL={};
 function getTrack(path){ if(!trackURL[path])trackURL[path]=fetch(path).then(r=>r.blob()).then(b=>URL.createObjectURL(b)).catch(()=>null); return trackURL[path]; }
 // change song: the playing one fades out on its own player, the new one starts silent on the other player and fades in
@@ -2222,15 +1576,10 @@ let lastAct=0;const isIdle=()=>performance.now()-lastAct>4000&&!handInfo.length&
 function tDown(id,x,y,t,virt){lastAct=performance.now();if(mode==='ink'){x=vwx('ink',x);y=vwy('ink',y);}pointers.set(id,{x,y,t,c:pickColor(pointers.size+(Math.random()*6|0)),virt,born:performance.now()});
   if(virt&&flow>.3){const p=pointers.get(id);      // 손끝이 닿는 순간 바로 작은 반응 = '인식됐다'는 확인
     if(mode==='paint')queue.push({x,y,dx:0,dy:0,c:p.c,r:.0026,s:.8,t:.7});
-    else if(mode==='splash')spThrow(x,y,0,spR(.16,.3),true);
-    else if(mode==='water'&&!dipMode)addPlop(x,y,.3);
-    else if(mode==='wave'&&wvH)wavePoke(x,y,.2);
+    else if(mode==='water')addPlop(x,y,.3);
     else if(mode==='light'||mode==='cloud')for(let i=0;i<4;i++){const a=i/4*6.283+.6;queue.push({x,y,dx:Math.cos(a)*140,dy:Math.sin(a)*140,r:.004,vOnly:true});}}
   if(mode==='halo'&&!virt)haloDown(id,x,y,t);
-  if(mode==='cosmos')cosPuff(x,y,virt?.5:.9);
-  if(mode==='water'&&dipMode){if(!virt)dipStart('t'+id,x,y,.005);}
-  else if(mode==='water'){if(!virt)addPlop(x,y,1);wakeEnd('t'+id);}          // 손가락은 '톡 굽히기'가 퐁당 (펴기만 해서는 퐁당 안 함)
-  else if(mode==='wave'&&wvH&&flow>.3){if(!virt)wavePoke(x,y,.5);}
+  if(mode==='water'){if(!virt)addPlop(x,y,1);wakeEnd('t'+id);}          // 손가락은 '톡 굽히기'가 퐁당 (펴기만 해서는 퐁당 안 함)
   else if(mode==='ink'&&flow>.3){const p=pointers.get(id);p.ink=inkNext++;if(inkA)inkDrop(p.x,p.y,p.ink,virt?.4:1);}}   // each finger that lands = one 퐁당
 function tMove(id,x,y,t){const p=pointers.get(id);if(!p)return;lastAct=performance.now();if(mode==='ink'){x=vwx('ink',x);y=vwy('ink',y);}
   if(mode==='halo'&&halo&&halo.grab&&halo.grab.id===id){haloMove(id,x,y,t);p.x=x;p.y=y;p.t=t;return;}   // holding the ring: it carries the smoke itself
@@ -2247,16 +1596,13 @@ function tMove(id,x,y,t){const p=pointers.get(id);if(!p)return;lastAct=performan
       // the brush paints a little behind the finger: the last stretch waits, so when it lifts that stretch can thin out to a point
       let L=0;for(let i=1;i<p.ib.length;i++)L+=Math.hypot((p.ib[i].x-p.ib[i-1].x)*aspect,p.ib[i].y-p.ib[i-1].y);
       while(p.ib.length>2&&L>INK_LAG){const a=p.ib[0],b=p.ib[1];inkStroke(a.x,a.y,b.x,b.y,p.ink||0,1,a.w,b.w);L-=Math.hypot((b.x-a.x)*aspect,b.y-a.y);p.ib.shift();}}}
-  else if(mode==='water'&&!dipMode)wakeStep('t'+id,x,y,Math.hypot((x-p.x)*aspect,y-p.y)/dtR,t);
-  else if(mode==='splash')spMove(p,x,y,dtR);
+  else if(mode==='water')wakeStep('t'+id,x,y,Math.hypot((x-p.x)*aspect,y-p.y)/dtR,t);
   else if(mode!=='water'){if(vp){let n=0;for(const q of pointers.values())if(q.virt)n++;const k=Math.max(.72,1/Math.sqrt(n||1));   // several fingertips share the push, as one hand
       queue.push({x,y,vx:(x-p.x)/dtR*.85,vy:(y-p.y)/dtR*.85,set:.85*k,c:p.c,r:.0042,s:.9*k,virt:1,nv:n});}
-    else queue.push({x,y,vx:(x-p.x)/dtR,vy:(y-p.y)/dtR,set:.85,c:p.c,r:.0042,s:.9});}p.x=x;p.y=y;p.t=t;
-  if(dipMode&&!p.virt)dipMove('t'+id,x,y);}
+    else queue.push({x,y,vx:(x-p.x)/dtR,vy:(y-p.y)/dtR,set:.85,c:p.c,r:.0042,s:.9});}p.x=x;p.y=y;p.t=t;}
 function tUp(id){if(mode==='halo')haloUp(id);
-  {const p=pointers.get(id);if(p&&mode==='splash'&&!p.virt&&(p.trav||0)<.02&&flow>.3)spThrow(p.x,p.y,0,spRandE(),true);}
   {const p=pointers.get(id);if(p&&mode==='ink'&&inkA&&p.ib)inkLift(p);}
-  pointers.delete(id);dipEnd('t'+id);wakeEnd('t'+id);}
+  pointers.delete(id);wakeEnd('t'+id);}
 canvas.addEventListener('pointerdown',e=>{if(document.body.classList.contains('menu')){openMenu(false);return;}const [ex,ey]=loc(e);wake();tDown(e.pointerId,ex,1-ey,e.timeStamp,false);});
 canvas.addEventListener('pointermove',e=>{if(!pointers.has(e.pointerId))return;const [lx0,ly0]=loc(e);tMove(e.pointerId,lx0,1-ly0,e.timeStamp);});
 ['pointerup','pointercancel','pointerleave'].forEach(t=>canvas.addEventListener(t,e=>tUp(e.pointerId)));
@@ -2264,8 +1610,8 @@ canvas.addEventListener('pointermove',e=>{if(!pointers.has(e.pointerId))return;c
 // hand state
 const TIPS=[4,8,12,16,20];
 const tracks={};            // key `${hand}-${tip}` -> {x,y}
-let hands=null, handsReady=false, camOn=false, busy=false, lastSeen=0, fistSince=0, handInfo=[];
-const pinchState={}, pointState={}, handSize={};
+let camOn=false, lastSeen=0, fistSince=0, handInfo=[];
+const pinchState={}, pointState={};
 const d2=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 
 /* 손 인식 범위: 카메라 영상의 가운데 부분만 화면 전체에 대응 → 손이 카메라 안에 넉넉히 있어도 손끝이 화면 끝까지 닿음
@@ -2285,7 +1631,7 @@ function onHands(res){
   if(!list.length){ for(const [id,q] of [...pointers])if(typeof id==='string'&&id[0]==='v'&&now-(q.seen||0)>VGRACE)tUp(id);
     if(now-lastSeen>250){for(const k in tracks)delete tracks[k];for(const k in pointState)delete pointState[k];} handInfo=[]; setDetect(false); if(camOn)status('손 인식 켜짐 · 손을 카메라에 보여주세요'); fistSince=0; return; }
   lastSeen=now; handInfo=[]; setDetect(true); lastAct=now;
-  const seenH={},vSeen=new Set(),vList=[];
+  const vSeen=new Set(),vList=[];
   let anyFist=false;
   list.forEach((lm,h)=>{
     const size=d2(lm[0],lm[9])||.1;
@@ -2338,14 +1684,7 @@ function onHands(res){
     if(W)fingerTaps(lm.slot??h,lm,bends,fist,now);
     handInfo.push({pts,fist,pinch,mid,point,open,palm:{x:lm[9].x,y:1-lm[9].y},virt:!!W,W,size,bends,lm});
     if(W)vList.push([lm.slot??h,lm,fist]);
-    // 손 담그기 gesture: palm moves toward the screen relative to its resting size
-    const hs=handSize[h]||(handSize[h]={base:size,dipping:false}),palm={x:lm[9].x,y:1-lm[9].y};seenH[h]=1;
-    const ratio=size/hs.base;
-    if(!hs.dipping){hs.base+=(size-hs.base)*.04;
-      if(ratio>1.14&&mode==='water'&&dipMode){hs.dipping=true;dipStart('h'+h,palm.x,palm.y,.0058);}}
-    else{ if(ratio<1.06||!dipMode||mode!=='water'){hs.dipping=false;dipEnd('h'+h);} else dipMove('h'+h,palm.x,palm.y);}
   });
-  for(const k in handSize)if(!seenH[k]&&handSize[k].dipping){handSize[k].dipping=false;dipEnd('h'+k);}
   if(anyFist){ if(!fistSince)fistSince=now; } else fistSince=0;
   flowTarget = (fistSince && now-fistSince>160) ? 0 : 1;
   for(let k=q0;k<queue.length;k++)queue[k].hand=1;
@@ -2364,8 +1703,7 @@ let stream=null, wakeLock=null;
 
 /* ===== 새 손 인식 (핸드 미러 3D와 같은 방식): MediaPipe Tasks HandLandmarker · full 모델 · GPU · 동영상 모드 · One Euro 필터 =====
    파일은 모두 mediapipe/tasks/ 안에 있어 오프라인에서도 동작 */
-let ENGINE='tasks';   // the menu no longer offers the older engine: always the new hand tracking
-let tasksLM=null,tasksDelegate='',lastVT=-1;
+let tasksLM=null,lastVT=-1;
 const FINGERS=[[1,2,3,4],[5,6,7,8],[9,10,11,12],[13,14,15,16],[17,18,19,20]];
 const d3=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z);
 function angV(a,b,c,d){const ux=b.x-a.x,uy=b.y-a.y,uz=b.z-a.z,vx=d.x-c.x,vy=d.y-c.y,vz=d.z-c.z;
@@ -2380,7 +1718,7 @@ async function loadTasks(){
   const fs=await vision.FilesetResolver.forVisionTasks(new URL('mediapipe/tasks/wasm',location.href).href);
   const mk=d=>vision.HandLandmarker.createFromOptions(fs,{baseOptions:{modelAssetPath:new URL('mediapipe/tasks/hand_landmarker.task',location.href).href,delegate:d},
     runningMode:'VIDEO',numHands:2,minHandDetectionConfidence:.6,minHandPresenceConfidence:.5,minTrackingConfidence:.4});
-  try{tasksLM=await mk('GPU');tasksDelegate='GPU';}catch(e){console.warn('GPU 인식 실패 → CPU',e);tasksLM=await mk('CPU');tasksDelegate='CPU';}
+  try{tasksLM=await mk('GPU');}catch(e){console.warn('GPU 인식 실패 → CPU',e);tasksLM=await mk('CPU');}
 }
 function tasksDetect(){
   if(video.currentTime===lastVT)return;lastVT=video.currentTime;
@@ -2435,30 +1773,15 @@ function firePendingTaps(now){
 }
 function fingerTap(x,y,fi){
   x=Math.min(.99,Math.max(.01,x));y=Math.min(.99,Math.max(.01,y));
-  if(mode==='water'){if(!dipMode)addPlop(x,y,.9);}
+  if(mode==='water')addPlop(x,y,.9);
   else if(mode==='ink'){if(inkA)inkDrop(vwx('ink',x),vwy('ink',y),inkNext++,.9);}
-  else if(mode==='wave'){if(wvH)wavePoke(x,y,.45);}
   else if(mode==='halo'&&halo){const [d,i]=haloNear(x,y);if(d<.08)haloKick(i,-.8);else haloPuff=[x*aspect,y,.005,.3];}
-  else if(mode==='splash'){spThrow(x,y,0,spRandE(),true);}
-  else if(mode==='cosmos'){cosPuff(x,y,1.2);}
   else if(mode==='paint'){colorTick++;for(let i=0;i<6;i++){const a=i/6*Math.PI*2;queue.push({x:x+Math.cos(a)*.012,y:y+Math.sin(a)*.012*aspect,dx:Math.cos(a)*600,dy:Math.sin(a)*600,c:pickColor(i+fi),r:.0022,s:.9,t:.8,hand:1});}}
 }
-function setEngine(e){ENGINE=e;try{localStorage.setItem('hf-engine',e);}catch(_){}
-  document.querySelectorAll('#engRow .chip').forEach(b=>b.setAttribute('aria-pressed',b.dataset.e===e));
-  if(camOn){stopCam();startCam();}}
-document.querySelectorAll('#engRow .chip').forEach(b=>b.onclick=()=>setEngine(b.dataset.e));
-document.querySelectorAll('#engRow .chip').forEach(b=>b.setAttribute('aria-pressed',b.dataset.e===ENGINE));
 async function startCam(){
   try{
     status('AI 모델 불러오는 중…');camBtn.disabled=true;gestBtn.classList.add('busy');
-    if(ENGINE==='tasks'&&!tasksLM){try{await loadTasks();}catch(e){console.warn('새 손 인식을 못 불러옴 → 기존 인식',e);ENGINE='legacy';
-      document.querySelectorAll('#engRow .chip').forEach(b=>b.setAttribute('aria-pressed',b.dataset.e==='legacy'));}}
-    if(ENGINE==='legacy'&&!hands){
-      hands=new Hands({locateFile:f=>'mediapipe/'+f});
-      hands.setOptions({maxNumHands:2,modelComplexity:0,minDetectionConfidence:.6,minTrackingConfidence:.5,selfieMode:true});
-      hands.onResults(onHands);
-      await hands.initialize();
-    }
+    if(!tasksLM)await loadTasks();
     status('카메라 여는 중…');
     stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:640},height:{ideal:480},frameRate:{ideal:30}}});
     video.srcObject=stream;await video.play();
@@ -2474,120 +1797,15 @@ function stopCam(){camOn=false;vTips.length=0;for(const id of [...pointers.keys(
   try{wakeLock&&wakeLock.release();}catch(e){} status('손 인식 꺼짐 · 화면을 문질러 보세요');}
 async function detectLoop(){
   if(!camOn)return;
-  if(ENGINE==='tasks'&&tasksLM){if(video.readyState>=2)tasksDetect();}
-  else if(!busy&&video.readyState>=2&&hands){busy=true;try{await hands.send({image:video});}catch(e){console.warn(e);}busy=false;}
+  if(tasksLM&&video.readyState>=2)tasksDetect();
   requestAnimationFrame(detectLoop);
 }
 camBtn.onclick=()=>{wake();camOn?stopCam():startCam();};
 capPress(gestBtn,()=>{if(camBtn.disabled)return;wake();camOn?stopCam():startCam();});
 document.addEventListener('visibilitychange',async()=>{if(!document.hidden&&camOn){try{wakeLock=await navigator.wakeLock?.request('screen');}catch(e){}}});
 
-/* fingertip glow overlay */
-function drawFx(){
-  fxc.clearRect(0,0,fx.width,fx.height);
-  if(!handInfo.length)return;
-  fxc.lineWidth=1.5*dpr;
-  for(const h of handInfo){
-    h.pts.forEach((p,i)=>{const x=p.x*fx.width,y=(1-p.y)*fx.height;const r=(i===1?11:7)*dpr*(h.fist?.7:1);
-      fxc.strokeStyle=h.fist?'rgba(255,255,255,.35)':'rgba(255,248,230,.75)';fxc.beginPath();fxc.arc(x,y,r,0,7);fxc.stroke();});
-    if(h.point){const p=h.point,x=p.x*fx.width,y=(1-p.y)*fx.height,L=46*dpr,ex=x+p.dx*L,ey=y-p.dy*L,a=Math.atan2(-p.dy,p.dx);
-      fxc.strokeStyle='rgba(255,248,230,.85)';fxc.lineWidth=2*dpr;fxc.beginPath();fxc.moveTo(x,y);fxc.lineTo(ex,ey);
-      fxc.moveTo(ex,ey);fxc.lineTo(ex-Math.cos(a-.5)*12*dpr,ey-Math.sin(a-.5)*12*dpr);fxc.moveTo(ex,ey);fxc.lineTo(ex-Math.cos(a+.5)*12*dpr,ey-Math.sin(a+.5)*12*dpr);fxc.stroke();fxc.lineWidth=1.5*dpr;}
-    if(h.pinch){fxc.strokeStyle='rgba(247,200,68,.8)';fxc.beginPath();fxc.arc(h.mid.x*fx.width,(1-h.mid.y)*fx.height,26*dpr,0,7);fxc.stroke();}
-  }
-}
 
 
-
-/* ================= Cosmos: luminous gas drifting among the stars ================= */
-let cosT=0,cosSeed=Math.random()*40;
-function cosReset(){cosSeed=Math.random()*40;cloudReset();if(vel){use('waterClear',[0,0]);blit(vel.w);vel.swap();blit(vel.w);vel.swap();}}
-function cosmosFrame(dt){
-  const live=flow>.3,k=dt*flow*(.35+timeScale);cosT+=k;
-  for(const h of handInfo){if(!live)break;
-    if(h.point){const p=h.point;splatVel(p.x,p.y,p.dx*380*dt*30,p.dy*380*dt*30,.004);}
-    if(h.open&&h.palm)for(let a=0;a<6;a++){const an=a/6*6.283+cosT;splatVel(h.palm.x+Math.cos(an)*.05/aspect,h.palm.y+Math.sin(an)*.05,Math.cos(an)*160*dt*30,Math.sin(an)*160*dt*30,.006);}}
-  for(const s of queue.splice(0)){if(!live)continue;
-    if(s.set)splatVelSet(s.x,s.y,s.vx*vel.r.w*.75,s.vy*vel.r.h*.75,s.r*2.8,s.set*.85);else splatVel(s.x,s.y,s.dx*.4,s.dy*.4,s.r*2.2);}
-  if(flow>.02){simTime+=k;stepVel(k,0,4,0);}
-  if(Math.abs(motionF[0])+Math.abs(motionF[1])>.01&&live)splatVel(.5,.5,motionF[0]*60,motionF[1]*60,.25);
-  let u=use('cloudDisp',[cDisp.r.tx,cDisp.r.ty]);gl.uniform1i(u.uD,cDisp.r.bind(0));gl.uniform1i(u.uVel,vel.r.bind(1));
-  gl.uniform2f(u.simTexel,vel.r.tx,vel.r.ty);gl.uniform1f(u.dt,k);gl.uniform1f(u.relax,.10);gl.uniform1f(u.clearK,.5);blit(cDisp.w);cDisp.swap();   // what a hand moves stays moved for a long while, then drifts back
-  u=use('cosNeb',[cFbo.tx,cFbo.ty]);gl.uniform1i(u.uD,cDisp.r.bind(0));gl.uniform1f(u.time,cosT*2.2);gl.uniform1f(u.aspect,aspect);gl.uniform1f(u.seed,cosSeed);blit(cFbo);
-  u=use('cosShow',[0,0]);gl.uniform1i(u.uC,cFbo.bind(0));gl.uniform2f(u.res,outW(),outH());gl.uniform1f(u.time,performance.now()*.001);gl.uniform1f(u.aspect,aspect);blit(null);}
-function cosPuff(x,y,k){if(flow<.3)return;for(let i=0;i<8;i++){const a=i/8*6.283+Math.random()*.5;queue.push({x:x+Math.cos(a)*.01/aspect,y:y+Math.sin(a)*.01,dx:Math.cos(a)*520*k,dy:Math.sin(a)*520*k,r:.005,vOnly:true});}}
-
-/* ================= Splash: paint flung across the canvas ================= */
-let spl=null,spBg=0,spClock=1.2,spJobs=[];try{spBg=localStorage.getItem('hf-splbg')==='1'?1:0;}catch(e){}
-const SPL_COLS={dark:[[.96,.94,.88],[.96,.94,.88],[.72,.74,.77],[.96,.26,.05],[.98,.42,.04],[.95,.60,.08],[.02,.62,.66],[.86,.10,.06]],
-               light:[[.07,.07,.08],[.07,.07,.08],[.55,.57,.60],[.96,.26,.05],[.98,.42,.04],[.95,.60,.08],[.02,.58,.62],[.86,.10,.06]]};
-function spAlloc(){const L=Math.max(canvas.width,canvas.height),k=Math.min(1,1600/L),w=Math.round(canvas.width*k),h=Math.round(canvas.height*k);
-  const mk=()=>{const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);
-    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
-    gl.texImage2D(gl.TEXTURE_2D,0,IFMT,w,h,0,gl.RGBA,TYPE,null);return t;};
-  const c=mk(),ht=mk(),f=gl.createFramebuffer();gl.bindFramebuffer(gl.FRAMEBUFFER,f);
-  gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,c,0);gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT1,gl.TEXTURE_2D,ht,0);
-  gl.drawBuffers([gl.COLOR_ATTACHMENT0,gl.COLOR_ATTACHMENT1]);
-  spl={c,ht,f,w,h};spClear();}
-function spClear(){if(!spl)return;gl.bindFramebuffer(gl.FRAMEBUFFER,spl.f);gl.viewport(0,0,spl.w,spl.h);gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);gl.clearColor(0,0,0,1);spJobs.length=0;}
-function spCol(){const P=SPL_COLS[spBg?'light':'dark'];const c=P[(Math.random()*P.length)|0],k=.93+Math.random()*.1;return c.map(v=>Math.min(1,v*k));}
-// one stamp, drawn straight into the colour + height layers (blended, only inside its own rectangle)
-function spStamp(o){const u=use('spStamp',[0,0]);gl.bindFramebuffer(gl.FRAMEBUFFER,spl.f);gl.viewport(0,0,spl.w,spl.h);
-  const R=o.R,x0=Math.max(0,Math.floor((o.x-R/aspect)*spl.w)),x1=Math.min(spl.w,Math.ceil((o.x+R/aspect)*spl.w)),y0=Math.max(0,Math.floor((o.y-R)*spl.h)),y1=Math.min(spl.h,Math.ceil((o.y+R)*spl.h));
-  if(x1<=x0||y1<=y0)return;
-  gl.enable(gl.SCISSOR_TEST);gl.scissor(x0,y0,x1-x0,y1-y0);gl.enable(gl.BLEND);gl.blendFuncSeparate(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA,gl.ONE,gl.ONE);
-  gl.uniform1f(u.aspect,aspect);gl.uniform1f(u.kind,o.kind);gl.uniform1f(u.seed,o.seed);gl.uniform1f(u.thick,o.thick);gl.uniform2f(u.point,o.x,o.y);
-  gl.uniform2f(u.dir,o.dx||1,o.dy||0);gl.uniform1f(u.len,o.len||.1);gl.uniform1f(u.wid,o.wid||.01);gl.uniform1f(u.bend,o.bend||0);gl.uniform1f(u.brk,o.brk||0);
-  gl.uniform1f(u.g0,o.g0||0);gl.uniform1f(u.g1,o.g1==null?9:o.g1);gl.uniform1f(u.spread,o.spread||0);gl.uniform1f(u.dens,o.dens||0);gl.uniform2f(u.pb,o.bx||0,o.by||0);
-  gl.uniform3f(u.color,o.c[0],o.c[1],o.c[2]);const c2=o.c2||o.c;gl.uniform3f(u.color2,c2[0],c2[1],c2[2]);
-  gl.drawElements(gl.TRIANGLES,6,gl.UNSIGNED_SHORT,0);gl.disable(gl.BLEND);gl.disable(gl.SCISSOR_TEST);}
-const spR=(a,b)=>a+Math.random()*(b-a);
-// a sheet, laid down as a quick sweep (band by band) so the paint is seen flying
-function spSheet(t0,x,y,ang,len,wid,c,c2,o){o=o||{};const seed=Math.random()*60,bend=o.bend!=null?o.bend:spR(-.5,.5),brk=o.brk||spR(.75,1.25),thick=o.thick||spR(.55,1),n=o.n||5,dur=o.dur!=null?o.dur:.05+len*.45;
-  for(let i=0;i<n;i++){const g0=i?-.3+1.45*i/n:-9,g1=i<n-1?-.3+1.45*(i+1)/n:9;
-    spJobs.push({t:t0+dur*i/n,o:{kind:0,x,y,R:len*1.35+wid,seed,thick,dx:Math.cos(ang),dy:Math.sin(ang),len,wid,bend,brk,g0,g1,c,c2}});}}
-// a whip of paint: a thin curved thread that thins as it goes and ends in a bead
-function spThread(t0,x,y,ang,len,r0,c){const n=Math.max(8,Math.round(len*90)),k=spR(-2.2,2.2),k2=spR(-1.5,1.5);let px=x,py=y,a=ang,pr=r0;const sl=len/n;
-  for(let i=1;i<=n;i++){const u=i/n;a+=(k+k2*u)*sl*4;const nx=px+Math.cos(a)*sl/aspect,ny=py+Math.sin(a)*sl,r=Math.max(.0006,r0*Math.pow(1-u,1.3)*(1+.25*Math.sin(u*9+k))+.0005);
-    spJobs.push({t:t0+.16*u,o:{kind:2,x:px,y:py,bx:nx,by:ny,wid:pr,len:r,R:sl*1.2+r0*2,seed:Math.random()*40,thick:.5,c}});px=nx;py=ny;pr=r;}
-  const rb=Math.max(.0012,r0*spR(.5,1.3));spJobs.push({t:t0+.17,o:{kind:2,x:px,y:py,bx:px,by:py,wid:rb,len:rb,R:rb*2.5,seed:1,thick:.75,c}});}
-function spSpray(t0,x,y,ang,r0,r1,spread,dens,c,c2){const seed=Math.random()*50;
-  for(let i=0;i<3;i++)spJobs.push({t:t0+.03+.05*i,o:{kind:1,x,y,R:r1*1.2,seed:seed+i*7.7,thick:spR(.45,.8),dx:Math.cos(ang),dy:Math.sin(ang),len:r1*.5,g0:r0,g1:r1*(.55+.25*i),spread,dens:dens*(i?.6:1),c,c2}});}
-// E = how much paint (0.2 small flick … 1.6 a bucketful)
-function spThrow(x,y,ang,E,burst){if(!spl)return;const now=performance.now()/1000,c=spCol();let c2=spCol();if(Math.random()<.45)c2=c;
-  if(burst){const n=6+(Math.random()*7|0),a0=Math.random()*6.283,L=.07*E*spR(.8,1.3);
-    spSheet(now,x,y,a0,L*.55,L*.5,c,c2,{brk:.5,bend:0,n:2,dur:.02,thick:spR(.8,1.1)});spSheet(now,x,y,a0+2.6,L*.5,L*.42,c,c2,{brk:.55,bend:0,n:2,dur:.02});
-    for(let i=0;i<n;i++){const a=a0+i/n*6.283+spR(-.35,.35),l=L*(.9+2.6*Math.pow(Math.random(),1.8));spSheet(now+.01,x,y,a,l,l*spR(.10,.2),c,c2,{brk:spR(.9,1.4)});}
-    const m=2+(Math.random()*4|0);for(let i=0;i<m;i++){const a=Math.random()*6.283;spThread(now+.03,x+Math.cos(a)*L*.5/aspect,y+Math.sin(a)*L*.5,a,L*spR(1.4,3.6),L*spR(.02,.05),c);}
-    spSpray(now,x,y,a0,L*.6,L*spR(3,5),3.2,.42,c,c2);return;}
-  const L=.2*E*spR(.75,1.3),W=L*spR(.18,.36);
-  spSheet(now,x,y,ang,L,W,c,c2);
-  const side=(Math.random()*3)|0;for(let i=0;i<side;i++){const da=spR(.12,.5)*(Math.random()<.5?-1:1);spSheet(now+.015,x,y,ang+da,L*spR(.45,.95),W*spR(.4,.8),c,c2,{brk:spR(.9,1.4)});}
-  if(Math.random()<.5)spSheet(now+.01,x-Math.cos(ang)*L*.1/aspect,y-Math.sin(ang)*L*.1,ang+3.14+spR(-.5,.5),L*spR(.2,.4),W*spR(.5,.9),c,c2,{brk:1.2});   // a little kick-back behind
-  const m=1+(Math.random()*4|0);for(let i=0;i<m;i++){const u=spR(.25,.85),a=ang+spR(-.45,.45);
-    spThread(now+.03+.05*u,x+Math.cos(ang)*L*u/aspect,y+Math.sin(ang)*L*u,a,L*spR(.7,2.2),W*spR(.05,.13),Math.random()<.2?c2:c);}
-  spSpray(now,x,y,ang,L*.25,L*spR(1.7,2.9),spR(.45,.95),.4,c,c2);
-  if(Math.random()<.4)spSpray(now,x,y,ang,L*.1,L*.9,3.2,.12,c,c2);}
-function spRandE(){return .22+1.45*Math.pow(Math.random(),2.1);}     // mostly modest, now and then a big one
-function splashFrame(dt){if(!spl||spl.cw!==canvas.width||spl.ch!==canvas.height){spAlloc();spl.cw=canvas.width;spl.ch=canvas.height;}
-  queue.length=0;const live=flow>.3,now=performance.now()/1000;
-  if(live){spClock-=dt*flow*(.55+.45*Math.min(timeScale,2.5));
-    if(spClock<=0){spClock=spR(1.3,3.6);const x=spR(.08,.92),y=spR(.08,.92);
-      if(Math.random()<.28)spThrow(x,y,0,spRandE(),true);else spThrow(x,y,Math.atan2(.5-y+spR(-.5,.5),(.5-x)*aspect+spR(-.5,.5)),spRandE(),false);}}
-  // the old paint slowly sinks back into the ground so there is always room for more
-  if(live){gl.bindFramebuffer(gl.FRAMEBUFFER,spl.f);gl.viewport(0,0,spl.w,spl.h);gl.useProgram(P.spFade.p);gl.enable(gl.BLEND);
-    gl.blendColor(0,0,0,Math.exp(-dt*flow*Math.max(.3,Math.min(timeScale,2.5))/46));gl.blendFuncSeparate(gl.ZERO,gl.ONE,gl.ZERO,gl.CONSTANT_ALPHA);
-    gl.drawElements(gl.TRIANGLES,6,gl.UNSIGNED_SHORT,0);gl.disable(gl.BLEND);}
-  let done=0;for(let i=0;i<spJobs.length&&done<70;){if(spJobs[i].t<=now){spStamp(spJobs[i].o);spJobs.splice(i,1);done++;}else i++;}
-  const u=use('spShow',[0,0]);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,spl.c);gl.uniform1i(u.uC,0);gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,spl.ht);gl.uniform1i(u.uH,1);
-  gl.uniform2f(u.hTexel,1/spl.w,1/spl.h);gl.uniform1f(u.bg,spBg);gl.uniform1f(u.time,now);blit(null);}
-// touch / fingertip: a drag flings paint the way it moves (faster = more), a tap bursts where it lands
-function spMove(p,x,y,dtR){const dx=(x-p.x)*aspect,dy=y-p.y,d=Math.hypot(dx,dy),sp=d/dtR;p.trav=(p.trav||0)+d;p.acc=(p.acc||0)+d;
-  if(p.virt&&sp<.3)return;
-  if(p.acc>(p.virt?.085:.06)&&flow>.3){p.acc=0;spThrow(x,y,Math.atan2(dy,dx),Math.min(1.5,(.28+sp*.33))*spR(.55,1.35),false);}}
-function setSplashBg(v){spBg=v?1:0;try{localStorage.setItem('hf-splbg',spBg?'1':'0');}catch(e){}spClear();
-  document.querySelectorAll('#splashRow .chip').forEach(b=>b.setAttribute('aria-pressed',(+b.dataset.sb)===spBg));}
 
 /* ================= Main loop ================= */
 let last=performance.now(), snapReq=false;
@@ -2599,7 +1817,7 @@ function frameBody(now){
   resize();
   flow+=(flowTarget-flow)*Math.min(1,dt*(flowTarget>flow?2.5:6));
   updateGyro(dt);updateTimeScale(dt);
-  if(mode==='water'){ waterFrame(dt); } else if(mode==='wave'){ waveFrame(dt); } else if(mode==='halo'){ haloFrame(dt); } else if(mode==='light'){ lightFrame(dt); } else if(mode==='silk'){ queue.length=0; silkFrame(dt); } else if(mode==='cloud'){ cloudFrame(dt); } else if(mode==='ink'){ inkFrame(dt); } else if(mode==='splash'){ splashFrame(dt); } else if(mode==='cosmos'){ cosmosFrame(dt); } else {
+  if(mode==='water'){ waterFrame(dt); } else if(mode==='halo'){ haloFrame(dt); } else if(mode==='light'){ lightFrame(dt); } else if(mode==='cloud'){ cloudFrame(dt); } else if(mode==='ink'){ inkFrame(dt); } else {
   viewStep('paint',dt);
   // left alone: two invisible brushes wander and stir the colours on their own
   if(isIdle()&&flow>.3){for(const g of ghosts){g.ph+=dt;g.a+=(Math.sin(g.ph*.7+g.s)*1.1+Math.sin(g.ph*1.9+g.s*2.)*.6)*dt;
@@ -2669,40 +1887,29 @@ function applyPlop(v){plopVal=+v;plopScale=.5*Math.pow(2,(plopVal-100)/50);wCapK
 plopEl.value=plopVal;applyPlop(plopVal);plopEl.addEventListener('input',e=>applyPlop(e.target.value));
 const seedBtn=document.getElementById('seedBtn'),hintTxt=document.getElementById('hintTxt');
 const HINTS={paint:hintTxt.innerHTML,
-  cosmos:'<b>저절로</b> 빛나는 성운이 별 사이를 흘러다님<br><b>터치·손끝</b> 움직이면 성운이 따라 흐르고 빛의 자취가 남음 · <b>톡</b> 빛이 피어남 · <b>집기</b> 소용돌이 · <b>주먹</b> 멈춤',
-  splash:'<b>저절로</b> 크고 작은 물감이 흩뿌려짐 · 오래된 물감은 천천히 가라앉음<br><b>터치·손끝을 휙</b> 움직인 방향으로 뿌려짐(빠를수록 많이) · <b>톡</b> 그 자리에서 터짐 · <b>주먹</b> 멈춤',
-  dip:'<b>손 담그기</b> · 터치: 오래 누를수록 깊게, 톡 누르면 살짝<br>손: 손바닥을 화면 쪽으로 내밀어 오래 둘수록 깊게, 떼면 물이 되솟음',
   ink:'<b>랜덤</b> 붓이 스스로 그림 — 언제든 함께 그리기<br><b>터치·손가락</b> 움직이면 먹물이 스며듦 · 겹칠수록 짙어짐<br><b>엄지+검지 집기</b> 먹 한 방울 · <b>주먹</b> 멈춤<br>먹물은 천천히 옅어져 사라짐 · <b>흔들기 켜면</b> 기울인 쪽으로 번짐',
   cloud:'<b>저절로</b> 여러 빛깔의 성운이 별 사이를 유선형으로 흘러다님<br><b>터치·손끝</b> 움직이면 성운이 부드럽게 휘어 흐름 · <b>집기</b> 회전 흐름 · <b>손 펼치기</b> 넓게 퍼짐 · <b>주먹</b> 멈춤',
-  silk:'<b>손가락·터치를 움직이면</b> 그 방향으로 바람이 불어 실크가 날아감<br>바람이 불어오는 쪽에서 새 실크가 들어옴 · <b>주먹</b> 바람이 잦아듦',
   light:'<b>손가락</b> 빛의 흐름 밀기 · <b>검지만 펴기</b> 가리킨 방향으로 빛줄기<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 멈춤',
-  wave:'<b>폰 기울이기</b> 물이 쏠려 벽에 부딪힘 · <b>흔들기</b> 출렁임<br><b>터치·손</b> 물 밀기 · <b>톡</b> 물결 · <b>주먹</b> 멈춤',
   halo:'<b>터치</b> 링 끌기 · <b>튕기기</b> 동전처럼 뒤집힘 · <b>톡</b> 빛이 돎 · <b>두 손가락</b> 확대·축소·회전<br><b>손</b> 검지 = 링 끌기 · <b>엄지를 펴면</b> 확대 · <b>엄지를 검지 끝에 붙이면</b> 축소 · <b>접은 손가락 활짝 펴기</b> = 링을 쳐서 회전 · <b>주먹</b> = 멈춤',
   water:'<b>톡 터치·손가락 톡 굽히기</b> 퐁당 · <b>끌며 원 그리기</b> 소용돌이<br><b>손가락</b> 움직여 물결 · <b>검지만 펴기</b> 가리킨 방향으로 물길<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 물 멈춤'};
-function setMode(m){mode=m;document.body.classList.toggle('water',m==='water');document.body.classList.toggle('wave',m==='wave');document.body.classList.toggle('halo',m==='halo');document.body.classList.toggle('light',m==='light');document.body.classList.toggle('silk',m==='silk');document.body.classList.toggle('cloud',m==='cloud');document.body.classList.toggle('ink',m==='ink');document.body.classList.toggle('splash',m==='splash');document.body.classList.toggle('cosmos',m==='cosmos');
+function setMode(m){mode=m;document.body.classList.toggle('water',m==='water');document.body.classList.toggle('halo',m==='halo');document.body.classList.toggle('light',m==='light');document.body.classList.toggle('cloud',m==='cloud');document.body.classList.toggle('ink',m==='ink');
   if(m==='halo')halo=null;   // starts fresh (built on the next frame)
-  if(m==='cosmos'||m==='cloud')cloudReset();
-  if((m==='cloud'||m==='cosmos')&&vel){const u=use('waterClear',[0,0]);blit(vel.w);vel.swap();blit(vel.w);vel.swap();}   // start calm: no leftover swirls from other modes
+  if(m==='cloud')cloudReset();
+  if(m==='cloud'&&vel){const u=use('waterClear',[0,0]);blit(vel.w);vel.swap();blit(vel.w);vel.swap();}   // start calm: no leftover swirls from other modes
   document.querySelectorAll('#modeSeg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.m===m));
-  seedBtn.textContent=(m==='water'||m==='wave')?'잔잔하게':m==='ink'?'새 한지':'새 캔버스';hintTxt.innerHTML=(m==='water'&&dipMode)?HINTS.dip:HINTS[m];
-  gliders.length=0;queue.length=0;drops.length=0;try{localStorage.setItem('hf-mode',m);}catch(e){}
-  if(['wave','cloud','water','paint','light','halo','ink'].includes(m)&&!gyroOn)setGyro(true);                 // the aquarium lives on tilt and shake
+  seedBtn.textContent=m==='water'?'잔잔하게':m==='ink'?'새 한지':'새 캔버스';hintTxt.innerHTML=HINTS[m];
+  gliders.length=0;queue.length=0;try{localStorage.setItem('hf-mode',m);}catch(e){}
+  if(!gyroOn)setGyro(true);                 // every mode looks around with the tilt
   if(curTrack)switchTrack();}
 document.querySelectorAll('#modeSeg button').forEach(b=>b.onclick=()=>setMode(b.dataset.m));
 setMode(mode);
-document.querySelectorAll('#splashRow .chip').forEach(b=>{b.onclick=()=>setSplashBg(+b.dataset.sb);b.setAttribute('aria-pressed',(+b.dataset.sb)===spBg);});
-seedBtn.onclick=()=>{if(mode==='splash'){spClear();}else if(mode==='cosmos'){cosReset();}else if(mode==='ink'){inkSeed=Math.random()*50;inkClear();}else if(mode==='wave'){waveInit();}else if(mode==='halo'){halo=null;}else if(mode==='water'){waterClear();gliders.length=0;}else if(mode==='light'){lightSeedAll();}else if(mode==='silk'){silkInit();}else if(mode==='cloud'){cloudReset();}else seed();drops.length=0;};
+seedBtn.onclick=()=>{if(mode==='ink'){inkSeed=Math.random()*50;inkClear();}else if(mode==='halo'){halo=null;}else if(mode==='water'){waterClear();gliders.length=0;}else if(mode==='light'){lightSeedAll();}else if(mode==='cloud'){cloudReset();}else seed();};
 const lightWrap=document.getElementById('lights');
 function renderLights(){lightWrap.innerHTML='';for(const name in LIGHTS){const b=document.createElement('button');b.className='chip';
   b.setAttribute('aria-pressed',name===lightName);b.innerHTML='<i>'+LIGHTS[name].map(c=>`<span style="background:${c}"></span>`).join('')+'</i>'+name;
   b.onclick=()=>{lightName=name;lightFlat=new Float32Array(LIGHTS[name].map(hex2rgb).flat());try{localStorage.setItem('hf-light',name);}catch(e){}renderLights();};
   lightWrap.appendChild(b);}}
 renderLights();
-const silkWrap=document.getElementById('silks');
-function renderSilks(){silkWrap.innerHTML='';for(const name in SILKS){const b=document.createElement('button');b.className='chip';
-  b.setAttribute('aria-pressed',name===silkName);b.innerHTML='<i>'+SILKS[name].map(c=>`<span style="background:${c}"></span>`).join('')+'</i>'+name;
-  b.onclick=()=>{silkName=name;try{localStorage.setItem('hf-silk',name);}catch(e){}renderSilks();};silkWrap.appendChild(b);}}
-renderSilks();
 const cloudWrap=document.getElementById('clouds');
 function renderClouds(){cloudWrap.innerHTML='';NEB_TONES.forEach((T_,i)=>{const b=document.createElement('button');b.className='chip';
   const hx=c=>'rgb('+c.map(v=>Math.round(Math.min(1,v)*255)).join(',')+')';
@@ -2715,11 +1922,6 @@ function renderInks(){inkWrap.innerHTML='';for(const name of ['랜덤',...Object
   b.innerHTML='<i>'+cs.map(c=>`<span style="background:${c}"></span>`).join('')+'</i>'+name;
   b.onclick=()=>{inkName=name;try{localStorage.setItem('hf-ink',name);}catch(e){}renderInks();};inkWrap.appendChild(b);}}
 renderInks();
-const dipBtn=document.getElementById('dipBtn');
-function setDip(on){dipMode=on;dipBtn.textContent=on?'손 담그기 끄기':'손 담그기 켜기';dipBtn.classList.toggle('on',on);
-  for(const id of dips.keys())dipEnd(id);try{localStorage.setItem('hf-dip',on?'1':'0');}catch(e){}
-  if(mode==='water')hintTxt.innerHTML=on?HINTS.dip:HINTS.water;}
-dipBtn.onclick=()=>setDip(!dipMode);
 function setRain(v){rainLevel=v;document.querySelectorAll('#rainRow .chip').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.r===v));try{localStorage.setItem('hf-rain',v);}catch(e){}}
 document.querySelectorAll('#rainRow .chip').forEach(b=>b.onclick=()=>setRain(+b.dataset.r));setRain(rainLevel);
 function setFloor(v){floorType=v;document.querySelectorAll('#floors .chip').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.f===v));try{localStorage.setItem('hf-floor4',v);}catch(e){}}
@@ -2734,7 +1936,6 @@ document.getElementById('gyroBtn').onclick=()=>{const want=!gyroOn;setGyro(want,
  let pref=null;try{pref=localStorage.getItem('hf-gyro');}catch(e){}
  if(phone&&pref!=='0'&&typeof DeviceMotionEvent!=='undefined'){
   if(!gyroOn)setGyro(true);}}
-setDip(dipMode);
 document.getElementById('snapBtn').onclick=()=>{snapReq='png';};
 /* ================= Record (MP4) & capture (JPEG): only the artwork, never the buttons or the menu ================= */
 function stamp(){const d=new Date(),z=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate())+'_'+z(d.getHours())+'-'+z(d.getMinutes())+'-'+z(d.getSeconds());}
@@ -2776,7 +1977,6 @@ capPress(document.getElementById('shotBtn'),()=>{snapReq='jpg';
 // true fullscreen (also draws under the camera cut-out / status bar area)
 const goFull=()=>{const d=document.documentElement;if(document.fullscreenElement)return;
   const r=(d.requestFullscreen||d.webkitRequestFullscreen);try{const p=r?.call(d,{navigationUI:'hide'});p&&p.catch&&p.catch(()=>{});}catch(e){}};
-const isApp=()=>matchMedia('(display-mode: fullscreen)').matches||matchMedia('(display-mode: standalone)').matches;
 let wantFull=false,needRefull=false,lastScreen=screen.width+'x'+screen.height,lastResizeT=0;
 try{wantFull=localStorage.getItem('hf-full')==='1';}catch(e){}
 function setWantFull(v){wantFull=v;try{localStorage.setItem('hf-full',v?'1':'0');}catch(e){}}
@@ -2792,7 +1992,6 @@ addEventListener('pointerdown',()=>{
   if(!document.fullscreenElement){goFull();needRefull=false;}
   else if(needRefull){needRefull=false;document.exitFullscreen().then(goFull).catch(()=>{});}   // re-apply on the new screen (covers the camera cut-out)
 },true);
-let hideTimer=0;
 function wake(){}   // no automatic Fullscreen API (avoids Chrome's fullscreen notice)
 const openMenu=v=>document.body.classList.toggle('menu',v);
 function swipe(el,dir,fn){let y0=null;
@@ -2805,7 +2004,6 @@ swipe(document.getElementById('sheetHead'),-1,()=>openMenu(false));   // swipe d
 
 /* ================= 마음 남기기: write, then keep (locked, on this phone only) or let it flow away ================= */
 const mindEl=document.getElementById('mind'),mText=document.getElementById('mText'),mFly=document.getElementById('mFly'),mModal=document.getElementById('mModal'),mCard=document.getElementById('mCard'),mToastEl=document.getElementById('mToast');
-const writing=()=>document.body.classList.contains('mind');
 let mArmT=0;function mShow(list){mCard.classList.toggle('klist',!!list);mModal.classList.add('on');mCard.classList.add('arming');clearTimeout(mArmT);mArmT=setTimeout(()=>mCard.classList.remove('arming'),550);}
 const fmtDate=t=>{const d=new Date(t),h=d.getHours();return d.getFullYear()+'년 '+(d.getMonth()+1)+'월 '+d.getDate()+'일 '+(h<12?'AM':'PM')+' '+((h%12)||12)+':'+String(d.getMinutes()).padStart(2,'0');};   // e.g. 2026년 11월 9일 PM 7:46
 let mindToastT=0;function mToast(t){mToastEl.textContent=t;mToastEl.classList.add('on');clearTimeout(mindToastT);mindToastT=setTimeout(()=>mToastEl.classList.remove('on'),2200);}
@@ -2951,7 +2149,7 @@ document.getElementById('mLet').onclick=async()=>{const text=mText.value;if(!tex
   const v=await mMenu('흘려보냈어요','글은 어디에도 남지 않았어요',[{t:'공유하기',v:'share',cls:'solid'},{t:'다시 쓰기',v:'again'},{t:'닫기',v:'close'}]);
   mFly.innerHTML='';mText.style.visibility='';
   if(v==='share'){await shareMind(pic,text.trim());closeMind();}else if(v==='again'){try{mText.focus();}catch(e){}}else closeMind();};
-// the letters leave the way this mode moves: sink in water, bleed into hanji, blow away on the silk wind, fall into the ring…
+// the letters leave the way this mode moves: sink in water, bleed into hanji, fall into the ring…
 function mindDissolve(text){return new Promise(done=>{
   mFly.innerHTML='';mFly.scrollTop=0;const top=mText.scrollTop;
   for(const ch of text){if(ch==='\n'){mFly.appendChild(document.createElement('br'));continue;}
@@ -2962,31 +2160,30 @@ function mindDissolve(text){return new Promise(done=>{
   spans.forEach((s,i)=>{const d=.15+Math.random()*1.1+i/n*.6,du=1.6+Math.random()*1.2;
     s.style.transitionDuration=du+'s';s.style.transitionDelay=d+'s';});
   requestAnimationFrame(()=>requestAnimationFrame(()=>spans.forEach(s=>{const r=s.getBoundingClientRect(),rx=Math.random(),ry=Math.random();let tf,fl;
-    if(mode==='water'||mode==='wave'){tf=`translate(${(rx-.5)*30}px,${60+ry*110}px) scale(.85)`;fl='blur(5px)';}
+    if(mode==='water'){tf=`translate(${(rx-.5)*30}px,${60+ry*110}px) scale(.85)`;fl='blur(5px)';}
     else if(mode==='ink'){tf=`translate(${(rx-.5)*14}px,${(ry-.5)*14}px) scale(${1.5+rx})`;fl='blur(9px)';}
-    else if(mode==='silk'){tf=`translate(${180+rx*320}px,${(ry-.6)*140}px) rotate(${20+rx*70}deg)`;fl='blur(2px)';}
     else if(mode==='halo'&&hc){const cx=(hc[0]/aspect)*innerWidth-(r.left+r.width/2),cy=(1-hc[1])*innerHeight-(r.top+r.height/2);
       tf=`translate(${cx*(.8+rx*.2)}px,${cy*(.8+ry*.2)}px) scale(.15) rotate(${(rx-.5)*180}deg)`;fl='blur(3px)';}
     else{tf=`translate(${(rx-.5)*40}px,${-(70+ry*140)}px) scale(1.1)`;fl='blur(7px)';}
     s.style.transform=tf;s.style.filter=fl;s.style.opacity='0';})));
   // and the art answers
   let k=0;const fx=setInterval(()=>{k++;const x=.15+.7*Math.random(),y=.3+.5*Math.random();
-    if(mode==='water')addPlop(x,y,.8);else if(mode==='ink'&&inkA)inkDrop(x,y,inkNext++,.7);else if(mode==='wave'&&wvH)wavePoke(x,y,.4);
-    else if(mode==='halo'&&halo)haloKick((Math.random()*HN)|0,.4);else if(mode==='silk'){silkWind.x=1.3;silkWind.y=(Math.random()-.5)*.4;}
+    if(mode==='water')addPlop(x,y,.8);else if(mode==='ink'&&inkA)inkDrop(x,y,inkNext++,.7);
+    else if(mode==='halo'&&halo)haloKick((Math.random()*HN)|0,.4);
     else if(mode==='paint'){const a=Math.random()*6.283;queue.push({x,y,vx:Math.cos(a)*.3,vy:Math.sin(a)*.3,set:.6,c:pickColor(k),r:.004,s:.6});}
     if(k>=6)clearInterval(fx);},420);
   setTimeout(done,3300);});}
 // ---- the kept ones ----
-const MODE_NAME_K={cosmos:'Cosmos',splash:'Splash',paint:'Pigment',water:'Ripple',wave:'Wave',light:'Aurora',silk:'Silk',cloud:'Cloud',ink:'Ink',halo:'Halo'};
+const MODE_NAME_K={paint:'Pigment',water:'Ripple',light:'Aurora',cloud:'Cloud',ink:'Ink',halo:'Halo'};
+const OLD_MODE_K={wave:'Wave',silk:'Silk',splash:'Splash',cosmos:'Cosmos'};   // notes kept in modes that no longer exist still show their name
 const TRASH_SVG='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9.5 7V4.8h5V7M6.5 7l1 12.2h9l1-12.2M10.2 10.5v5.8M13.8 10.5v5.8"/></svg>';
-const MODE_TINT={cosmos:'#1b3fd6',splash:'#f2551a',paint:'#e85d8a',water:'#2fa4c4',wave:'#2b7fd6',light:'#7a5cff',silk:'#d79ad0',cloud:'#9fb6d8',ink:'#3a3a3a',halo:'#e8e4f0'};
 async function openKept(){let recs=[];try{recs=await dbDo('readonly',st=>st.getAll());}catch(e){}
   if(!recs||!recs.length){viewRestore();return mToast('아직 간직한 마음이 없어요');}
   const key=await mindUnlock();if(!key){viewRestore();return;}
   for(const r of recs)if(r.img){delete r.img;try{await dbDo('readwrite',st=>st.put(r));}catch(e){}}   // older notes carried a picture: keep only the words now
   const items=[];for(const r of recs.sort((a,b)=>b.id-a.id)){try{items.push({r,d:await openNote(key,r)});}catch(e){}}
   mCard.innerHTML=`<h3>간직한 마음</h3><p>${items.length}개 · 이 휴대폰에만 있어요</p><div class="mlist">${items.map((it,i)=>{const m=it.d.mode||'paint';
-      return `<div class="mrow"><button class="mitem" data-i="${i}"><img class="mthumb" alt="" src="thumbs/${MODE_NAME_K[m]?m:'paint'}.jpg"><div><b>${fmtDate(it.d.t)} · ${MODE_NAME_K[m]||m}</b><span></span></div></button><button class="mtrash" aria-label="지우기">${TRASH_SVG}</button></div>`;}).join('')}</div>
+      return `<div class="mrow"><button class="mitem" data-i="${i}"><img class="mthumb" alt="" src="thumbs/${MODE_NAME_K[m]?m:'paint'}.jpg"><div><b>${fmtDate(it.d.t)} · ${MODE_NAME_K[m]||OLD_MODE_K[m]||m}</b><span></span></div></button><button class="mtrash" aria-label="지우기">${TRASH_SVG}</button></div>`;}).join('')}</div>
     <div class="mbtns"><button class="mbtn" id="mLc">닫기</button></div>`;
   mCard.querySelectorAll('.mitem').forEach((b,i)=>{const it=items[i];b.querySelector('span').textContent=it.d.text.split('\n')[0];
     b.onclick=()=>{mModal.classList.remove('on');viewKept(it,()=>openKept());};

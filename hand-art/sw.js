@@ -1,9 +1,11 @@
 /* Hand Flow Art — offline cache
    · 화면 파일(index.html 등): 온라인이면 항상 새로 받아옴(network-first), 오프라인이면 저장본 사용
    · AI 모델·런타임(mediapipe/): 한 번 받으면 그대로 재사용(버전 올려도 다시 받지 않음) */
-const CORE = 'hand-flow-core-v127';
+const CORE = 'hand-flow-core-v128';
 const MODEL = 'hand-flow-model-v1';
-const CORE_ASSETS = ['./', './index.html', './manifest.json', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png', './thumbs/paint.jpg', './thumbs/water.jpg', './thumbs/wave.jpg', './thumbs/light.jpg', './thumbs/silk.jpg', './thumbs/cloud.jpg', './thumbs/ink.jpg', './thumbs/halo.jpg', './thumbs/splash.jpg', './thumbs/cosmos.jpg'];
+const CORE_ASSETS = ['./', './index.html', './manifest.json', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png', './thumbs/paint.jpg', './thumbs/water.jpg', './thumbs/light.jpg', './thumbs/cloud.jpg', './thumbs/ink.jpg', './thumbs/halo.jpg'];
+// files no longer used: removed from the phone's saved copy as well
+const GONE = ["./audio/slow_drift_at_zenith.mp3", "./mediapipe/hand_landmark_lite.tflite", "./mediapipe/hands.binarypb", "./mediapipe/hands.js", "./mediapipe/hands_solution_packed_assets.data", "./mediapipe/hands_solution_packed_assets_loader.js", "./mediapipe/hands_solution_simd_wasm_bin.data", "./mediapipe/hands_solution_simd_wasm_bin.js", "./mediapipe/hands_solution_simd_wasm_bin.wasm", "./mediapipe/hands_solution_wasm_bin.js", "./mediapipe/hands_solution_wasm_bin.wasm"];
 const MODEL_ASSETS = [
   "./audio/where_the_stream_widens.mp3",
   "./audio/where_the_ocean_meets_sky.mp3",
@@ -11,16 +13,6 @@ const MODEL_ASSETS = [
   "./audio/silk_and_moonlight.mp3",
   "./audio/beneath_the_haloed_glass.mp3",
   "./audio/velvet_horizon.mp3",
-  "./mediapipe/hand_landmark_lite.tflite",
-  "./mediapipe/hands.binarypb",
-  "./mediapipe/hands.js",
-  "./mediapipe/hands_solution_packed_assets.data",
-  "./mediapipe/hands_solution_packed_assets_loader.js",
-  "./mediapipe/hands_solution_simd_wasm_bin.data",
-  "./mediapipe/hands_solution_simd_wasm_bin.js",
-  "./mediapipe/hands_solution_simd_wasm_bin.wasm",
-  "./mediapipe/hands_solution_wasm_bin.js",
-  "./mediapipe/hands_solution_wasm_bin.wasm",
   "./mediapipe/tasks/vision_bundle.mjs",
   "./mediapipe/tasks/wasm/vision_wasm_internal.js",
   "./mediapipe/tasks/wasm/vision_wasm_internal.wasm",
@@ -35,7 +27,7 @@ self.addEventListener('install', e => {
 self.addEventListener('activate', e => {
   // 옛 버전 저장본은 여기서 자동 삭제
   e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CORE && k !== MODEL).map(k => caches.delete(k))))
-    .then(() => caches.open(MODEL)).then(c => Promise.all(['./audio/slow_drift_at_zenith.mp3'].map(u => c.delete(u))))   // 더 이상 쓰지 않는 음악은 휴대폰 저장본에서도 지움
+    .then(() => caches.open(MODEL)).then(c => Promise.all(GONE.map(u => c.delete(u))))   // 더 이상 쓰지 않는 파일(옛 손 인식·음악)은 휴대폰 저장본에서도 지움
     .then(() => self.clients.claim()));
 });
 self.addEventListener('fetch', e => {

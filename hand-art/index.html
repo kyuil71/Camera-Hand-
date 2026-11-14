@@ -206,7 +206,7 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
     <div class="row"><button class="btn" id="pinBtn">비밀번호 바꾸기</button></div>
     <div class="row"><button class="btn" id="bakOut">마음 백업 내보내기</button><button class="btn" id="bakIn">백업 가져오기</button></div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 128</p>
+    <p class="hint" id="ver">버전 129</p>
   </div>
 </div>
 <!-- 마음 남기기: write over the flowing art, then keep it (locked with a 4-digit PIN, on this phone only) or let it flow away -->
@@ -524,7 +524,7 @@ void main(){vec4 s=texture(uP,vUv);vec2 p=s.xy;float life=s.z,lane=s.w;
  vec2 fb=v+flowB((p+.5)*.5,t)*3.2;                              // the great slow currents turn through the whole 4× space, sweeping light in and out of view
  float tl=length(tilt);
  if(tl>.01){float al=dot(fb,tilt)/(length(fb)*tl+1e-5);          // flowing the way the phone leans → faster, against it → slower
-  fb*=clamp(1.+al*tl*2.6,.25,2.6);fb+=tilt*.04;}
+  fb*=clamp(1.+al*tl*2.6,.6,2.6);fb+=tilt*.04;}
  p+=(fb+w+force*.05)*dt;
  bool born=lane>=1.;float hue=fract(lane);
  if(born){p+=v*.6*dt;}                                      // new light rides its own flow harder → it carves its own stream
@@ -535,7 +535,7 @@ void main(){vec4 s=texture(uP,vUv);vec2 p=s.xy;float life=s.z,lane=s.w;
  if(p.x<-.5)p.x=-1.-p.x;if(p.x>1.5)p.x=3.-p.x;if(p.y<-.5)p.y=-1.-p.y;if(p.y>1.5)p.y=3.-p.y;   // the walls are far outside the screen
  float eW=min(min(p.x+.5,1.5-p.x)*aspect,min(p.y+.5,1.5-p.y));
  life-=dt*(born?.11+.05*hash(vUv*91.7):.05+.08*hash(vUv*91.7))+dt*4.*smoothstep(.03,.0,eW);   /* new flows last a while */      /* no light piling up along the walls */
- if(life<0.){p=vec2(hash(vUv+t+seed),hash(vUv*1.7+t+seed+3.))*2.-.5;life=1.;lane=fract(lane);}
+ if(life<0.){vec2 rr=vec2(hash(vUv+t+seed),hash(vUv*1.7+t+seed+3.));p=hash(vUv*5.9+t+seed)<.55?pan-.08+rr*1.16:rr*2.-.5;life=1.;lane=fract(lane);}   /* most fading light is reborn around the view */
  // emission: a few particles per frame are reborn at a fingertip as a new, bright stream
  float tot=emitK[0]+emitK[1]+emitK[2]+emitK[3];
  if(tot>0.&&hash(vUv*913.7+fract(t*3.17)*97.)<emitFrac*tot){
@@ -772,15 +772,17 @@ void main(){
 function compile(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);
   if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(s));return s;}
 const vs = compile(gl.VERTEX_SHADER,VS);
+const BIG_STEP=1801,N_BIG=Math.floor(384*384/BIG_STEP);  /* 384 = PART_N (defined further down) */   // Aurora: every 1801st spark is a soft bokeh orb (≈80 — about as many as showed before; drawn in their own small pass)
 const PT_VS=`#version 300 es
 precision highp float;precision highp sampler2D;
 uniform sampler2D uP;uniform float psize,t,bigPass,psc;uniform vec3 pal[6];uniform vec3 emCol[4];uniform vec2 pan;
 out vec3 vc;out float vb;
 float rnd(float n){return fract(sin(n*12.9898)*43758.5453);}
-void main(){int w=textureSize(uP,0).x;ivec2 id=ivec2(gl_VertexID%w,gl_VertexID/w);vec4 s=texelFetch(uP,id,0);
- float n=float(gl_VertexID),h=rnd(n),h2=rnd(n+.37);
+void main(){int vid=bigPass>.5?gl_VertexID*${BIG_STEP}:gl_VertexID;   /* the orb pass visits only every ${BIG_STEP}th spark */
+ int w=textureSize(uP,0).x;ivec2 id=ivec2(vid%w,vid/w);vec4 s=texelFetch(uP,id,0);
+ float n=float(vid),h=rnd(n),h2=rnd(n+.37);
  float born=step(1.,s.w);
- float big=step(.993,h2)*(1.-born);float bright=step(.90,h);
+ float big=float(vid%${BIG_STEP}==0)*(1.-born);float bright=step(.90,h);
  gl_Position=vec4((s.xy-pan)*psc*2.-1.,0.,1.);   /* trail pass: the whole reachable area · screen pass: the current view */
  float k=fract(.5+.45*sin(s.x*3.1+t*.05)*cos(s.y*2.3-t*.04)+s.y*.85+s.x*.45+t*.012)*6.;int i=int(k);vec3 c=mix(pal[i],pal[(i+1)%6],smoothstep(.2,.8,fract(k)));
  float fade=smoothstep(0.,.12,s.z)*smoothstep(1.,.9,s.z)*smoothstep(0.,.04,min(min(s.x+.5,1.5-s.x),min(s.y+.5,1.5-s.y)));
@@ -852,7 +854,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 128';
+const VER_TXT='버전 129';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -979,7 +981,7 @@ function drawPoints(target,bigPass){
   gl.useProgram(PTP.p);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,parts.r.t);gl.uniform1i(PTP.u.uP,0);
   if(target){gl.uniform1f(PTP.u.psize,dpr*1.15*TQ);gl.uniform2f(PTP.u.pan,-LM,-LM);gl.uniform1f(PTP.u.psc,1/(1+2*LM));}
   else{gl.uniform1f(PTP.u.psize,dpr*1.15*(QS>.999?1:QS));gl.uniform2f(PTP.u.pan,VIEW.light.o[0],VIEW.light.o[1]);gl.uniform1f(PTP.u.psc,1);}gl.uniform1f(PTP.u.t,lightTime);gl.uniform1f(PTP.u.bigPass,bigPass);gl.uniform3fv(PTP.u.pal,lightFlat);gl.uniform3fv(PTP.u.emCol,emColFlat());
-  gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE);gl.bindVertexArray(vaoPts);gl.drawArrays(gl.POINTS,0,Math.round(PART_N*PART_N*(QS<.75?.65:1)));   /* a struggling phone draws fewer sparks */
+  gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE);gl.bindVertexArray(vaoPts);gl.drawArrays(gl.POINTS,0,bigPass?N_BIG:Math.round(PART_N*PART_N*(QS<.75?.65:1)));   /* orbs: only their own few · trails: all (a struggling phone draws fewer) */
   gl.bindVertexArray(vao);gl.disable(gl.BLEND);}
 const emState=new Map();let hueCounter=Math.random();
 function emColFlat(){const P=LIGHTS[lightName].map(hex2rgb);return new Float32Array([...P[1],...P[4],...P[2],...P[5]]);}
@@ -997,19 +999,20 @@ function gatherEmitters(dt){
   for(const [k,e] of emState)if(performance.now()-e.seen>400)emState.delete(k);
   return out;}
 function lightFrame(dt){
+  dt=Math.max(dt,frameDtRaw);   // 20–30 frames a second: the light still moves at its real speed (no slow motion)
   const live=flow>.3, ldt=dt*flow*(.35+timeScale);
   lightTime+=ldt;
   // hands / touch / pinch / pointing → push the light (same flow field as the paint)
   for(const h of handInfo){const p=h.point;if(!p||!live)continue;
-    splatVel(p.x,p.y,p.dx*900*dt*30,p.dy*900*dt*30,.0032);
-    for(let k=1;k<=3;k++)splatVel(p.x+p.dx/aspect*.04*k,p.y+p.dy*.04*k,p.dx*(800-k*120)*dt*30,p.dy*(800-k*120)*dt*30,.0042);}
-  for(const s of queue.splice(0)){ if(!live)continue;
-    if(s.set){splatVelSet(s.x,s.y,s.vx*vel.r.w,s.vy*vel.r.h,s.r*1.6,s.set);} else splatVel(s.x,s.y,s.dx*.6,s.dy*.6,s.r*1.4);}
+    splatVel(p.x,p.y,p.dx*1350*dt*30,p.dy*1350*dt*30,.0032);
+    for(let k=1;k<=3;k++)splatVel(p.x+p.dx/aspect*.04*k,p.y+p.dy*.04*k,p.dx*(800-k*120)*1.5*dt*30,p.dy*(800-k*120)*1.5*dt*30,.0042);}
+  for(const s of queue.splice(0)){ if(!live)continue;   // touch and hands push 1.5× harder than before (the big currents got stronger with the 4× space)
+    if(s.set){splatVelSet(s.x,s.y,s.vx*vel.r.w*1.5,s.vy*vel.r.h*1.5,s.r*1.6,Math.min(1,s.set*1.15));} else splatVel(s.x,s.y,s.dx*.9,s.dy*.9,s.r*1.4);}
   const em=live?gatherEmitters(dt):[];const ev=new Float32Array(16),ek=new Float32Array(4),eh=new Float32Array(4);
   const LV=viewStep('light',dt);
   em.forEach((e,i)=>{ev.set([e.x+LV.o[0],e.y+LV.o[1],e.dx,e.dy],i*4);   /* a fingertip on the screen = that place in the big space */ek[i]=e.k;eh[i]=e.hue;
     // each new light is a source of flow: a jet that swirls, collides with the other flows and pushes them
-    const j=520*e.k*Math.min(dt*60,2);
+    const j=780*e.k*Math.min(dt*60,2);
     splatVel(e.x,e.y,e.dx*j,e.dy*j,.0035);
     splatVel(e.x+e.dx/aspect*.05,e.y+e.dy*.05,e.dx*j*.8,e.dy*j*.8,.005);});
   if(flow>.02){simTime+=ldt;stepVel(ldt,12);}
@@ -1460,7 +1463,7 @@ function inkFrame(dt){
 let WATER_AMP=1, HAND_K=1.1;const wPan=[0,0];
 // look around by tilting, for the modes that draw on a canvas larger than the screen: z = how much of it the screen shows,
 // o = where the window sits (uv). The canvas is 1/z the screen; the window slides as far as the tilt, never past the edge.
-const LM=.3,TQ=.8;   // Aurora: how far the view can slide, and the trail canvas resolution (per screen pixel)
+const LM=.3,TQ=.65;   // Aurora: how far the view can slide, and the trail canvas resolution (per screen pixel)
 const VIEW={paint:{z:.72,o:[0,0]},ink:{z:.75,o:[0,0]},light:{z:1,lim:LM,K:1.1,o:[0,0]},halo:{z:1,lim:.5,o:[0,0]}};
 function viewStep(key,dt){const V=VIEW[key],lim=V.lim||(1-V.z)/2,K=V.K||(V.lim?.8:.5),r=1-Math.exp(-dt*3);
   const tx=gyroOn?Math.max(-lim,Math.min(lim,viewTilt[0]*K)):0,ty=gyroOn?Math.max(-lim,Math.min(lim,viewTilt[1]*K)):0;
@@ -1815,13 +1818,13 @@ document.addEventListener('visibilitychange',async()=>{if(!document.hidden&&camO
 
 
 /* ================= Main loop ================= */
-let last=performance.now(), snapReq=false;
+let last=performance.now(), snapReq=false, frameDtRaw=1/60;
 let frameErr=0;
 function frame(now){qualityTick(now);try{frameBody(now);}catch(e){if(!frameErr++){console.error(e);try{status('이 모드를 그리는 중 오류: '+String(e.message||e).slice(0,80));}catch(_){}}last=now;}   // one bad frame never stops the loop
   requestAnimationFrame(frame);}
 function frameBody(now){
   sceneAlloc();
-  const dt=Math.min((now-last)/1000,1/30);last=now;
+  const dt=Math.min((now-last)/1000,1/30);frameDtRaw=Math.min((now-last)/1000,1/20);last=now;
   resize();
   flow+=(flowTarget-flow)*Math.min(1,dt*(flowTarget>flow?2.5:6));
   updateGyro(dt);updateTimeScale(dt);

@@ -205,7 +205,7 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
     <div class="row"><button class="btn" id="pinBtn">비밀번호 바꾸기</button></div>
     <div class="row"><button class="btn" id="bakOut">마음 백업 내보내기</button><button class="btn" id="bakIn">백업 가져오기</button></div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 126</p>
+    <p class="hint" id="ver">버전 127</p>
   </div>
 </div>
 <!-- 마음 남기기: write over the flowing art, then keep it (locked with a 4-digit PIN, on this phone only) or let it flow away -->
@@ -824,16 +824,20 @@ function fbo(w,h){const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);
 function dfbo(w,h){return {r:fbo(w,h),w:fbo(w,h),swap(){const x=this.r;this.r=this.w;this.w=x;}};}
 /* ---- adaptive quality: when frames get slow, the final (heaviest) picture is drawn at a lower resolution and scaled up smoothly;
    when the phone has headroom again it steps back up. Nothing is reset, only the last stage changes size. ---- */
-let QS=1,sceneF=null,qFt=16.7,qLast=0,qSlow=0,qGood=0;
-function sceneBuf(){if(QS>.999)return null;const w=Math.max(2,Math.round(canvas.width*QS)),h=Math.max(2,Math.round(canvas.height*QS));
-  if(!sceneF||sceneF.w!==w||sceneF.h!==h){if(sceneF){gl.deleteTexture(sceneF.t);gl.deleteFramebuffer(sceneF.f);}sceneF=fbo(w,h);}return sceneF;}
+let QS=1,sceneF=null,qFt=16.7,qLast=0,qSlow=0,qGood=0,qUpAt=-1e9,qUpHold=0;
+/* The lower-resolution buffer is made (or resized) only here, at the very start of a frame. Making it in the middle of drawing
+   (as before) replaced the texture a shader was about to read → that one frame came out black = the screen blinked at every quality step. */
+function sceneAlloc(){if(QS>.999)return;const w=Math.max(2,Math.round(canvas.width*QS)),h=Math.max(2,Math.round(canvas.height*QS));
+  if(!sceneF||sceneF.w!==w||sceneF.h!==h){if(sceneF){gl.deleteTexture(sceneF.t);gl.deleteFramebuffer(sceneF.f);}sceneF=fbo(w,h);}}
+function sceneBuf(){return QS>.999||!sceneF?null:sceneF;}
 function bindScreen(){const sf=sceneBuf();if(sf){gl.bindFramebuffer(gl.FRAMEBUFFER,sf.f);gl.viewport(0,0,sf.w,sf.h);}else{gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,canvas.width,canvas.height);}}
 const outW=()=>sceneF&&QS<.999?sceneF.w:canvas.width,outH=()=>sceneF&&QS<.999?sceneF.h:canvas.height;
 function qualityTick(now){const iv=now-(qLast||now);qLast=now;if(iv<=0||iv>250)return;   // ignore pauses (app in background)
   qFt+=(iv-qFt)*.05;
   if(qFt>24){qSlow+=iv;qGood=0;}else{qSlow=Math.max(0,qSlow-iv*.5);if(qFt<18)qGood+=iv;else qGood=0;}
-  if(qSlow>2000&&QS>.5){QS=Math.max(.5,+(QS-.12).toFixed(2));qSlow=0;qGood=0;}            // slow for ~2 s → a step down
-  else if(qGood>9000&&QS<1){QS=Math.min(1,+(QS+.1).toFixed(2));qGood=0;}}               // smooth for ~9 s → a step back up
+  if(qSlow>2000&&QS>.5){QS=Math.max(.5,+(QS-.12).toFixed(2));qSlow=0;qGood=0;            // slow for ~2 s → a step down
+    if(now-qUpAt<8000)qUpHold=now+90000;}             // it only just stepped up and is already slow again → stay put for a while (no up-down see-saw)
+  else if(qGood>9000&&QS<1&&now>qUpHold){QS=Math.min(1,+(QS+.1).toFixed(2));qGood=0;qUpAt=now;}}               // smooth for ~9 s → a step back up
 function presentScene(){if(QS>.999||!sceneF)return;gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,canvas.width,canvas.height);
   const u=use('present',[0,0]);gl.uniform1i(u.uT,sceneF.bind(0));gl.drawElements(gl.TRIANGLES,6,gl.UNSIGNED_SHORT,0);}
 function blit(target){if(target){gl.bindFramebuffer(gl.FRAMEBUFFER,target.f);gl.viewport(0,0,target.w,target.h);}
@@ -847,7 +851,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 126';
+const VER_TXT='버전 127';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -1813,6 +1817,7 @@ let frameErr=0;
 function frame(now){qualityTick(now);try{frameBody(now);}catch(e){if(!frameErr++){console.error(e);try{status('이 모드를 그리는 중 오류: '+String(e.message||e).slice(0,80));}catch(_){}}last=now;}   // one bad frame never stops the loop
   requestAnimationFrame(frame);}
 function frameBody(now){
+  sceneAlloc();
   const dt=Math.min((now-last)/1000,1/30);last=now;
   resize();
   flow+=(flowTarget-flow)*Math.min(1,dt*(flowTarget>flow?2.5:6));

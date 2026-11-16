@@ -79,7 +79,8 @@ body:not(.cloud) #clouds{display:none}
 body:not(.ink) #inks{display:none}
 body:not(.light) #lights{display:none}
 body:not(.water) #plopRow,body:not(.water) #floors,body:not(.water) #rainRow{display:none}
-body:not(.pond) #pondRow{display:none}
+body:not(.pond) #pondRow,body:not(.pond) #pondSunRow{display:none}
+#pondSunRow{margin-bottom:8px}
 #pondRow{margin-bottom:10px}
 #rainRow{margin-bottom:10px}
 #rangeRow{margin-top:10px}
@@ -189,6 +190,7 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
     <div class="row chips" id="lights"></div>
     <div class="row chips" id="clouds"></div>
     <div class="row chips" id="inks"></div>
+    <div class="row chips" id="pondSunRow"><button class="chip" data-ps="0"><i class="sw" style="background:linear-gradient(135deg,#1d2622,#3e4a46 50%,#151b19)"></i>흐린 밤</button><button class="chip" data-ps="1"><i class="sw" style="background:linear-gradient(135deg,#fff3c4,#9fd1a0 50%,#5e8f63)"></i>햇살 낮</button></div>
     <div class="row chips" id="pondRow"><button class="chip" data-pr="0">비 그침</button><button class="chip" data-pr="1">약한 비</button><button class="chip" data-pr="2">장맛비</button><button class="chip" data-pr="3">폭우</button></div>
     <div class="row chips" id="rainRow"><button class="chip" data-r="0">비 없음</button><button class="chip" data-r="1">이슬비</button><button class="chip" data-r="2">비</button><button class="chip" data-r="3">소나기</button></div>
     <div class="row chips" id="haloColRow"><button class="chip" data-hc="white">링 화이트</button><button class="chip" data-hc="random">링 색 랜덤</button></div>
@@ -209,7 +211,7 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
     <div class="row"><button class="btn" id="pinBtn">비밀번호 바꾸기</button></div>
     <div class="row"><button class="btn" id="bakOut">마음 백업 내보내기</button><button class="btn" id="bakIn">백업 가져오기</button></div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 138</p>
+    <p class="hint" id="ver">버전 139</p>
   </div>
 </div>
 <!-- 마음 남기기: write over the flowing art, then keep it (locked with a 4-digit PIN, on this phone only) or let it flow away -->
@@ -817,16 +819,18 @@ void main(){vec4 s=texture(uH,vUv);float h=s.x;vec2 p=vec2(vUv.x*aspect,vUv.y);
   vec4 v=pv[i];if(v.z<.5)h-=k.w*g;                                  /* a drop (or a light press): a small dent that rebounds into rings */
   else h+=k.w*dot(d,v.xy)/k.z*g;}                                   /* a moving finger: water pushed up in front, pulled down behind */
  o=vec4(h,s.y,0.,1.);}`,
-pdRender: H+PD_GL+`uniform sampler2D uH,uB;uniform vec2 px,tilt,pan;uniform float aspect,nsc,refr,refl,skyK,seed,ext;
+pdRender: H+PD_GL+`uniform sampler2D uH,uB;uniform vec2 px,tilt,pan;uniform float aspect,nsc,refr,refl,skyK,seed,ext,sun,time;
 vec2 bedUV(vec2 v){return (v+pan+ext)/(1.+2.*ext);}                 /* screen → the larger bed, shifted by the tilt */
 vec3 sky(vec2 s){                                                     /* looking up from the puddle: overcast sky framed by the forest */
  vec2 a=s*vec2(aspect,1.);float r=length(a);
  vec3 c=mix(vec3(.70,.74,.74),vec3(.50,.55,.55),smoothstep(.0,1.,r));
+ c=mix(c,mix(vec3(1.05,1.08,1.10),vec3(.55,.72,.92),smoothstep(.0,1.,r)),sun);   /* sunny: bright white-blue sky */
  float n=fbm(a*2.6+seed)*.75+fbm(a*9.+seed*2.)*.25;
  float edge=r*.62-s.x*.35;                                          /* trees lean in from the edges, most of all over the bank */
  float canopy=smoothstep(.44,.62,n*.72+edge);
  float twig=smoothstep(.62,.66,fbm(a*22.+seed*3.))*smoothstep(.28,.5,n*.6+edge);   /* fine twigs at the canopy's edge */
- return mix(c,vec3(.05,.075,.06),max(canopy*.92,twig*.6));}
+ vec3 leaf=mix(vec3(.05,.075,.06),vec3(.16,.26,.09)*(.7+.6*fbm(a*14.+seed)),sun);   /* sunny: the leaves overhead lit green */
+ return mix(c,leaf,max(canopy*.92,twig*.6));}
 void main(){
  float gx=texture(uH,vUv+vec2(px.x,0.)).x-texture(uH,vUv-vec2(px.x,0.)).x;
  float gy=texture(uH,vUv+vec2(0.,px.y)).x-texture(uH,vUv-vec2(0.,px.y)).x;
@@ -835,14 +839,29 @@ void main(){
  vec2 off=n.xy*refr*(.3+D);off.x/=aspect;                           /* refraction: the bed stays put, only the view of it bends (more where deeper) */
  vec4 b=texture(uB,bedUV(vUv+off*water));float Db=max(b.a-.04,0.)/.96;
  vec3 under=b.rgb*vec3(.84,.92,.86);
- under=mix(under,vec3(.055,.085,.07),(1.-exp(-Db*2.1))*.9);            /* deep side: calm grey-green */
+ if(sun>0.){
+  /* sunlight through the leaves: warm dappled patches drifting as the branches sway */
+  vec2 bq=bedUV(vUv+off*water)*vec2(aspect,1.)*(1.+2.*ext);
+  vec2 sw=vec2(sin(time*.35)+.4*sin(time*.9+1.),cos(time*.28)+.4*sin(time*.71))*.02;
+  float dap=smoothstep(.40,.62,fbm(bq*2.2+sw+seed*.7))*(.65+.35*smoothstep(.3,.7,fbm(bq*7.+sw*2.+seed)));
+  /* caustics: ripples gather the sunlight into moving bright rings on the bed (from the same height field) */
+  vec2 cu=vUv+off*.6;float hc=texture(uH,cu).x;
+  float lap=texture(uH,cu+vec2(px.x,0.)).x+texture(uH,cu-vec2(px.x,0.)).x+texture(uH,cu+vec2(0.,px.y)).x+texture(uH,cu-vec2(0.,px.y)).x-4.*hc;
+  float cau=clamp(-lap*nsc*3.2,-.45,1.6)*(1.-.5*Db);
+  vec3 sunL=vec3(1.25,1.12,.92);
+  under=b.rgb*mix(vec3(.95,1.,.92)*1.25,sunL*2.6,sun*dap)+b.rgb*sunL*cau*sun*(.35+.65*dap);
+ }
+ under=mix(under,mix(vec3(.055,.085,.07),vec3(.16,.22,.15),sun),(1.-exp(-Db*2.1))*mix(.9,.4,sun));            /* deep side: calm grey-green (sunny: a clearer green) */
  vec2 sv=(vUv-.5)+pan*.6+n.xy*vec2(1./aspect,1.)*skyK+tilt*.12;  /* reflection: the same normal bends the mirrored sky */
  vec3 sk=sky(sv);
  float F=.02+.98*pow(1.-n.z,5.);
  float R=clamp((mix(.08,.20,smoothstep(0.,.8,D))+F*.8)*refl,0.,.6);
- vec3 col=mix(under,sk,R*water);
+ vec3 col=mix(under,sk,R*water*(1.-.45*sun));                    /* sunny: the bright bed shows through more, less milky sky */
+ if(sun>0.){vec3 V=vec3(0.,0.,1.),Rd=reflect(-V,n);vec3 Sd=normalize(vec3(-.25+tilt.x*.3,.35+tilt.y*.3,.9));
+  float sp=pow(max(dot(Rd,Sd),0.),900.)*18.+pow(max(dot(Rd,Sd),0.),90.)*.25;   /* the sun's glint: a bright point that sparkles on every ripple */
+  col+=vec3(1.,.96,.86)*sp*sun*water;}
  col=mix(b0.rgb,col,water);
- col=col*.94+.03;                                                    /* overcast: soft contrast, no black blacks */
+ col=mix(col*.94+.03,col*1.08,sun);                                  /* overcast: soft contrast · sunny: clear and bright */
  o=vec4(col,1.);}`,
 haloEmit: H+`uniform sampler2D uS;uniform vec4 rp[48];uniform float aspect,amt,t;uniform vec4 puff;
 void main(){vec2 p=vec2(vUv.x*aspect,vUv.y);float d=9.;
@@ -982,7 +1001,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 138';
+const VER_TXT='버전 139';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -1369,7 +1388,7 @@ const PD={
   SKY_BEND:.35          // how far a ripple bends the mirrored sky
 };
 const PD_EXT=.25;      // how far tilting can look beyond the screen on each side (fraction of the screen)
-let pondLevel=2,pdPan=[0,0];try{const v=parseInt(localStorage.getItem('hf-pondrain'));if(v>=0&&v<=3)pondLevel=v;}catch(e){}
+let pondLevel=2,pdPan=[0,0],pondSun=0;try{pondSun=localStorage.getItem('hf-pondsun')==='1'?1:0;}catch(e){}try{const v=parseInt(localStorage.getItem('hf-pondrain'));if(v>=0&&v<=3)pondLevel=v;}catch(e){}
 let pdH=null,pdBed=null,pdSeed=Math.random()*50,pdLeaves=null,pdDrips=[],pdAcc=0,pdT=Math.random()*200,pdDropAcc=0;
 const pdImp=[];                 // impulses waiting for the next step: [x,y,r,amp, dx,dy,type]
 const pdK=new Float32Array(48*4),pdV=new Float32Array(48*4);
@@ -1431,10 +1450,11 @@ function pondFrame(dt){
   if(pdImp.length>200)pdImp.splice(0,pdImp.length-200);
   const u=use('pdRender',[0,0]);gl.uniform1i(u.uH,pdH.r.bind(0));gl.uniform1i(u.uB,pdBed.bind(1));gl.uniform2f(u.px,pdH.r.tx,pdH.r.ty);
   gl.uniform2f(u.tilt,Math.max(-.6,Math.min(.6,viewTilt[0])),Math.max(-.6,Math.min(.6,viewTilt[1])));
-  gl.uniform1f(u.aspect,aspect);gl.uniform1f(u.nsc,PD.NORMAL);gl.uniform1f(u.refr,PD.REFRACT);gl.uniform1f(u.refl,PD.REFLECT);gl.uniform1f(u.skyK,PD.SKY_BEND);gl.uniform1f(u.seed,pdSeed);gl.uniform1f(u.ext,PD_EXT);
+  gl.uniform1f(u.aspect,aspect);gl.uniform1f(u.nsc,PD.NORMAL);gl.uniform1f(u.refr,PD.REFRACT);gl.uniform1f(u.refl,PD.REFLECT);gl.uniform1f(u.skyK,PD.SKY_BEND);gl.uniform1f(u.seed,pdSeed);gl.uniform1f(u.ext,PD_EXT);gl.uniform1f(u.sun,pondSun);gl.uniform1f(u.time,pdT);
   {const K=.8,r=1-Math.exp(-dt*3);for(let k=0;k<2;k++){const tgt=gyroOn?Math.max(-PD_EXT,Math.min(PD_EXT,viewTilt[k]*K)):0;pdPan[k]+=(tgt-pdPan[k])*r;}   // tilt = look around the puddle
    gl.uniform2f(u.pan,pdPan[0],pdPan[1]);}
   blit(null);}
+function setPondSun(v){pondSun=v?1:0;document.querySelectorAll('#pondSunRow .chip').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.ps===pondSun));try{localStorage.setItem('hf-pondsun',pondSun?'1':'0');}catch(e){}}
 function setPondRain(v){pondLevel=v;document.querySelectorAll('#pondRow .chip').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.pr===v));try{localStorage.setItem('hf-pondrain',v);}catch(e){}}
 /* ================= Halo mode: a ring of light wrapped in smoke above a field of water beads ================= */
 // the ring is a 3D body (position, velocity, orientation, spin) with a soft elastic rim; smoke is the shared fluid; the beads mirror the ring
@@ -2166,6 +2186,7 @@ function renderInks(){inkWrap.innerHTML='';for(const name of ['랜덤',...Object
   b.onclick=()=>{inkName=name;try{localStorage.setItem('hf-ink',name);}catch(e){}renderInks();};inkWrap.appendChild(b);}}
 renderInks();
 document.querySelectorAll('#pondRow .chip').forEach(b=>b.onclick=()=>setPondRain(+b.dataset.pr));setPondRain(pondLevel);
+document.querySelectorAll('#pondSunRow .chip').forEach(b=>b.onclick=()=>setPondSun(+b.dataset.ps));setPondSun(pondSun);
 function setRain(v){rainLevel=v;document.querySelectorAll('#rainRow .chip').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.r===v));try{localStorage.setItem('hf-rain',v);}catch(e){}}
 document.querySelectorAll('#rainRow .chip').forEach(b=>b.onclick=()=>setRain(+b.dataset.r));setRain(rainLevel);
 function setFloor(v){floorType=v;if(v===4)loadSauna();document.querySelectorAll('#floors .chip').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.f===v));try{localStorage.setItem('hf-floor4',v);}catch(e){}}

@@ -57,7 +57,7 @@ body.menu .dock{transform:translate(-50%,0)}
 .btn{flex:1;min-height:48px;border:1px solid var(--line);background:rgba(255,255,255,.06);color:var(--ink);border-radius:14px;font:inherit;font-size:16px;font-weight:600}
 .btn.main{flex:1.6;background:var(--ink);color:#101826;border-color:transparent}
 .btn.main.on{background:#d8262c;color:#fff}
-#gyroBtn.on,#musicBtn.on{background:var(--ink);color:#101826}
+#gyroBtn.on,#musicBtn.on,#liteBtn.on{background:var(--ink);color:#101826}
 .btn:active,.chip:active{transform:scale(.97)}
 #install{display:none}
 .speed{display:flex;align-items:center;gap:12px;margin:0 2px 12px;touch-action:none}
@@ -208,10 +208,10 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
       <button class="btn" id="fsBtn">전체화면</button>
       <button class="btn" id="install">앱 설치</button>
     </div>
-    <div class="row"><button class="btn" id="pinBtn">비밀번호 바꾸기</button></div>
+    <div class="row"><button class="btn" id="pinBtn">비밀번호 바꾸기</button><button class="btn" id="liteBtn">가벼운 모드 켜기</button></div>
     <div class="row"><button class="btn" id="bakOut">마음 백업 내보내기</button><button class="btn" id="bakIn">백업 가져오기</button></div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 142</p>
+    <p class="hint" id="ver">버전 143</p>
   </div>
 </div>
 <!-- 마음 남기기: write over the flowing art, then keep it (locked with a 4-digit PIN, on this phone only) or let it flow away -->
@@ -264,7 +264,9 @@ void main(){vUv=aPos*.5+.5;vL=vUv-vec2(texel.x,0.);vR=vUv+vec2(texel.x,0.);vT=vU
 const H = `#version 300 es
 precision highp float;precision highp sampler2D;
 in vec2 vUv,vL,vR,vT,vB;out vec4 o;
-float hash(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}
+/* inputs are wrapped (period 97) and multiplied by small numbers only: the values never grow large enough to lose precision on phone GPUs
+   (large ones turned noise into straight seams and square blocks on some phones) */
+float hash(vec2 p){p=mod(p,97.);vec3 q=fract(vec3(p.xyx)*.1031);q+=dot(q,q.yzx+33.33);return fract((q.x+q.y)*q.z);}
 float vn(vec2 p){vec2 i=floor(p),f=clamp(p-i,0.,1.);f=f*f*(3.-2.*f);   /* f from p-floor(p): never disagrees with i on any GPU */return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+1.),f.x),f.y);}
 float bristle(vec2 uv,vec2 dims,float sd){vec2 q=uv*dims;return .55*vn(q/2.2+sd)+.3*vn(q/5.+sd*1.7)+.15*vn(q/11.-sd);}
 `;
@@ -958,14 +960,30 @@ const PTP=(()=>{const p=gl.createProgram();gl.attachShader(p,compile(gl.VERTEX_S
   if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(p));
   const u={};['uP','psize','t','bigPass','pal','emCol','pan','psc'].forEach(k=>u[k]=gl.getUniformLocation(p,k));return {p,u};})();
 const vaoPts=gl.createVertexArray();
+/* If the phone takes the graphics memory away, nothing can be drawn until everything is built again: the simplest sure way is to
+   start the page afresh once the system gives graphics back (the mode and settings are remembered). While someone is writing or reading
+   a note the restart waits, so no words are lost. */
+let ctxLost=false,ctxWant=false;
+function ctxReload(){const busy=document.body.classList.contains('mind')||document.body.classList.contains('mview')||document.getElementById('mModal').classList.contains('on');
+  if(busy||document.hidden){ctxWant=true;return;}
+  let last=0;try{last=+sessionStorage.getItem('hf-ctx-reload')||0;}catch(e){}
+  if(Date.now()-last<15000){try{status('그래픽을 다시 준비하지 못했어요 · 앱을 다시 켜 주세요');}catch(e){}return;}   // never a restart loop
+  try{sessionStorage.setItem('hf-ctx-reload',String(Date.now()));}catch(e){}
+  location.reload();}
+canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();ctxLost=true;try{status('그래픽을 다시 준비하는 중…');}catch(_){}
+  setTimeout(()=>{if(ctxLost)ctxReload();},4000);});                       // some phones never report 'restored'
+canvas.addEventListener('webglcontextrestored',()=>ctxReload());
+setInterval(()=>{if(ctxWant&&ctxLost){ctxWant=false;ctxReload();}},1000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&ctxLost)ctxReload();});
 const P = {};
 const P_FAIL=[];   // a shader this GPU cannot build only disables what uses it — never the whole app
-for(const k in FS){try{const p=gl.createProgram();gl.attachShader(p,vs);gl.attachShader(p,compile(gl.FRAGMENT_SHADER,FS[k]));
-  gl.bindAttribLocation(p,0,'aPos');gl.linkProgram(p);
-  if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(p));
-  const u={};const n=gl.getProgramParameter(p,gl.ACTIVE_UNIFORMS);
-  for(let i=0;i<n;i++){const nm=gl.getActiveUniform(p,i).name.replace('[0]','');u[nm]=gl.getUniformLocation(p,nm);}
-  P[k]={p,u};}catch(e){console.warn('shader',k,e);P_FAIL.push(k);}}
+function prog(k){let s=P[k];if(s)return s;if(P_FAIL.includes(k))throw new Error('shader '+k);
+  try{const p=gl.createProgram();gl.attachShader(p,vs);gl.attachShader(p,compile(gl.FRAGMENT_SHADER,FS[k]));
+    gl.bindAttribLocation(p,0,'aPos');gl.linkProgram(p);
+    if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(p));
+    const u={};const n=gl.getProgramParameter(p,gl.ACTIVE_UNIFORMS);
+    for(let i=0;i<n;i++){const nm=gl.getActiveUniform(p,i).name.replace('[0]','');u[nm]=gl.getUniformLocation(p,nm);}
+    return P[k]={p,u};}catch(e){console.warn('shader',k,e);P_FAIL.push(k);throw e;}}
 
 const vao=gl.createVertexArray();gl.bindVertexArray(vao);
 const vb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,vb);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,-1,1,1,1,1,-1]),gl.STATIC_DRAW);
@@ -982,6 +1000,8 @@ function fbo(w,h){const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);
 function dfbo(w,h){return {r:fbo(w,h),w:fbo(w,h),swap(){const x=this.r;this.r=this.w;this.w=x;}};}
 /* ---- adaptive quality: when frames get slow, the final (heaviest) picture is drawn at a lower resolution and scaled up smoothly;
    when the phone has headroom again it steps back up. Nothing is reset, only the last stage changes size. ---- */
+let liteUser=false,liteAuto=false;try{liteUser=localStorage.getItem('hf-lite')==='1';}catch(e){}
+const LITE=()=>liteUser||liteAuto;   // 가벼운 모드: 60 frames a second at most, lower picture resolution, fewer sparks and rings, hand tracking less often
 let QS=1,sceneF=null,qFt=16.7,qLast=0,qSlow=0,qGood=0,qUpAt=-1e9,qUpHold=0;
 /* The lower-resolution buffer is made (or resized) only here, at the very start of a frame. Making it in the middle of drawing
    (as before) replaced the texture a shader was about to read → that one frame came out black = the screen blinked at every quality step. */
@@ -993,15 +1013,17 @@ const outW=()=>sceneF&&QS<.999?sceneF.w:canvas.width,outH=()=>sceneF&&QS<.999?sc
 function qualityTick(now){const iv=now-(qLast||now);qLast=now;if(iv<=0||iv>250)return;   // ignore pauses (app in background)
   qFt+=(iv-qFt)*.05;
   if(qFt>24){qSlow+=iv;qGood=0;}else{qSlow=Math.max(0,qSlow-iv*.5);if(qFt<18)qGood+=iv;else qGood=0;}
-  if(qSlow>2000&&QS>.5){QS=Math.max(.5,+(QS-.12).toFixed(2));qSlow=0;qGood=0;            // slow for ~2 s → a step down
+  const qMin=LITE()?.4:.5,qMax=LITE()?.75:1;if(QS>qMax)QS=qMax;
+  if(qSlow>2000&&QS<=qMin&&!LITE()){liteAuto=true;qSlow=0;}      // already at the lowest picture size and still slow → ease everything else too (until the app is restarted)
+  else if(qSlow>2000&&QS>qMin){QS=Math.max(qMin,+(QS-.12).toFixed(2));qSlow=0;qGood=0;            // slow for ~2 s → a step down
     if(now-qUpAt<8000)qUpHold=now+90000;}             // it only just stepped up and is already slow again → stay put for a while (no up-down see-saw)
-  else if(qGood>9000&&QS<1&&now>qUpHold){QS=Math.min(1,+(QS+.1).toFixed(2));qGood=0;qUpAt=now;}}               // smooth for ~9 s → a step back up
+  else if(qGood>9000&&QS<qMax&&now>qUpHold){QS=Math.min(qMax,+(QS+.1).toFixed(2));qGood=0;qUpAt=now;}}               // smooth for ~9 s → a step back up
 function presentScene(){if(QS>.999||!sceneF)return;gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,canvas.width,canvas.height);
   const u=use('present',[0,0]);gl.uniform1i(u.uT,sceneF.bind(0));gl.drawElements(gl.TRIANGLES,6,gl.UNSIGNED_SHORT,0);}
 function blit(target){if(target){gl.bindFramebuffer(gl.FRAMEBUFFER,target.f);gl.viewport(0,0,target.w,target.h);}
   else bindScreen();
   gl.drawElements(gl.TRIANGLES,6,gl.UNSIGNED_SHORT,0);}
-function use(k,texel){const s=P[k];gl.useProgram(s.p);gl.uniform2f(s.u.texel,texel[0],texel[1]);return s.u;}
+function use(k,texel){const s=prog(k);gl.useProgram(s.p);gl.uniform2f(s.u.texel,texel[0],texel[1]);return s.u;}
 
 /* ================= Simulation state ================= */
 const SIM_RES=128, DYE_RES=800;   // the paint canvas is a little larger than the screen (tilt to look around), so a little finer
@@ -1009,7 +1031,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 142';
+const VER_TXT='버전 143';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -1045,11 +1067,18 @@ function resize(){applyRot();dpr=Math.min(window.devicePixelRatio||1,2);
   const w=Math.round(VW()*dpr),h=Math.round(VH()*dpr);
   if(canvas.width===w&&canvas.height===h&&vel)return;
   canvas.width=w;canvas.height=h;fx.width=w;fx.height=h;aspect=w/h;
-  const [sw,sh]=res(SIM_RES),[dw,dh]=res(DYE_RES);
-  vel=dfbo(sw,sh);dye=dfbo(dw,dh);det=dfbo(dw,dh);div=fbo(sw,sh);curlF=fbo(sw,sh);pres=dfbo(sw,sh);
-  const [ww,wh]=res(WATER_RES);wat=dfbo(ww,wh);lightAlloc();cloudAlloc();inkA=null;inkAlloc();wgrad=fbo(ww,wh);waterClear();
-  seed();}
-function seed(){const u=use('init',[dye.w.tx,dye.w.ty]);
+  const [sw,sh]=res(SIM_RES);
+  freeD(vel);freeD(pres);freeF(div);freeF(curlF);
+  vel=dfbo(sw,sh);div=fbo(sw,sh);curlF=fbo(sw,sh);pres=dfbo(sw,sh);
+  dropModeBufs();}                 // every mode's own buffers are made again (at the new size) when that mode is next drawn
+function freeF(f){if(f){gl.deleteTexture(f.t);gl.deleteFramebuffer(f.f);}}
+function freeD(d){if(d){freeF(d.r);freeF(d.w);}}
+function dropModeBufs(){freeD(dye);freeD(det);dye=det=null;freeD(wat);freeF(wgrad);wat=wgrad=null;
+  freeD(trail);freeF(glowF);trail=glowF=null;freeD(cDisp);freeF(cFbo);cDisp=cFbo=null;
+  freeD(inkA);freeD(inkS);freeF(inkK);inkA=inkS=inkK=null;}
+function paintAlloc(){const [dw,dh]=res(liteUser?560:DYE_RES);dye=dfbo(dw,dh);det=dfbo(dw,dh);seed();}
+function waterAlloc(){const [ww,wh]=res(WATER_RES);wat=dfbo(ww,wh);wgrad=fbo(ww,wh);waterClear();}
+function seed(){if(!dye)return;const u=use('init',[dye.w.tx,dye.w.ty]);
   gl.uniform3fv(u.pal,palFlat);gl.uniform1f(u.seed,Math.random()*100);gl.uniform1f(u.aspect,aspect);
   blit(dye.w);dye.swap();
   detSeed=Math.random()*50;detailPass(2);
@@ -1061,7 +1090,7 @@ function seed(){const u=use('init',[dye.w.tx,dye.w.ty]);
     splatVel(x,y,Math.cos(a)*(big?750:450),Math.sin(a)*(big?750:450),big?r*1.5:.005);}
   for(let i=0;i<5;i++){const cx=.15+.7*Math.random(),cy=.15+.7*Math.random(),sp=Math.random()<.5?1:-1;   // a few big eddies so it moves at once
     for(let k=0;k<6;k++){const an=k/6*6.283;splatVel(cx+Math.cos(an)*.07/aspect,cy+Math.sin(an)*.07,-Math.sin(an)*sp*600,Math.cos(an)*sp*600,.004);}}
-  for(let i=0;i<16;i++)step(1/30);}
+  for(let i=0,n=liteUser?6:16;i<n;i++)step(1/30);}
 
 function splatVelSet(x,y,vx,vy,r,k){const u=use('splatVelSet',[vel.r.tx,vel.r.ty]);
   gl.uniform1i(u.uT,vel.r.bind(0));gl.uniform1f(u.aspect,aspect);gl.uniform2f(u.point,x,y);
@@ -1144,7 +1173,7 @@ function drawPoints(target,bigPass){
   gl.useProgram(PTP.p);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,parts.r.t);gl.uniform1i(PTP.u.uP,0);
   if(target){gl.uniform1f(PTP.u.psize,dpr*1.15*TQ);gl.uniform2f(PTP.u.pan,-LM,-LM);gl.uniform1f(PTP.u.psc,1/(1+2*LM));}
   else{gl.uniform1f(PTP.u.psize,dpr*1.15*(QS>.999?1:QS));gl.uniform2f(PTP.u.pan,VIEW.light.o[0],VIEW.light.o[1]);gl.uniform1f(PTP.u.psc,1);}gl.uniform1f(PTP.u.t,lightTime);gl.uniform1f(PTP.u.bigPass,bigPass);gl.uniform3fv(PTP.u.pal,lightFlat);gl.uniform3fv(PTP.u.emCol,emColFlat());
-  gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE);gl.bindVertexArray(vaoPts);gl.drawArrays(gl.POINTS,0,bigPass?N_BIG:Math.round(PART_N*PART_N*(QS<.75?.65:1)));   /* orbs: only their own few · trails: all (a struggling phone draws fewer) */
+  gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE);gl.bindVertexArray(vaoPts);gl.drawArrays(gl.POINTS,0,bigPass?N_BIG:Math.round(PART_N*PART_N*(LITE()?.45:QS<.75?.65:1)));   /* orbs: only their own few · trails: all (a struggling phone draws fewer) */
   gl.bindVertexArray(vao);gl.disable(gl.BLEND);}
 const emState=new Map();let hueCounter=Math.random();
 function emColFlat(){const P=LIGHTS[lightName].map(hex2rgb);return new Float32Array([...P[1],...P[4],...P[2],...P[5]]);}
@@ -1163,6 +1192,7 @@ function gatherEmitters(dt){
   return out;}
 function lightFrame(dt){
   dt=Math.max(dt,frameDtRaw);   // 20–30 frames a second: the light still moves at its real speed (no slow motion)
+  if(!trail)lightAlloc();
   const live=flow>.3, ldt=dt*flow*(.35+timeScale);
   lightTime+=ldt;
   // hands / touch / pinch / pointing → push the light (same flow field as the paint)
@@ -1254,6 +1284,7 @@ function cloudWindStep(dt,live){const W=cWind;W.T+=dt;const now=performance.now(
 // tilt = look around the space: tilt toward a side and the view travels that way, as far as the tilt (bounded), and comes back when level
 const cPan=[0,0];
 function cloudFrame(dt){
+  if(!cFbo)cloudAlloc();
   const st=NEB_STY,live=flow>.3,k=dt*flow*(.35+.5*Math.min(timeScale,2));
   cloudT+=k;
   cloudWindStep(dt,live);
@@ -1281,7 +1312,7 @@ const W_C=250, W_H=1/540, W_NK=.24, SUN=(()=>{const v=[.12,.82,.56],l=Math.hypot
 // strength budget: however hard and often the water is struck, it never gets rougher than ~3 plops at once
 // (extra pushes are softened, and rough water calms faster) → the floor's light pattern always shows
 let wBudget=0,wExtra=0,wCapK=1,wSmooth=0;const W_BCAP=.035;
-function waterClear(){wBudget=0;wExtra=0;const u=use('waterClear',[0,0]);blit(wat.w);wat.swap();blit(wat.w);wat.swap();}
+function waterClear(){if(!wat)return;wBudget=0;wExtra=0;const u=use('waterClear',[0,0]);blit(wat.w);wat.swap();blit(wat.w);wat.swap();}
 function waterPoke(x,y,amp,r,bw,minK){const I=Math.abs(amp)*r*(bw==null?1:bw);   // bw: how much this push counts against the roughness budget
   let k=1;if(I>0){const room=W_BCAP*wCapK-wBudget;k=room>=I?1:Math.max(minK==null?.15:minK,Math.max(0,room)/I);amp*=k;wBudget+=I*k;}
   const u=use('waterPoke',[wat.r.tx,wat.r.ty]);gl.uniform1i(u.uT,wat.r.bind(0));
@@ -1330,6 +1361,7 @@ let WHIRL_D=.12;const swlBuf=new Float32Array(16);
 function wakeEnd(id){const w=wakes.get(id);if(w&&w.whirl>.02){w.up=true;w.spin*=.8;}else wakes.delete(id);}   // let go: the swirl unwinds for a moment
 // camera hands work like in Pigment: every moving fingertip stirs the water, pointing sends a wake the way it points, pinch = whirl, fist = still
 function waterFrame(dt){
+  if(!wat)waterAlloc();
   const wts=Math.min(.45+.55*timeScale,2.6);            // slider + finger speed → water time
   const sdt=dt*flow*wts; waterTime+=sdt;
   wExtra=Math.max(0,wBudget/(W_BCAP*wCapK)-.8)*1.5;wSmooth=Math.min(.06,Math.max(0,wBudget/(W_BCAP*wCapK)-.3)*.12); wBudget*=Math.exp(-(.3+wExtra*.5)*sdt);   // rough water settles faster
@@ -1337,7 +1369,7 @@ function waterFrame(dt){
   if(plops.length){const n=plops.length,kk=1/Math.sqrt(n);            // many stones at once: each a little softer, total energy stays calm
     const ps=plopScale;
     if(live)for(const p of plops){const ek=waterPoke(p.x,p.y,WATER_AMP*PLOP_A*p.k*kk*Math.pow(ps,-.4),PLOP_R*ps*ps,.4,.8);   // 탭은 매번 또렷하게: 예산에 가볍게 계산, 많이 쳐도 80% 이상   // 퐁당 크기: wider push, a little gentler per area
-      if(PLOP_RING>0&&ek>.3){if(rainDrops.length>=MAXR)rainDrops.shift();
+      if(PLOP_RING>0&&ek>.3){if(rainDrops.length>=(LITE()?40:MAXR))rainDrops.shift();
       rainDrops.push({x:p.x,y:p.y,age:0,size:Math.min(1.8,PLOP_RING*Math.sqrt(kk)*p.k*Math.sqrt(ps))});}}   // + crisp capillary rings and a glint right where the finger touched
     plops.length=0;}
   // fingers / touch / pinch rings → pressure on the surface (stronger when moving faster)
@@ -1421,7 +1453,7 @@ function pondBake(){const E=1+2*PD_EXT,bw=Math.round(canvas.width*E*Math.min(1,2
 function pondClear(){if(!pdH)return;for(const t of [pdH.r,pdH.w]){gl.bindFramebuffer(gl.FRAMEBUFFER,t.f);gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT);}}
 function pondNew(){pdSeed=Math.random()*50;pdLeaves=null;pdBed=null;pondClear();}
 function pondAlloc(){const [sw,sh]=res(PD.SIM);
-  if(!pdH||pdH.r.w!==sw||pdH.r.h!==sh){pdH=dfbo(sw,sh);pondClear();pdBed=null;}
+  if(!pdH||pdH.r.w!==sw||pdH.r.h!==sh){freeD(pdH);pdH=dfbo(sw,sh);pondClear();freeF(pdBed);pdBed=null;}
   if(!pdBed||pdBedAsp!==aspect)pondBake();}   // a new screen shape (rotation, fold) → the bed is made again to fit       // the bed is made once and reused (again only when the screen changes size or a new puddle is asked for)
 // ---- input: a drop or press = a dent; a moving finger = a push (bulge ahead, trough behind) ----
 function pondDrop(x,y,r,amp){pdImp.push([x,y,r,amp,0,0,0]);}
@@ -1494,7 +1526,7 @@ function haloHome(){return [aspect/2,.55,0];}
 function haloInit(){const R=haloR0();
   halo={C:haloHome(),V:[0,0,0],q:[0,0,0,1],w:[0,0,0],R,Rt:R,a:new Float32Array(HN),av:new Float32Array(HN),b:new Float32Array(HN),bv:new Float32Array(HN),
     pul:[],el:0,elA:0,sad:0,grab:null,pinch:null,hold:null,two:null,P:[],pv:[],I:1,lastHand:0,hBase:{}};
-  const [sw,sh]=res(190);if(!hSmoke||hSmoke.r.w!==sw||hSmoke.r.h!==sh)hSmoke=dfbo(sw,sh);
+  const [sw,sh]=res(190);if(!hSmoke||hSmoke.r.w!==sw||hSmoke.r.h!==sh){freeD(hSmoke);hSmoke=dfbo(sw,sh);}
   for(const t of [hSmoke.r,hSmoke.w]){gl.bindFramebuffer(gl.FRAMEBUFFER,t.f);gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT);}
   if(vel){const u=use('waterClear',[0,0]);blit(vel.w);vel.swap();blit(vel.w);vel.swap();}
   haloNodes();}
@@ -1736,7 +1768,7 @@ function updateRain(dt){
   for(let i=rainDrops.length-1;i>=0;i--){rainDrops[i].age+=dt;if(rainDrops[i].age>(rainDrops[i].life||1.5))rainDrops.splice(i,1);}
   rainAcc+=RAIN_RATE[rainLevel]*dt;
   while(rainAcc>=1){rainAcc-=1;
-    if(rainDrops.length>=MAXR)rainDrops.shift();
+    while(rainDrops.length>=(LITE()?40:MAXR))rainDrops.shift();
     const S=RAIN_SIZE[rainLevel],sz=Math.pow(Math.random(),S[2]);   // drizzle: fine drops only · shower: many big ones
     const d={x:Math.random(),y:Math.random(),age:0,size:S[0]+S[1]*sz,life:RAIN_LIFE[rainLevel]*(.8+.4*Math.random())};rainDrops.push(d);
     if(d.size>.75&&flow>.3)waterPoke(d.x,d.y,WATER_AMP*.35*d.size,.00006);}   // big drops also stir the lake
@@ -1997,7 +2029,7 @@ async function loadTasks(){
 let lastDetT=0;
 function tasksDetect(){
   if(video.currentTime===lastVT)return;
-  const t=performance.now();if(QS<.999&&t-lastDetT<48)return;   // phone struggling (quality stepped down): ≈20 detections a second instead of every camera frame
+  const t=performance.now();if((QS<.999||LITE())&&t-lastDetT<(LITE()?64:48))return;   // phone struggling (quality stepped down): ≈20 detections a second instead of every camera frame
   lastVT=video.currentTime;lastDetT=t;let res;try{res=tasksLM.detectForVideo(video,t);}catch(e){console.warn(e);return;}
   const out=[],used=[false,false];
   (res.landmarks||[]).forEach((lm,i)=>{
@@ -2087,7 +2119,11 @@ document.addEventListener('visibilitychange',async()=>{if(!document.hidden&&camO
 /* ================= Main loop ================= */
 let last=performance.now(), snapReq=false, frameDtRaw=1/60;
 let frameErr=0;
-function frame(now){qualityTick(now);try{frameBody(now);}catch(e){if(!frameErr++){console.error(e);try{status('이 모드를 그리는 중 오류: '+String(e.message||e).slice(0,80));}catch(_){}}last=now;}   // one bad frame never stops the loop
+let lastDrawT=0;
+function frame(now){
+  if(ctxLost){requestAnimationFrame(frame);return;}
+  if(LITE()&&now-lastDrawT<15.5){requestAnimationFrame(frame);return;}lastDrawT=now;   // light mode: never more than 60 pictures a second (120 Hz screens)
+  qualityTick(now);try{frameBody(now);}catch(e){if(!frameErr++){console.error(e);try{status('이 모드를 그리는 중 오류: '+String(e.message||e).slice(0,80));}catch(_){}}last=now;}   // one bad frame never stops the loop
   requestAnimationFrame(frame);}
 function frameBody(now){
   sceneAlloc();
@@ -2096,6 +2132,7 @@ function frameBody(now){
   flow+=(flowTarget-flow)*Math.min(1,dt*(flowTarget>flow?2.5:6));
   updateGyro(dt);updateTimeScale(dt);
   if(mode==='water'){ waterFrame(dt); } else if(mode==='pond'){ queue.length=0; pondFrame(dt); } else if(mode==='halo'){ haloFrame(dt); } else if(mode==='light'){ lightFrame(dt); } else if(mode==='cloud'){ cloudFrame(dt); } else if(mode==='ink'){ inkFrame(dt); } else {
+  if(!dye)paintAlloc();
   viewStep('paint',dt);
   // left alone: two invisible brushes wander and stir the colours on their own
   if(isIdle()&&flow>.3){for(const g of ghosts){g.ph+=dt;g.a+=(Math.sin(g.ph*.7+g.s)*1.1+Math.sin(g.ph*1.9+g.s*2.)*.6)*dt;
@@ -2207,6 +2244,13 @@ function setRain(v){rainLevel=v;document.querySelectorAll('#rainRow .chip').forE
 document.querySelectorAll('#rainRow .chip').forEach(b=>b.onclick=()=>setRain(+b.dataset.r));setRain(rainLevel);
 function setFloor(v){floorType=v;if(v===4)loadSauna();document.querySelectorAll('#floors .chip').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.f===v));try{localStorage.setItem('hf-floor4',v);}catch(e){}}
 document.querySelectorAll('#floors .chip').forEach(b=>b.onclick=()=>setFloor(+b.dataset.f));setFloor(floorType);
+const liteBtn=document.getElementById('liteBtn');
+function setLite(on,init){liteUser=!!on;liteBtn.textContent=on?'가벼운 모드 끄기':'가벼운 모드 켜기';liteBtn.classList.toggle('on',!!on);
+  try{localStorage.setItem('hf-lite',on?'1':'0');}catch(e){}
+  if(init)return;if(on)QS=Math.min(QS,.75);else liteAuto=false;
+  freeD(dye);freeD(det);dye=det=null;                                // Pigment's canvas is made again at the matching size
+  status(on?'가벼운 모드 켜짐 · 느린 휴대폰에서 더 부드럽게':'가벼운 모드 꺼짐');}
+liteBtn.onclick=()=>setLite(!liteUser);setLite(liteUser,true);
 const musicBtn=document.getElementById('musicBtn');
 function setMusic(on){musicOn=on;musicBtn.textContent=on?'음악 끄기':'음악 켜기';musicBtn.classList.toggle('on',on);try{localStorage.setItem('hf-music',on?'on':'off');}catch(e){}
   if(on)tryMusic();}                                   // off: the song fades out by itself (updateMusic)

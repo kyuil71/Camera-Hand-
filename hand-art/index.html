@@ -211,7 +211,7 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
     <div class="row"><button class="btn" id="pinBtn">비밀번호 바꾸기</button></div>
     <div class="row"><button class="btn" id="bakOut">마음 백업 내보내기</button><button class="btn" id="bakIn">백업 가져오기</button></div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 140</p>
+    <p class="hint" id="ver">버전 141</p>
   </div>
 </div>
 <!-- 마음 남기기: write over the flowing art, then keep it (locked with a 4-digit PIN, on this phone only) or let it flow away -->
@@ -268,7 +268,11 @@ float hash(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract
 float vn(vec2 p){vec2 i=floor(p),f=clamp(p-i,0.,1.);f=f*f*(3.-2.*f);   /* f from p-floor(p): never disagrees with i on any GPU */return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+1.),f.x),f.y);}
 float bristle(vec2 uv,vec2 dims,float sd){vec2 q=uv*dims;return .55*vn(q/2.2+sd)+.3*vn(q/5.+sd*1.7)+.15*vn(q/11.-sd);}
 `;
-const PD_GL=`float fbm(vec2 p){float s=0.,a=.5;for(int i=0;i<5;i++){s+=a*vn(p);p=p*2.03+vec2(1.7,9.2);a*=.5;}return s;}
+/* Pond noise that stays exact on phone GPUs: the lattice is wrapped (period 97) before hashing and the hash uses small multipliers,
+   so the numbers never grow large enough to lose precision (large ones turn noise into straight lines and square blocks on some phones) */
+const PD_GL=`float ph(vec2 p){p=mod(p,97.);p=fract(p*vec2(.1031,.1030));p+=dot(p,p.yx+33.33);return fract((p.x+p.y)*p.x);}
+float pvn(vec2 p){vec2 i=floor(p),f=clamp(p-i,0.,1.);f=f*f*(3.-2.*f);return mix(mix(ph(i),ph(i+vec2(1,0)),f.x),mix(ph(i+vec2(0,1)),ph(i+1.),f.x),f.y);}
+float fbm(vec2 p){float s=0.,a=.5;for(int i=0;i<5;i++){s+=a*pvn(p);p=mod(p*2.03+vec2(1.7,9.2),97.*8.);a*=.5;}return s;}
 `;   // Pond: soft multi-scale noise
 const FS = {
 splatVelSet: H+`uniform sampler2D uT;uniform float aspect,radius,strength;uniform vec2 point;uniform vec3 color;
@@ -769,13 +773,13 @@ pdBed: H+PD_GL+`uniform float aspect,seed,ext;uniform vec4 lf[10];uniform vec3 l
 /* one layer of pebbles: jittered cells, each stone its own size, shape, turn and colour; some cells stay empty → uneven gaps */
 vec4 pebbles(vec2 p,float sc,float sd,float dens,out float id){
  p*=sc;vec2 c=floor(p);vec4 best=vec4(0.,0.,0.,9.);id=0.;
- for(int j=-1;j<=1;j++)for(int i=-1;i<=1;i++){vec2 g=c+vec2(i,j);if(hash(g+sd*3.1)>dens)continue;
-  vec2 cen=g+.18+.64*vec2(hash(g+sd),hash(g+sd+19.19));
-  float ang=hash(g+sd*7.7)*3.1416,el=.55+.45*hash(g+sd*5.3),rad=.26+.42*hash(g+sd*2.9);
+ for(int j=-1;j<=1;j++)for(int i=-1;i<=1;i++){vec2 g=c+vec2(i,j);if(ph(g+sd*3.1)>dens)continue;
+  vec2 cen=g+.18+.64*vec2(ph(g+sd),ph(g+sd+19.19));
+  float ang=ph(g+sd*7.7)*3.1416,el=.55+.45*ph(g+sd*5.3),rad=.26+.42*ph(g+sd*2.9);
   vec2 d=p-cen;d=mat2(cos(ang),-sin(ang),sin(ang),cos(ang))*d;d.y/=el;
-  float an=atan(d.y,d.x),wob=1.+.10*sin(an*2.+hash(g+sd*9.)*6.3)+.06*sin(an*5.+hash(g+sd*4.)*6.3);
+  float an=atan(d.y,d.x),wob=1.+.10*sin(an*2.+ph(g+sd*9.)*6.3)+.06*sin(an*5.+ph(g+sd*4.)*6.3);
   float r=length(d)/(rad*wob);
-  if(r<best.w){best=vec4(d/rad,ang,r);id=hash(g+sd*11.1);}}
+  if(r<best.w){best=vec4(d/rad,ang,r);id=ph(g+sd*11.1);}}
  return best;}
 vec3 stone(vec4 pb,float id,vec2 q){
  float r=clamp(pb.w,0.,1.),nz=sqrt(max(1.-r*r,0.));vec3 n=normalize(vec3(pb.xy*.85,nz+.35));
@@ -783,7 +787,7 @@ vec3 stone(vec4 pb,float id,vec2 q){
  vec3 c=mix(vec3(.36,.36,.34),vec3(.62,.61,.57),id);                              /* grey, from slate to pale */
  c=mix(c,c*vec3(1.08,.98,.86),step(.72,fract(id*7.3)));                           /* a few warmer, brownish stones */
  c=mix(c,c*vec3(.86,.95,1.04),step(.8,fract(id*13.7)));                           /* and a few cooler ones */
- c*=.86+.22*vn(q*190.+id*40.)+.08*vn(q*520.);                                     /* grain and speckles */
+ c*=.86+.22*pvn(q*190.+id*40.)+.08*pvn(q*520.);                                     /* grain and speckles */
  return c*dif*(1.-.35*smoothstep(.7,1.,r));}
 float leafMask(vec2 d,out float vein){float x=d.x,hw=.36*pow(max(1.-x*x,0.),.75)*(1.+.12*x);
  vein=1.-smoothstep(0.,.025,abs(d.y))*(1.-.0);
@@ -792,7 +796,7 @@ float leafMask(vec2 d,out float vein){float x=d.x,hw=.36*pow(max(1.-x*x,0.),.75)
 void main(){vec2 u=vUv*(1.+2.*ext)-ext;vec2 q=vec2(u.x*aspect,u.y);   /* the bed is made larger than the screen: tilting looks around it */
  float D=clamp(.12+.88*smoothstep(.28,.72,fbm(q*.55+seed*1.3)),0.,1.);   /* water everywhere: shallow gravel flats and deeper hollows */
  /* under water: silt, then gravel, stones, big stones (fewer where it is deep), leaves */
- vec3 col=mix(vec3(.15,.15,.12),vec3(.25,.24,.19),fbm(q*9.+seed));col*=.85+.25*vn(q*240.);
+ vec3 col=mix(vec3(.15,.15,.12),vec3(.25,.24,.19),fbm(q*9.+seed));col*=.85+.25*pvn(q*240.);
  float id;vec4 pb;float ao=1.;
  pb=pebbles(q,46.,seed+9.,mix(.9,.35,D),id);if(pb.w<1.)col=stone(pb,id,q)*.92;else ao=min(ao,.78+.22*smoothstep(1.,1.25,pb.w));
  pb=pebbles(q,21.,seed+4.,mix(.8,.22,D),id);if(pb.w<1.){col=stone(pb,id,q);ao=1.;}else ao=min(ao,.7+.3*smoothstep(1.,1.3,pb.w));
@@ -800,8 +804,8 @@ void main(){vec2 u=vUv*(1.+2.*ext)-ext;vec2 q=vec2(u.x*aspect,u.y);   /* the bed
  col*=ao;                                                                         /* stones shade the silt right around them */
  for(int k=0;k<10;k++){vec4 L=lf[k];if(L.w<=0.)continue;vec2 d=q-L.xy;float a=L.z;d=mat2(cos(a),sin(a),-sin(a),cos(a))*d/L.w;
   float vein;float m=leafMask(d,vein);if(m<=0.)continue;
-  vec3 lcol=lc[k]*(.82+.3*vn(d*14.+float(k)*7.))*(1.-.25*vein);
-  float rot=smoothstep(.62,.8,vn(d*7.+float(k)*3.));lcol=mix(lcol,col,rot*.8);                 /* old leaves: patches rotted thin */
+  vec3 lcol=lc[k]*(.82+.3*pvn(d*14.+float(k)*7.))*(1.-.25*vein);
+  float rot=smoothstep(.62,.8,pvn(d*7.+float(k)*3.));lcol=mix(lcol,col,rot*.8);                 /* old leaves: patches rotted thin */
   col=mix(col,lcol,m*.92);}
  vec3 c2=col;float a=.04+.96*D;
  o=vec4(c2,a);}`,
@@ -846,7 +850,7 @@ void main(){
   float dap=smoothstep(.40,.62,fbm(bq*2.2+sw+seed*.7))*(.65+.35*smoothstep(.3,.7,fbm(bq*7.+sw*2.+seed)));
   /* caustics: ripples gather the sunlight into moving bright rings on the bed (from the same height field) */
   vec2 cu=vUv+off*.6;float hc=texture(uH,cu).x;
-  float lap=texture(uH,cu+vec2(px.x,0.)).x+texture(uH,cu-vec2(px.x,0.)).x+texture(uH,cu+vec2(0.,px.y)).x+texture(uH,cu-vec2(0.,px.y)).x-4.*hc;
+  vec2 p2=px*2.;float lap=(texture(uH,cu+vec2(p2.x,0.)).x+texture(uH,cu-vec2(p2.x,0.)).x+texture(uH,cu+vec2(0.,p2.y)).x+texture(uH,cu-vec2(0.,p2.y)).x-4.*hc)*.25;   /* a wider stencil: smooth light, never grid-sized blocks */
   float cau=clamp(-lap*nsc*3.2,-.45,1.6)*(1.-.5*Db);
   vec3 sunL=vec3(1.25,1.12,.92);
   under=b.rgb*mix(vec3(.95,1.,.92)*1.25,sunL*2.6,sun*dap)+b.rgb*sunL*cau*sun*(.35+.65*dap);
@@ -1001,7 +1005,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 140';
+const VER_TXT='버전 141';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -1389,7 +1393,7 @@ const PD={
 };
 const PD_EXT=.25;      // how far tilting can look beyond the screen on each side (fraction of the screen)
 let pondLevel=2,pdPan=[0,0],pondSun=0;try{pondSun=localStorage.getItem('hf-pondsun')==='1'?1:0;}catch(e){}try{const v=parseInt(localStorage.getItem('hf-pondrain'));if(v>=0&&v<=3)pondLevel=v;}catch(e){}
-let pdH=null,pdBed=null,pdSeed=Math.random()*50,pdLeaves=null,pdDrips=[],pdAcc=0,pdT=Math.random()*200,pdDropAcc=0;
+let pdBedAsp=0,pdH=null,pdBed=null,pdSeed=Math.random()*50,pdLeaves=null,pdDrips=[],pdAcc=0,pdT=Math.random()*200,pdDropAcc=0;
 const pdImp=[];                 // impulses waiting for the next step: [x,y,r,amp, dx,dy,type]
 const pdK=new Float32Array(48*4),pdV=new Float32Array(48*4);
 function pondLayout(){const R=Math.random;
@@ -1399,14 +1403,14 @@ function pondLayout(){const R=Math.random;
   pdLeaves={lf,lc};
   pdDrips=[];for(let i=0;i<5;i++)pdDrips.push({x:.06+.88*R(),y:.06+.88*R(),next:R()*4});}
 function pondBake(){const E=1+2*PD_EXT,bw=Math.round(canvas.width*E*Math.min(1,2048/(Math.max(canvas.width,canvas.height)*E))),bh=Math.round(bw*canvas.height/canvas.width);
-  if(pdBed){gl.deleteTexture(pdBed.t);gl.deleteFramebuffer(pdBed.f);}pdBed=fbo(bw,bh);
+  if(pdBed){gl.deleteTexture(pdBed.t);gl.deleteFramebuffer(pdBed.f);}pdBed=fbo(bw,bh);pdBedAsp=aspect;
   if(!pdLeaves)pondLayout();
   const u=use('pdBed',[1/bw,1/bh]);gl.uniform1f(u.aspect,aspect);gl.uniform1f(u.seed,pdSeed);gl.uniform1f(u.ext,PD_EXT);gl.uniform4fv(u.lf,pdLeaves.lf);gl.uniform3fv(u.lc,pdLeaves.lc);blit(pdBed);}
 function pondClear(){if(!pdH)return;for(const t of [pdH.r,pdH.w]){gl.bindFramebuffer(gl.FRAMEBUFFER,t.f);gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT);}}
 function pondNew(){pdSeed=Math.random()*50;pdLeaves=null;pdBed=null;pondClear();}
 function pondAlloc(){const [sw,sh]=res(PD.SIM);
   if(!pdH||pdH.r.w!==sw||pdH.r.h!==sh){pdH=dfbo(sw,sh);pondClear();pdBed=null;}
-  if(!pdBed)pondBake();}       // the bed is made once and reused (again only when the screen changes size or a new puddle is asked for)
+  if(!pdBed||pdBedAsp!==aspect)pondBake();}   // a new screen shape (rotation, fold) → the bed is made again to fit       // the bed is made once and reused (again only when the screen changes size or a new puddle is asked for)
 // ---- input: a drop or press = a dent; a moving finger = a push (bulge ahead, trough behind) ----
 function pondDrop(x,y,r,amp){pdImp.push([x,y,r,amp,0,0,0]);}
 function pondPush(x,y,dx,dy,r,amp){const l=Math.hypot(dx,dy)||1;pdImp.push([x,y,r,amp,dx/l,dy/l,1]);}

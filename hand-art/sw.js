@@ -1,7 +1,7 @@
 /* Hand Flow Art — offline cache
    · 화면 파일(index.html 등): 온라인이면 항상 새로 받아옴(network-first), 오프라인이면 저장본 사용
    · AI 모델·런타임(mediapipe/): 한 번 받으면 그대로 재사용(버전 올려도 다시 받지 않음) */
-const CORE = 'hand-flow-core-v141';
+const CORE = 'hand-flow-core-v142';
 const MODEL = 'hand-flow-model-v1';
 const CORE_ASSETS = ['./', './index.html', './manifest.json', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png', './thumbs/paint.jpg', './thumbs/water.jpg', './thumbs/pond.jpg', './floors/sauna.jpg', './thumbs/light.jpg', './thumbs/cloud.jpg', './thumbs/ink.jpg', './thumbs/halo.jpg'];
 // files no longer used: removed from the phone's saved copy as well
@@ -13,6 +13,7 @@ const MODEL_ASSETS = [
   "./audio/silk_and_moonlight.mp3",
   "./audio/beneath_the_haloed_glass.mp3",
   "./audio/velvet_horizon.mp3",
+  "./audio/stone_beneath_the_surface.mp3",
   "./mediapipe/tasks/vision_bundle.mjs",
   "./mediapipe/tasks/wasm/vision_wasm_internal.js",
   "./mediapipe/tasks/wasm/vision_wasm_internal.wasm",

@@ -1,11 +1,11 @@
 /* Hand Flow Art — offline cache
    · 화면 파일(index.html 등): 온라인이면 항상 새로 받아옴(network-first), 오프라인이면 저장본 사용
    · AI 모델·런타임(mediapipe/): 한 번 받으면 그대로 재사용(버전 올려도 다시 받지 않음) */
-const CORE = 'hand-flow-core-v151';
+const CORE = 'hand-flow-core-v152';
 const MODEL = 'hand-flow-model-v1';
-const CORE_ASSETS = ['./', './index.html', './manifest.json', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png', './thumbs/paint.jpg', './thumbs/water.jpg', './thumbs/pond.jpg', './floors/sauna.jpg', './floors/rings_base.jpg', './floors/rings_crest.jpg', './floors/stripes_base.jpg', './floors/stripes_crest.png', './thumbs/light.jpg', './thumbs/cloud.jpg', './thumbs/ink.jpg', './thumbs/halo.jpg'];
+const CORE_ASSETS = ['./', './index.html', './manifest.json', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png', './thumbs/paint.jpg', './thumbs/water.jpg', './thumbs/pond.jpg', './floors/sauna.jpg', './floors/rings_base.jpg', './floors/rings_crest.jpg', './floors/marble_base.jpg', './floors/marble_vein.jpg', './thumbs/light.jpg', './thumbs/cloud.jpg', './thumbs/ink.jpg', './thumbs/halo.jpg'];
 // files no longer used: removed from the phone's saved copy as well
-const GONE = ["./audio/slow_drift_at_zenith.mp3", "./mediapipe/hand_landmark_lite.tflite", "./mediapipe/hands.binarypb", "./mediapipe/hands.js", "./mediapipe/hands_solution_packed_assets.data", "./mediapipe/hands_solution_packed_assets_loader.js", "./mediapipe/hands_solution_simd_wasm_bin.data", "./mediapipe/hands_solution_simd_wasm_bin.js", "./mediapipe/hands_solution_simd_wasm_bin.wasm", "./mediapipe/hands_solution_wasm_bin.js", "./mediapipe/hands_solution_wasm_bin.wasm"];
+const GONE = ["./floors/stripes_base.jpg", "./floors/stripes_crest.png", "./audio/slow_drift_at_zenith.mp3", "./mediapipe/hand_landmark_lite.tflite", "./mediapipe/hands.binarypb", "./mediapipe/hands.js", "./mediapipe/hands_solution_packed_assets.data", "./mediapipe/hands_solution_packed_assets_loader.js", "./mediapipe/hands_solution_simd_wasm_bin.data", "./mediapipe/hands_solution_simd_wasm_bin.js", "./mediapipe/hands_solution_simd_wasm_bin.wasm", "./mediapipe/hands_solution_wasm_bin.js", "./mediapipe/hands_solution_wasm_bin.wasm"];
 const MODEL_ASSETS = [
   "./audio/where_the_stream_widens.mp3",
   "./audio/where_the_ocean_meets_sky.mp3",

@@ -213,7 +213,7 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
     <div class="row"><button class="btn" id="pinBtn">비밀번호 바꾸기</button><button class="btn" id="liteBtn">가벼운 모드 켜기</button></div>
     <div class="row"><button class="btn" id="bakOut">마음 백업 내보내기</button><button class="btn" id="bakIn">백업 가져오기</button></div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 148</p>
+    <p class="hint" id="ver">버전 149</p>
   </div>
 </div>
 <!-- 마음 남기기: write over the flowing art, then keep it (locked with a 4-digit PIN, on this phone only) or let it flow away -->
@@ -880,7 +880,7 @@ void main(){
  if(rings>1.5){                                                      /* the black corrugated floor (photo): straight folds, coloured lights running along their tops */
   water=1.;D=.2;Db=.2;
   vec2 bu=bedUV(vUv+off);vec2 iuv=(bu-.5)*iFit*1.45+.5;iuv.y=1.-iuv.y;   /* tiles seamlessly sideways, so the folds carry on forever when tilted */
-  b=vec4(iOk>.5?texture(uI,iuv).rgb*1.3:vec3(.08),.3);
+  b=vec4(iOk>.5?texture(uI,iuv).rgb*.92:vec3(.08),.3);
   vec3 cs=iOk>.5?texture(uC,vec2(iuv.x,.5)).rgb:vec3(0.);            /* r: the crest line, g: which fold, b: soft glow around the crest */
   float sid=floor(cs.g*16.)+floor(iuv.x)*11.;
   vec3 lc=vec3(0.);
@@ -894,7 +894,7 @@ void main(){
    vec3 hue=clamp(abs(fract(hc+vec3(0.,2./3.,1./3.))*6.-3.)-1.,0.,1.);
    vec3 col=mix(hue,vec3(1.),hc>.9?.8:.32);                         /* violet, amber, teal, rose, blue … and the odd white */
    lc+=col*e; }
-  gold=lc*(1.15*pow(cs.r,1.15)+.4*cs.b);
+  gold=lc*(1.5*pow(cs.r,1.3)+.22*cs.b);
  }
  vec3 under=b.rgb*vec3(.84,.92,.86);
  if(rings>.5)under=b.rgb+gold;
@@ -1080,7 +1080,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 148';
+const VER_TXT='버전 149';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -1548,7 +1548,7 @@ function pondFrame(dt){
   const u=use('pdRender',[0,0]);gl.uniform1i(u.uH,pdH.r.bind(0));gl.uniform1i(u.uB,pdBed.bind(1));gl.uniform2f(u.px,pdH.r.tx,pdH.r.ty);
   gl.uniform2f(u.tilt,Math.max(-.6,Math.min(.6,viewTilt[0])),Math.max(-.6,Math.min(.6,viewTilt[1])));
   gl.uniform1f(u.aspect,aspect);gl.uniform1f(u.nsc,PD.NORMAL);gl.uniform1f(u.refr,PD.REFRACT);gl.uniform1f(u.refl,PD.REFLECT);gl.uniform1f(u.skyK,PD.SKY_BEND);gl.uniform1f(u.seed,pdSeed);gl.uniform1f(u.ext,PD_EXT);gl.uniform1f(u.sun,pondSun);gl.uniform1f(u.time,pdT);
-  {const ft=floorTex[pondFloor]||{},ok=pondFloor&&ft.b&&ft.c,ia=pondFloor===2?926/1448:1086/1448;gl.uniform1f(u.rings,pondFloor);gl.uniform1f(u.iOk,ok?1:0);
+  {const ft=floorTex[pondFloor]||{},ok=pondFloor&&ft.b&&ft.c,ia=pondFloor===2?846/1448:1086/1448;gl.uniform1f(u.rings,pondFloor);gl.uniform1f(u.iOk,ok?1:0);
    gl.uniform2f(u.iFit,aspect<ia?aspect/ia:1,aspect<ia?1:ia/aspect);   // the photo covers the whole bed (cropped, never stretched)
    gl.activeTexture(gl.TEXTURE2);gl.bindTexture(gl.TEXTURE_2D,ft.b||null);gl.uniform1i(u.uI,2);gl.activeTexture(gl.TEXTURE3);gl.bindTexture(gl.TEXTURE_2D,ft.c||null);gl.uniform1i(u.uC,3);}
   {const K=.8,r=1-Math.exp(-dt*3);for(let k=0;k<2;k++){const tgt=gyroOn?Math.max(-PD_EXT,Math.min(PD_EXT,viewTilt[k]*K)):0;pdPan[k]+=(tgt-pdPan[k])*r;}   // tilt = look around the puddle
@@ -1561,7 +1561,7 @@ function loadFloor(f){if(!f||floorLoading[f])return;floorLoading[f]=true;   // a
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,mip?gl.LINEAR_MIPMAP_LINEAR:gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,st?gl.REPEAT:gl.MIRRORED_REPEAT);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.MIRRORED_REPEAT);ft[key]=t;};
     im.onerror=()=>{floorLoading[f]=false;};im.src=src;};
-  if(st){mk('floors/stripes_base.jpg?v=1','b',true);mk('floors/stripes_crest.png?v=1','c',false);}
+  if(st){mk('floors/stripes_base.jpg?v=2','b',true);mk('floors/stripes_crest.png?v=2','c',false);}
   else{mk('floors/rings_base.jpg?v=2','b',true);mk('floors/rings_crest.jpg?v=2','c',true);}}
 function setPondFloor(v){pondFloor=(v>=0&&v<=2)?v:0;if(pondFloor)loadFloor(pondFloor);document.querySelectorAll('#pondFloorRow .chip').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.pf===pondFloor));try{localStorage.setItem('hf-pondfloor',String(pondFloor));}catch(e){}}
 function setPondSun(v){pondSun=v?1:0;document.querySelectorAll('#pondSunRow .chip').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.ps===pondSun));try{localStorage.setItem('hf-pondsun',pondSun?'1':'0');}catch(e){}}

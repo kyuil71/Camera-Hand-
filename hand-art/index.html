@@ -213,7 +213,7 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
     <div class="row"><button class="btn" id="pinBtn">비밀번호 바꾸기</button><button class="btn" id="liteBtn">가벼운 모드 켜기</button></div>
     <div class="row"><button class="btn" id="bakOut">마음 백업 내보내기</button><button class="btn" id="bakIn">백업 가져오기</button></div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 146</p>
+    <p class="hint" id="ver">버전 147</p>
   </div>
 </div>
 <!-- 마음 남기기: write over the flowing art, then keep it (locked with a 4-digit PIN, on this phone only) or let it flow away -->
@@ -854,22 +854,28 @@ void main(){
  if(rings>.5){                                                       /* the sculpted black ripple floor (photo), with golden light running along its crests */
   water=1.;D=.2;Db=.2;
   vec2 bu=bedUV(vUv+off);vec2 iuv=(bu-.5)*iFit*1.45+.5;iuv.y=1.-iuv.y;   /* zoomed out: smaller rings (the whole photo fits the screen at rest) */
-  vec2 qf=abs(mod(iuv+1.,2.)-1.);float ef=smoothstep(0.,.045,min(min(qf.x,1.-qf.x),min(qf.y,1.-qf.y)));   /* only when tilted past the photo's edge: it continues mirrored, the fold softened into shade */
-  b=vec4((iOk>.5?texture(uI,iuv).rgb*1.08:vec3(.12))*(.45+.55*ef),.3);
-  float cr=iOk>.5?texture(uC,iuv).r:0.;
-  vec2 dd=(iuv-vec2(.489,.477))*vec2(.75,1.);float r=length(dd),th=atan(dd.y,dd.x);
-  /* light drifting around the rings: two layers of soft noise on the circle (one each way) that also slowly change shape,
-     seen only where the floor rises into a crest — so it always follows the curves */
-  /* waves of light around each ring: a few sines in the angle, each travelling at its own speed and direction and shifted per ring —
-     perfectly smooth (no blocks or dashes) and never repeating the same way */
-  float T=time+.6*sin(time*.21)+.4*sin(time*.37+1.);                 /* speeds that keep changing: never a steady spin */
-  float s1=sin(th*1.+T*.95+r*5.),s2=sin(th*2.-T*.72+r*11.+1.3),s3=sin(th*3.+T*1.25-r*7.+2.1),s4=sin(th*1.-T*.55+r*17.+4.);
-  float g=smoothstep(.40,.78,.5+.5*(.40*s1+.26*s2+.16*s3+.18*s4));   /* long arcs on most of the rings at once */
-  /* lights come and go at random places: a slowly changing mask over the rings (it drifts round on its own and reshapes), so no
-     part of the floor keeps the same light circling in the same spot */
-  vec2 cm=vec2(cos(th-T*.37),sin(th-T*.37));
-  g*=smoothstep(.30,.62,pvn(cm*1.7+vec2(r*4.5,time*.23)+11.)*.7+pvn(cm*3.1+vec2(r*7.,-time*.31)+3.)*.3);
-  gold=(vec3(1.,.62,.24)*1.3*g+vec3(1.,.86,.60)*.75*pow(g,3.))*pow(cr,1.3)*smoothstep(.02,.06,r)*ef;   /* a fine line on the very top of each crest */
+  /* no mirrored copy past the photo's edge: the rings simply carry on outward (concentric, same spacing) by reusing the
+     photo's own outer pair of rings, cross-faded so the joins never show */
+  vec2 C0=vec2(.489,.477),SC=vec2(.75,1.);
+  vec2 dd=(iuv-C0)*SC;float r=max(length(dd),1e-4),th=atan(dd.y,dd.x);vec2 dir=dd/r;
+  vec2 gx=dFdx(iuv),gy=dFdy(iuv);
+  float sA=r,sB=r,wB=0.;
+  if(r>.176){float fr=fract((r-.176)/.141);sA=.176+fr*.141;sB=sA-.141;wB=smoothstep(.8,1.,fr);}
+  vec2 uA=C0+dir*sA/SC,uB2=C0+dir*sB/SC;
+  vec3 colI=iOk>.5?mix(textureGrad(uI,uA,gx,gy).rgb,textureGrad(uI,uB2,gx,gy).rgb,wB)*1.08:vec3(.12);
+  b=vec4(colI,.3);
+  float cr=iOk>.5?mix(textureGrad(uC,uA,gx,gy).r,textureGrad(uC,uB2,gx,gy).r,wB):0.;
+  /* every ring has its own light: its own direction (some clockwise, some counter-clockwise), speed, number of arcs and
+     start angle, and fades in and out on its own clock — so the lights never line up or spin together */
+  float q=(r-.033)/.0705,ri=floor(q),fq=fract(q);
+  float h1=hash(vec2(ri,3.1)),h2=hash(vec2(ri,17.7)),h3=hash(vec2(ri,41.3)),h4=hash(vec2(ri,63.9)),h5=hash(vec2(ri,88.2));
+  float sg=h1<.5?-1.:1.,sp=.35+.85*h2,nl=h3<.55?1.:2.;
+  float Ti=time*sp+.8*sin(time*(.11+.13*h4)+h5*6.28);
+  float w1=sin(nl*th+sg*Ti+h4*6.28),w2=sin((nl+1.)*th-sg*Ti*.55+h5*6.28+r*9.);
+  float g=smoothstep(.38,.80,.5+.5*(.68*w1+.32*w2));
+  g*=smoothstep(.15,.55,.5+.5*sin(time*(.09+.14*h3)+h1*6.28));      /* this ring's light comes and goes */
+  g*=smoothstep(0.,.2,fq)*(1.-smoothstep(.8,1.,fq));                     /* kept to its own ring */
+  gold=(vec3(1.,.62,.24)*1.3*g+vec3(1.,.86,.60)*.75*pow(g,3.))*pow(cr,1.3)*smoothstep(.02,.06,r);   /* a fine line on the very top of each crest */
  }
  vec3 under=b.rgb*vec3(.84,.92,.86);
  if(rings>.5)under=b.rgb+gold;
@@ -1055,7 +1061,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 146';
+const VER_TXT='버전 147';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}

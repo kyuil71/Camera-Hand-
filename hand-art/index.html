@@ -213,7 +213,7 @@ body.mview #grab,body.mview #cap,body.mview .dock{display:none}
     <div class="row"><button class="btn" id="pinBtn">비밀번호 바꾸기</button><button class="btn" id="liteBtn">가벼운 모드 켜기</button></div>
     <div class="row"><button class="btn" id="bakOut">마음 백업 내보내기</button><button class="btn" id="bakIn">백업 가져오기</button></div>
     <p class="hint" id="hintTxt"><b>손가락</b> 흐름 그리기 · <b>검지만 펴기</b> 방향 분사<br><b>엄지+검지 집기</b> 소용돌이 · <b>주먹</b> 굳히기<br><b>손가락 톡 굽히기</b> 색이 터짐</p>
-    <p class="hint" id="ver">버전 151</p>
+    <p class="hint" id="ver">버전 152</p>
   </div>
 </div>
 <!-- 마음 남기기: write over the flowing art, then keep it (locked with a 4-digit PIN, on this phone only) or let it flow away -->
@@ -887,7 +887,7 @@ void main(){vec4 s=texture(uH,vUv);float h=s.x;vec2 p=vec2(vUv.x*aspect,vUv.y);
   vec4 v=pv[i];if(v.z<.5)h-=k.w*g;                                  /* a drop (or a light press): a small dent that rebounds into rings */
   else h+=k.w*dot(d,v.xy)/k.z*g;}                                   /* a moving finger: water pushed up in front, pulled down behind */
  o=vec4(h,s.y,0.,1.);}`,
-pdRender: H+PD_GL+MB_GL+`uniform sampler2D uH,uB,uI,uC;uniform vec2 px,tilt,pan,iFit;uniform float aspect,nsc,refr,refl,skyK,seed,ext,sun,time,rings,iOk;
+pdRender: H+PD_GL+MB_GL+`uniform sampler2D uH,uB,uI,uC,uT;uniform vec2 px,tilt,pan,iFit;uniform float hOn,aspect,nsc,refr,refl,skyK,seed,ext,sun,time,rings,iOk;
 vec2 bedUV(vec2 v){return (v+pan+ext)/(1.+2.*ext);}                 /* screen → the larger bed, shifted by the tilt */
 vec3 sky(vec2 s){                                                     /* looking up from the puddle: overcast sky framed by the forest */
  vec2 a=s*vec2(aspect,1.);float r=length(a);
@@ -938,7 +938,15 @@ void main(){
   vec2 bu=bedUV(vUv+off);vec2 iuv=(bu-.5)*iFit*1.05+.5;iuv.y=1.-iuv.y;   /* the photo tiles seamlessly, so tilting just reveals more marble */
   b=vec4(iOk>.5?texture(uI,iuv).rgb*1.15:vec3(.06),.3);
   float vein=iOk>.5?texture(uC,iuv).r:0.;                            /* where the grey veins are: the lights live along them */
-  gold=mbLights(iuv,vein,time,0.);
+  float th=0.,tb=0.;
+  if(hOn>.5){th=texture(uT,vUv+off).y;for(int i=0;i<6;i++){float a=float(i)*1.047+.3;tb+=texture(uT,vUv+off+vec2(cos(a),sin(a))*vec2(1./aspect,1.)*.045).y;}tb/=6.;}
+  float fl=.82+.36*pvn(iuv*vec2(7.,12.)+vec2(time*.35,-time*.27));  /* a touch: the marble below lights up, through its veins and fine cracks */
+  float rg=1.-abs(2.*pvn(iuv*vec2(26.,46.)+vec2(time*.05,0.))-1.);rg=rg*rg*rg;
+  float hv=th*fl*(.22+1.0*vein+.9*rg);
+  vec3 tg=vec3(1.,.40,.02)*smoothstep(0.,1.3,hv)*1.1+vec3(1.,.68,.14)*smoothstep(.35,2.,hv)*1.25+vec3(1.,.94,.74)*smoothstep(2.,4.,hv)*1.3;
+  tg+=vec3(1.,.5,.05)*tb*(.18+.3*vein)+vec3(1.,.74,.3)*smoothstep(1.,3.8,th)*(.55+.45*fl)*(.6+.6*rg+.5*vein);   /* held longer: brighter and brighter */
+  b.rgb*=1.+tb*.6*vec3(1.,.6,.25);
+  gold=mbLights(iuv,vein,time,min(th+tb,1.5))+tg;
  }
  vec3 under=b.rgb*vec3(.84,.92,.86);
  if(rings>.5)under=b.rgb+gold;
@@ -1124,7 +1132,7 @@ let vel,dye,det,detSeed=0,div,curlF,pres,wat,wgrad,aspect=1,dpr=1;
 const WATER_RES=200;
 function res(r){let a=canvas.width/canvas.height;if(a<1)a=1/a;const mn=Math.round(r),mx=Math.round(r*a);
   return canvas.width>canvas.height?[mx,mn]:[mn,mx];}
-const VER_TXT='버전 151';
+const VER_TXT='버전 152';
 /* ===== 가상 회전 잠금: OS가 화면을 돌려도(폴드 내부 화면처럼 잠금 요청을 무시하는 경우) 내용은 기기 기준으로 고정 ===== */
 const appEl=document.getElementById('app');let viewAng=-1,viewIW=0,viewIH=0,lockAng=null,lockKey='',lockP=true,devG=null,rawAng=0;
 function devAngle(){let a=0;try{if(screen.orientation&&typeof screen.orientation.angle==='number')a=screen.orientation.angle;else if(typeof window.orientation==='number')a=window.orientation;}catch(e){}
@@ -1168,7 +1176,7 @@ function freeF(f){if(f){gl.deleteTexture(f.t);gl.deleteFramebuffer(f.f);}}
 function freeD(d){if(d){freeF(d.r);freeF(d.w);}}
 function dropModeBufs(){freeD(dye);freeD(det);dye=det=null;freeD(wat);freeF(wgrad);wat=wgrad=null;
   freeD(trail);freeF(glowF);trail=glowF=null;freeD(cDisp);freeF(cFbo);cDisp=cFbo=null;
-  freeD(inkA);freeD(inkS);freeF(inkK);inkA=inkS=inkK=null;freeD(emH);emH=null;}
+  freeD(inkA);freeD(inkS);freeF(inkK);inkA=inkS=inkK=null;freeD(emH);emH=null;freeD(pdHt);pdHt=null;}
 function paintAlloc(){const [dw,dh]=res(liteUser?560:DYE_RES);dye=dfbo(dw,dh);det=dfbo(dw,dh);seed();}
 function waterAlloc(){const [ww,wh]=res(WATER_RES);wat=dfbo(ww,wh);wgrad=fbo(ww,wh);waterClear();}
 function seed(){if(!dye)return;const u=use('init',[dye.w.tx,dye.w.ty]);
@@ -1524,19 +1532,23 @@ let emH=null,emT=Math.random()*200;const emPokes=[],emK=new Float32Array(16*4),e
 function emberClear(){if(!emH)return;for(const t of [emH.r,emH.w]){gl.bindFramebuffer(gl.FRAMEBUFFER,t.f);gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT);}}
 function emberAlloc(){const [w,h]=res(EM.SIM);if(!emH||emH.r.w!==w||emH.r.h!==h){freeD(emH);emH=dfbo(w,h);emberClear();}if(!floorLoading[2])loadFloor(2);}
 function emPoke(x,y,k){emPokes.push([x,y,k]);}
-function emberFrame(dt){
-  dt=Math.max(dt,frameDtRaw)*flow;emT+=dt;emberAlloc();
+function touchField(F,dt,dR,pD,hK=1){   // fingers (and pokes) → a field: R = how far the stone has sunk, G = how much light wells up
   let n=0;emK.fill(0);emA.fill(0);
   for(const p of pointers.values()){if(n>=16)break;const fresh=p.ex===undefined,x0=fresh?p.x:p.ex,y0=fresh?p.y:p.ey,r=EM.R*(p.virt?.85:1);
     const L=Math.hypot((p.x-x0)*aspect,p.y-y0);
     emK.set([x0,y0,p.x,p.y],n*4);emA.set([r,fresh?1:Math.min(1.5,L/r),(p.virt?.75:1)*(flow>.3?1:0),0],n*4);p.ex=p.x;p.ey=p.y;n++;}
   while(emPokes.length&&n<16){const q=emPokes.shift();emK.set([q[0],q[1],q[0],q[1]],n*4);emA.set([EM.R*1.2,q[2],1,0],n*4);n++;}
   emPokes.length=0;
-  let u=use('emStep',[emH.r.tx,emH.r.ty]);gl.uniform1i(u.uH,emH.r.bind(0));gl.uniform2f(u.px,emH.r.tx,emH.r.ty);
+  const u=use('emStep',[F.r.tx,F.r.ty]);gl.uniform1i(u.uH,F.r.bind(0));gl.uniform2f(u.px,F.r.tx,F.r.ty);
   gl.uniform4fv(u.pk,emK);gl.uniform4fv(u.pa,emA);gl.uniform1i(u.pn,n);gl.uniform1f(u.aspect,aspect);gl.uniform1f(u.dt,dt);
-  gl.uniform1f(u.dRate,EM.DEPTH_RATE);gl.uniform1f(u.hRate,EM.HEAT_RATE);gl.uniform1f(u.pD,EM.PASS_DEPTH);gl.uniform1f(u.pH,EM.PASS_HEAT);
+  gl.uniform1f(u.dRate,dR);gl.uniform1f(u.hRate,EM.HEAT_RATE*hK);gl.uniform1f(u.pD,pD);gl.uniform1f(u.pH,EM.PASS_HEAT);
   gl.uniform1f(u.dBack,EM.DEPTH_BACK);gl.uniform1f(u.hFade,EM.HEAT_FADE);gl.uniform1f(u.dMax,EM.DMAX);gl.uniform1f(u.hMax,EM.HMAX);
-  blit(emH.w);emH.swap();
+  blit(F.w);F.swap();
+}
+function emberFrame(dt){
+  dt=Math.max(dt,frameDtRaw)*flow;emT+=dt;emberAlloc();
+  touchField(emH,dt,EM.DEPTH_RATE,EM.PASS_DEPTH);
+  let u;
   const ft=floorTex[2]||{},ok=ft.b&&ft.c,ia=941/1672;
   u=use('emRender',[0,0]);gl.uniform1i(u.uH,emH.r.bind(0));gl.uniform2f(u.px,emH.r.tx,emH.r.ty);gl.uniform1f(u.aspect,aspect);gl.uniform1f(u.time,emT);gl.uniform1f(u.iOk,ok?1:0);
   gl.uniform2f(u.iFit,aspect<ia?aspect/ia:1,aspect<ia?1:ia/aspect);
@@ -1563,7 +1575,7 @@ const PD={
 };
 const PD_EXT=.25;      // how far tilting can look beyond the screen on each side (fraction of the screen)
 let pondLevel=2,pdPan=[0,0],pondSun=0,pondFloor=0,floorTex={},floorLoading={};try{const v=parseInt(localStorage.getItem('hf-pondfloor'));if(v>=0&&v<=2)pondFloor=v;}catch(e){}try{pondSun=localStorage.getItem('hf-pondsun')==='1'?1:0;}catch(e){}try{const v=parseInt(localStorage.getItem('hf-pondrain'));if(v>=0&&v<=3)pondLevel=v;}catch(e){}
-let pdBedAsp=0,pdH=null,pdBed=null,pdSeed=Math.random()*50,pdLeaves=null,pdDrips=[],pdAcc=0,pdT=Math.random()*200,pdDropAcc=0;
+let pdHt=null,pdBedAsp=0,pdH=null,pdBed=null,pdSeed=Math.random()*50,pdLeaves=null,pdDrips=[],pdAcc=0,pdT=Math.random()*200,pdDropAcc=0;
 const pdImp=[];                 // impulses waiting for the next step: [x,y,r,amp, dx,dy,type]
 const pdK=new Float32Array(48*4),pdV=new Float32Array(48*4);
 function pondLayout(){const R=Math.random;
@@ -1622,7 +1634,10 @@ function pondFrame(dt){
     pdAcc-=step;n++;}
   if(n>=10)pdAcc=0;                                       // after a long pause: do not try to catch up
   if(pdImp.length>200)pdImp.splice(0,pdImp.length-200);
-  const u=use('pdRender',[0,0]);gl.uniform1i(u.uH,pdH.r.bind(0));gl.uniform1i(u.uB,pdBed.bind(1));gl.uniform2f(u.px,pdH.r.tx,pdH.r.ty);
+  const mb=pondFloor===2;
+  if(mb){const [hw,hh]=res(EM.SIM);if(!pdHt||pdHt.r.w!==hw||pdHt.r.h!==hh){freeD(pdHt);pdHt=dfbo(hw,hh);}touchField(pdHt,dt,0,0,2.4);}   // marble floor: touching lights up the stone below
+  else if(pdHt){freeD(pdHt);pdHt=null;}
+  const u=use('pdRender',[0,0]);gl.uniform1i(u.uH,pdH.r.bind(0));gl.uniform1i(u.uT,(mb?pdHt.r:pdH.r).bind(4));gl.uniform1f(u.hOn,mb?1:0);gl.uniform1i(u.uB,pdBed.bind(1));gl.uniform2f(u.px,pdH.r.tx,pdH.r.ty);
   gl.uniform2f(u.tilt,Math.max(-.6,Math.min(.6,viewTilt[0])),Math.max(-.6,Math.min(.6,viewTilt[1])));
   gl.uniform1f(u.aspect,aspect);gl.uniform1f(u.nsc,PD.NORMAL);gl.uniform1f(u.refr,PD.REFRACT);gl.uniform1f(u.refl,PD.REFLECT);gl.uniform1f(u.skyK,PD.SKY_BEND);gl.uniform1f(u.seed,pdSeed);gl.uniform1f(u.ext,PD_EXT);gl.uniform1f(u.sun,pondSun);gl.uniform1f(u.time,pdT);
   {const ft=floorTex[pondFloor]||{},ok=pondFloor&&ft.b&&ft.c,ia=pondFloor===2?941/1672:1086/1448;gl.uniform1f(u.rings,pondFloor);gl.uniform1f(u.iOk,ok?1:0);
